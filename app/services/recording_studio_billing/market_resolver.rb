@@ -100,10 +100,23 @@ module RecordingStudioBilling
     end
 
     def eligible?(market)
-      return false unless market.respond_to?(:state) && market.state == "published"
+      return false unless current_recordable?(market, Market) && market.state == "published"
 
       provider = market.provider_account_recording&.recordable
-      provider.is_a?(ProviderAccount) && provider.state == "published" && provider.active?
+      current_recordable?(provider, ProviderAccount) && provider.state == "published" && provider.active?
+    end
+
+    def current_recordable?(record, expected_type)
+      return false unless record.is_a?(expected_type)
+
+      recording = record.recording
+      return false unless recording
+
+      RecordingStudio::Recording.unscoped.exists?(
+        id: recording.id,
+        recordable_type: expected_type.name,
+        recordable_id: record.id
+      )
     end
 
     def valid_country?(value)

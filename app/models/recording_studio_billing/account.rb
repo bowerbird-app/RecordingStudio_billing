@@ -6,6 +6,7 @@ module RecordingStudioBilling
 
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     has_one :recording, as: :recordable, class_name: "RecordingStudio::Recording", dependent: :restrict_with_error
+    scope :with_current_recording, -> { joins(:recording) }
 
     validates :name, presence: true
     validate :root_recording_is_a_root

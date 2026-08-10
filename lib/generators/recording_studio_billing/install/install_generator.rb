@@ -5,6 +5,8 @@ require "rails/generators"
 module RecordingStudioBilling
   module Generators
     class InstallGenerator < Rails::Generators::Base
+      SQL_SCHEMA_FORMAT_SETTING = "config.active_record.schema_format = :sql"
+
       source_root File.expand_path("templates", __dir__)
 
       desc "Installs RecordingStudioBilling engine into your application"
@@ -29,6 +31,22 @@ module RecordingStudioBilling
         return unless yes?(prompt)
 
         template "recording_studio_billing.yml", "config/recording_studio_billing.yml"
+      end
+
+      def configure_sql_schema_format
+        application_config = File.join(destination_root, "config/application.rb")
+        unless File.file?(application_config)
+          say "Could not find config/application.rb. Configure Active Record to use the SQL schema format manually.",
+              :yellow
+          return
+        end
+        if File.read(application_config).include?(SQL_SCHEMA_FORMAT_SETTING)
+          say "Active Record already uses the SQL schema format.", :green
+          return
+        end
+
+        application SQL_SCHEMA_FORMAT_SETTING
+        say "Configured Active Record to dump structure.sql so billing integrity triggers are reproducible.", :green
       end
 
       def add_tailwind_source

@@ -7,6 +7,7 @@ This Rails app validates the Recording Studio Billing foundation in a real host 
 - Devise authentication with a seeded admin user
 - `Current.actor` wiring for Recording Studio events
 - One Workspace billing root, one AdminRoot billing-admin root, and their capability-owned child recordables
+- SQL schema dumps that reproduce the PostgreSQL functions and triggers protecting billing history
 - FlatPack layout integration and Tailwind source scanning
 - Mounted `RecordingStudio::Engine` route behavior inside a host app
 
@@ -20,6 +21,9 @@ bin/dev
 ```
 
 Run the commands above from the dummy app directory, not the repository root.
+The dummy app intentionally uses `config.active_record.schema_format = :sql`;
+commit `db/structure.sql` after migration changes and do not hand-edit
+`schema.rb`.
 
 Then open the app and sign in with:
 

@@ -21,4 +21,17 @@ class RecordingStudioBillingTest < Minitest::Test
 
     assert_includes layout, '<html data-theme="rounded" class="h-full overflow-hidden overscroll-none">'
   end
+
+  def test_dummy_sql_structure_preserves_billing_integrity_objects
+    structure_path = File.expand_path("dummy/db/structure.sql", __dir__)
+    schema_path = File.expand_path("dummy/db/schema.rb", __dir__)
+    structure = File.read(structure_path)
+
+    refute File.exist?(schema_path)
+    assert_includes structure, "CREATE FUNCTION public.rs_billing_protect_commercial_history()"
+    assert_includes structure, "CREATE UNIQUE INDEX idx_rs_billing_one_account_per_root"
+    assert_includes structure, "CREATE UNIQUE INDEX idx_rs_billing_one_admin_per_root"
+    assert_includes structure,
+                    "rs_billing_protect_commercial_history('RecordingStudioBilling::Price')"
+  end
 end

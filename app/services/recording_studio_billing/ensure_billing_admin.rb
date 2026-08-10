@@ -14,10 +14,10 @@ module RecordingStudioBilling
     def call
       BillingAdmin.transaction do
         root = canonical_root.lock!
-        BillingAdmin.find_by(root_recording: root) || create_billing_admin(root)
+        current_billing_admin(root) || create_billing_admin(root)
       end
     rescue ActiveRecord::RecordNotUnique
-      BillingAdmin.find_by!(root_recording: canonical_root)
+      current_billing_admin(canonical_root) || raise
     end
 
     private
@@ -39,6 +39,10 @@ module RecordingStudioBilling
         parent_recording: root
       )
       billing_admin
+    end
+
+    def current_billing_admin(root)
+      BillingAdmin.with_current_recording.find_by(root_recording: root)
     end
   end
 end

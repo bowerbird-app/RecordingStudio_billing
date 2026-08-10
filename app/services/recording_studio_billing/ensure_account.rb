@@ -14,10 +14,10 @@ module RecordingStudioBilling
     def call
       Account.transaction do
         root = canonical_root.lock!
-        Account.find_by(root_recording: root) || create_account(root)
+        current_account(root) || create_account(root)
       end
     rescue ActiveRecord::RecordNotUnique
-      Account.find_by!(root_recording: canonical_root)
+      current_account(canonical_root) || raise
     end
 
     private
@@ -39,6 +39,10 @@ module RecordingStudioBilling
         parent_recording: root
       )
       account
+    end
+
+    def current_account(root)
+      Account.with_current_recording.find_by(root_recording: root)
     end
   end
 end

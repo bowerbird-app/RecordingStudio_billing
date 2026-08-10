@@ -129,7 +129,10 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
 
     assert_equal account, RecordingStudioBilling.ensure_account(root_recording: account_recording, name: "Ignored name")
     assert_raises(ActiveRecord::RecordNotUnique) do
-      RecordingStudioBilling::Account.create!(root_recording: root_recording, name: "Duplicate account")
+      record_child(
+        RecordingStudioBilling::Account.new(root_recording: root_recording, name: "Duplicate account"),
+        root_recording
+      )
     end
 
     concurrent_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Concurrent workspace")))
@@ -154,6 +157,43 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_equal 1, accounts.map(&:id).uniq.count
     assert_equal 1, RecordingStudioBilling::Account.where(root_recording: concurrent_root).count
   end
+
+  # rubocop:disable Metrics/BlockLength
+  test "root ownership survives revisions and ensure services return current snapshots" do
+    workspace_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
+    admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
+    historical_account = RecordingStudioBilling.ensure_account(
+      root_recording: workspace_root,
+      name: "Original account"
+    )
+    historical_admin = RecordingStudioBilling.ensure_billing_admin(
+      root_recording: admin_root,
+      key: unique_name("billing")
+    )
+    account_recording = historical_account.recording
+    admin_recording = historical_admin.recording
+
+    workspace_root.revise(account_recording) { |revision| revision.name = "Revised account" }
+    admin_root.revise(admin_recording) { |revision| revision.key = unique_name("revised_billing") }
+
+    current_account = account_recording.reload.recordable
+    current_admin = admin_recording.reload.recordable
+    assert_equal current_account, RecordingStudioBilling.ensure_account(
+      root_recording: workspace_root,
+      name: "Ignored"
+    )
+    assert_equal current_admin, RecordingStudioBilling.ensure_billing_admin(
+      root_recording: admin_root,
+      key: "ignored"
+    )
+    assert_equal workspace_root.id, historical_account.reload.root_recording_id
+    assert_equal workspace_root.id, current_account.root_recording_id
+    assert_equal admin_root.id, historical_admin.reload.root_recording_id
+    assert_equal admin_root.id, current_admin.root_recording_id
+    assert_equal 2, RecordingStudioBilling::Account.where(root_recording_id: workspace_root.id).count
+    assert_equal 2, RecordingStudioBilling::BillingAdmin.where(root_recording_id: admin_root.id).count
+  end
+  # rubocop:enable Metrics/BlockLength
 
   # rubocop:disable Metrics/BlockLength
   test "V1 billing models validate the corrected contract and price versioning" do
@@ -351,6 +391,33 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       :recording_studio_billing_commercial_manifests
     )
     assert(foreign_keys.any? { |foreign_key| foreign_key.options[:name] == "fk_rs_billing_manifests_root" })
+  end
+
+  test "root ownership uniqueness is enforced on current Recording pointers" do
+    connection = ActiveRecord::Base.connection
+    account_root_index = connection.indexes(:recording_studio_billing_accounts).find do |index|
+      index.name == "idx_rs_billing_account_root_history"
+    end
+    admin_root_index = connection.indexes(:recording_studio_billing_billing_admins).find do |index|
+      index.name == "idx_rs_billing_admin_root_history"
+    end
+    recording_indexes = connection.indexes(:recording_studio_recordings)
+    current_account_index = recording_indexes.find do |index|
+      index.name == "idx_rs_billing_one_account_per_root"
+    end
+    current_admin_index = recording_indexes.find do |index|
+      index.name == "idx_rs_billing_one_admin_per_root"
+    end
+
+    assert account_root_index
+    assert admin_root_index
+    refute_predicate account_root_index, :unique
+    refute_predicate admin_root_index, :unique
+    assert_predicate current_account_index, :unique
+    assert_predicate current_admin_index, :unique
+    assert_includes current_account_index.where, "RecordingStudioBilling::Account"
+    assert_includes current_admin_index.where, "RecordingStudioBilling::BillingAdmin"
+    assert_equal :sql, Rails.application.config.active_record.schema_format
   end
   # rubocop:enable Metrics/BlockLength
 

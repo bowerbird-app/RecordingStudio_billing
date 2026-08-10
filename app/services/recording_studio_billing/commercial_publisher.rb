@@ -2,6 +2,8 @@
 
 # rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
 
+require "json"
+
 module RecordingStudioBilling
   # Produces a deliberately small publication.  A publication is selected by its
   # Price recording identities; it never means "publish every draft below root".
@@ -33,7 +35,10 @@ module RecordingStudioBilling
       @effective_at = effective_at
       @candidate = candidate
       @price_recording_ids = Array(price_recording_ids).compact.map(&:to_s).uniq.sort
-      @replacements = replacements.to_h.stringify_keys
+      @resolved_price_recording_ids = nil
+      @replacements = replacements.to_h.each_with_object({}) do |(replacement_id, predecessor_id), normalized|
+        normalized[replacement_id.to_s] = predecessor_id.to_s
+      end
       @rule_context = rule_context.to_h
       @actor = actor
     end
@@ -42,16 +47,22 @@ module RecordingStudioBilling
       CommercialPublicationCandidate.transaction do
         root = canonical_root!
         authorize!(:publish, root:)
+        resolve_price_recording_ids!(root)
         graph = closure_for(root)
         lock_graph!(graph)
         graph = closure_for(root) # rebuild after every referenced row is locked
-        validate_graph!(root, graph)
+        retry_candidate = matching_activated_candidate(root, graph)
 
-        manifests = persist_manifests(root, graph)
-        envelope = snapshot_envelope(root, graph, manifests)
-        candidate = find_or_create_candidate!(root, manifests, envelope)
-        activate_candidate!(candidate) if candidate.effective_at <= Time.current
-        candidate
+        if retry_candidate
+          retry_candidate
+        else
+          validate_graph!(root, graph)
+          manifests = persist_manifests(root, graph)
+          envelope = snapshot_envelope(root, graph, manifests)
+          publication = find_or_create_candidate!(root, manifests, envelope)
+          activate_candidate!(publication) if publication.effective_at <= Time.current
+          publication
+        end
       end
     end
 
@@ -82,6 +93,11 @@ module RecordingStudioBilling
       authorizer = RecordingStudioBilling.configuration.commercial_authorizer
       raise ArgumentError, "commercial publication requires an authorizer" unless authorizer
       raise ArgumentError, "commercial publication requires an actor" if actor.nil?
+
+      unless actor.respond_to?(:persisted?) && actor.persisted?
+        raise ArgumentError,
+              "commercial publication actor must be persisted"
+      end
       return if authorizer.call(action:, actor:, root_recording: root, candidate: publication)
 
       raise ArgumentError, "commercial publication is not authorized"
@@ -89,8 +105,8 @@ module RecordingStudioBilling
 
     def selected_prices(root)
       scope = Price.with_current_recording.where(recording_studio_recordings: { root_recording_id: root.id })
-      if price_recording_ids.any?
-        return scope.where(recording_studio_recordings: { id: price_recording_ids }).order(:id).to_a
+      if resolved_price_recording_ids.any?
+        return scope.where(recording_studio_recordings: { id: resolved_price_recording_ids }).order(:id).to_a
       end
 
       drafts = scope.where(state: "draft").order(:id).to_a
@@ -100,6 +116,47 @@ module RecordingStudioBilling
       end
 
       drafts
+    end
+
+    def resolve_price_recording_ids!(root)
+      if price_recording_ids.any?
+        @resolved_price_recording_ids = price_recording_ids
+        return
+      end
+
+      drafts = Price.with_current_recording
+                    .where(recording_studio_recordings: { root_recording_id: root.id }, state: "draft")
+                    .order(:id).to_a
+      if drafts.one?
+        @resolved_price_recording_ids = [drafts.first.recording.id]
+        return
+      end
+      if drafts.many?
+        raise ArgumentError,
+              "a price_recording_ids selection is required when more than one draft price exists"
+      end
+
+      prior_candidate = latest_activated_candidate(root)
+      @resolved_price_recording_ids = Array(
+        prior_candidate&.snapshot_envelope&.dig("selection", "price_recording_ids")
+      ).map(&:to_s).uniq.sort
+      raise ArgumentError, "no selected draft or published price exists" if resolved_price_recording_ids.empty?
+    end
+
+    def latest_activated_candidate(root)
+      CommercialPublicationCandidate
+        .where(root_recording_id: root.id)
+        .where.not(activated_at: nil)
+        .where(
+          "snapshot_envelope -> 'selection' -> 'replacements' = ?::jsonb",
+          JSON.generate(replacements.sort.to_h)
+        )
+        .order(activated_at: :desc, id: :desc)
+        .first
+    end
+
+    def resolved_price_recording_ids
+      @resolved_price_recording_ids || price_recording_ids
     end
 
     def closure_for(root)
@@ -131,7 +188,7 @@ module RecordingStudioBilling
           scope: price.scope
         ).where.not(state: "retired").order(:id).to_a
       end
-      overages.reject! { |overage| replacements.value?(overage.recording.id) }
+      overages.reject! { |overage| replacement_predecessor?(overage) }
       usage_units = records_for(UsageUnit, overages.map(&:usage_unit_recording_id))
       usage_unit_ids = usage_units.map { |item| item.recording.id }
       meters = Meter.with_current_recording.where(usage_unit_recording_id: usage_unit_ids)
@@ -186,7 +243,7 @@ module RecordingStudioBilling
       validate_selected_price_identities!(prices)
       graph.each { |record| validate_record!(root, record, records) }
       prices.each { |price| validate_price!(price, records) }
-      overages = graph.grep(OveragePrice).reject { |overage| replacements.value?(overage.recording.id) }
+      overages = graph.grep(OveragePrice).reject { |overage| replacement_predecessor?(overage) }
       validate_overages!(overages, records)
       validate_rules!(graph.grep(ProductRule), records, prices)
       validate_replacements!(records)
@@ -417,6 +474,7 @@ module RecordingStudioBilling
           overage.market_recording_id == price.market_recording_id &&
           overage.currency_code == price.currency_code && overage.scope == price.scope
       end
+      overages.reject! { |overage| replacement_predecessor?(overage) }
       resolver = CommercialManifestResolver.new(
         product: records.fetch(option.product_recording_id),
         billing_option: option,
@@ -451,10 +509,7 @@ module RecordingStudioBilling
         "resolver_version" => SUPPORTED_RESOLVER_VERSION,
         "root_recording_id" => root.id,
         "effective_at" => effective_at.utc.iso8601(6),
-        "selection" => {
-          "price_recording_ids" => selected_prices(root).map { |price| price.recording.id }.sort,
-          "replacements" => replacements.sort.to_h
-        },
+        "selection" => publication_selection,
         "recordings" => snapshots,
         "manifests" => manifests.sort_by(&:manifest_digest).map do |manifest|
           { "manifest_digest" => manifest.manifest_digest, "schema_version" => manifest.schema_version,
@@ -498,6 +553,48 @@ module RecordingStudioBilling
         manifest_digests: manifests.map(&:manifest_digest).sort, recording_snapshots: envelope.fetch("recordings"),
         snapshot_envelope: envelope
       )
+    end
+
+    def matching_activated_candidate(root, graph)
+      return if effective_at > Time.current
+
+      selection = publication_selection
+      CommercialPublicationCandidate
+        .where(root_recording_id: root.id)
+        .where.not(activated_at: nil)
+        .where("snapshot_envelope -> 'selection' = ?::jsonb", JSON.generate(selection))
+        .order(activated_at: :desc, id: :desc)
+        .lock
+        .detect { |publication| activated_candidate_matches_graph?(publication, graph) }
+    end
+
+    def activated_candidate_matches_graph?(publication, graph)
+      recording_ids = graph.map { |record| record.recording.id.to_s }.sort
+      snapshot_ids = publication.snapshot_envelope.fetch("recordings", {}).keys.map(&:to_s).sort
+      return false unless recording_ids == snapshot_ids
+
+      latest_events = RecordingStudio::Event.unscoped
+                                            .where(recording_id: recording_ids)
+                                            .order(:recording_id, occurred_at: :desc, created_at: :desc, id: :desc)
+                                            .to_a
+                                            .group_by { |event| event.recording_id.to_s }
+                                            .transform_values(&:first)
+      recording_ids.all? do |recording_id|
+        event = latest_events[recording_id]
+        event&.action == "commercial_published" &&
+          event.metadata["candidate_digest"] == publication.candidate_digest
+      end
+    end
+
+    def publication_selection
+      {
+        "price_recording_ids" => resolved_price_recording_ids.sort,
+        "replacements" => replacements.sort.to_h
+      }
+    end
+
+    def replacement_predecessor?(record)
+      replacements.value?(record.recording.id.to_s)
     end
 
     def verify_candidate!(publication)
@@ -589,7 +686,9 @@ module RecordingStudioBilling
       records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
       replacements_for(envelope).each do |prior|
         prior.recording.root_recording.revise(
-          prior.recording, metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+          prior.recording,
+          actor: actor,
+          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
         ) { |revision| revision.state = "retired" }
       end
       records.each do |recording|
@@ -597,7 +696,9 @@ module RecordingStudioBilling
         next unless record.respond_to?(:state) && record.state == "draft"
 
         recording.root_recording.revise(
-          recording, metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+          recording,
+          actor: actor,
+          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
         ) { |revision| revision.state = "published" }
       end
       CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
@@ -605,6 +706,7 @@ module RecordingStudioBilling
       records.each do |recording|
         recording.reload.log_event!(
           action: "commercial_published",
+          actor: actor,
           metadata: { "candidate_digest" => publication.candidate_digest }
         )
       end

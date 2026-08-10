@@ -68,6 +68,15 @@ bin/rails generate recording_studio_billing:migrations
 bin/rails db:migrate
 ```
 
+The install generator configures `config.active_record.schema_format = :sql`.
+Keep the generated `db/structure.sql` under version control; PostgreSQL
+functions and triggers enforce immutable commercial history and cannot be
+represented by `schema.rb`. Regenerate the dump with:
+
+```bash
+bin/rails db:schema:dump
+```
+
 Set the default provider in an initializer. Stripe is only a default symbol in
 this phase; adding a Stripe SDK or any provider adapter is deferred.
 

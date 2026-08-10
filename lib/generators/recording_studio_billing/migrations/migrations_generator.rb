@@ -63,6 +63,7 @@ module RecordingStudioBilling
         end
 
         say "\nRun 'bin/rails db:migrate' to apply the migrations.", :green
+        say "Commit db/structure.sql; schema.rb cannot preserve the billing integrity triggers.", :green
       end
 
       private
