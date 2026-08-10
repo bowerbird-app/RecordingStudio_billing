@@ -22,12 +22,11 @@ user = User.find_or_create_by!(email: "admin@admin.com") do |u|
   u.password_confirmation = "Password"
 end
 
-# Create the workspace recordables
+# Create the billing roots and their capability-owned child recordables.
 workspace = Workspace.find_or_create_by!(name: "Studio Workspace")
-accessible_workspace = Workspace.find_or_create_by!(name: "Client Workspace")
-private_workspace = Workspace.find_or_create_by!(name: "Private Workspace")
-folder = Folder.find_or_create_by!(name: "Product Docs")
-page = Page.find_or_create_by!(title: "Getting Started")
+admin_root = AdminRoot.find_or_create_by!(name: "Billing Administration")
+account = RecordingStudioBilling::Account.find_or_create_by!(name: "Studio Account")
+billing_admin = RecordingStudioBilling::BillingAdmin.find_or_create_by!(key: "billing")
 
 previous_actor = Current.actor
 Current.actor = user
@@ -35,18 +34,15 @@ Current.actor = user
 begin
   # Create the root recording
   root_recording = RecordingStudio.root_recording_for(workspace)
-  accessible_root_recording = RecordingStudio.root_recording_for(accessible_workspace)
-  private_root_recording = RecordingStudio.root_recording_for(private_workspace)
+  admin_root_recording = RecordingStudio.root_recording_for(admin_root)
 
-  folder_recording = find_or_record_child.call(folder, root_recording, root_recording)
-
-  find_or_record_child.call(page, root_recording, folder_recording)
+  find_or_record_child.call(account, root_recording, root_recording)
+  find_or_record_child.call(billing_admin, admin_root_recording, admin_root_recording)
 ensure
   Current.actor = previous_actor
 end
 
 puts "Seeded: admin@admin.com / Password"
 puts "Seeded: Workspace '#{workspace.name}' with root recording ##{root_recording.id}"
-puts "Seeded: Workspace '#{accessible_workspace.name}' with root recording ##{accessible_root_recording.id}"
-puts "Seeded: Workspace '#{private_workspace.name}' with root recording ##{private_root_recording.id}"
-puts "Seeded: Folder '#{folder.name}' and page '#{page.title}'"
+puts "Seeded: Admin root '#{admin_root.name}' with root recording ##{admin_root_recording.id}"
+puts "Seeded: Billing account '#{account.name}' and billing admin '#{billing_admin.key}'"

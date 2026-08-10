@@ -39,4 +39,4 @@ echo "To start the server:"
 echo "  cd test/dummy"
 echo "  bundle exec rails server -p 3000 -b 0.0.0.0"
 echo
-echo "Then visit: http://localhost:3000/gem_template"
+echo "Then visit: http://localhost:3000/recording_studio_billing"

@@ -7,89 +7,52 @@ require_relative "dummy/config/environment"
 require "rails/test_help"
 
 class RecordingStudioV3Test < ActiveSupport::TestCase
-  test "dummy recordable declarations validate and expose v3 introspection" do
+  test "billing roots and capability-owned children validate" do
     assert RecordingStudio.validate_recordable_declarations!
-    assert_equal ["Workspace"], RecordingStudio.root_recordable_types
-    assert_equal %w[Workspace Folder], RecordingStudio.allowed_parent_types_for("Folder")
-    assert_equal %w[Workspace Folder], RecordingStudio.allowed_parent_types_for(Page)
+    assert_equal %w[AdminRoot Workspace], RecordingStudio.root_recordable_types.sort
+    assert_equal ["Workspace"], RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Account)
+    assert_equal ["AdminRoot"], RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::BillingAdmin)
+    assert RecordingStudio.capability_enabled?(:billing, for: Workspace)
+    assert RecordingStudio.capability_enabled?(:billing_admin, for: AdminRoot)
   end
 
-  test "root recordable creates a root recording" do
-    workspace = Workspace.create!(name: unique_name("Root Workspace"))
+  test "workspace records a billing account as a child" do
+    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
+    account = RecordingStudioBilling::Account.new(name: unique_name("Account"))
 
-    root_recording = RecordingStudio.root_recording_for(workspace)
+    recording = record_child(account, root_recording)
 
-    assert_predicate root_recording, :persisted?
-    assert_equal workspace, root_recording.recordable
-    assert_nil root_recording.parent_recording_id
-    assert_equal root_recording.id, root_recording.root_recording_id
+    assert_equal root_recording, recording.parent_recording
+    assert_equal root_recording, recording.root_recording
   end
 
-  test "allowed child can be recorded under a workspace root" do
-    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Child Workspace")))
-    folder = Folder.new(name: unique_name("Allowed Folder"))
+  test "admin root records billing administration as a child" do
+    root_recording = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
+    billing_admin = RecordingStudioBilling::BillingAdmin.new(key: unique_name("billing"))
 
-    event = RecordingStudio.record!(
-      action: "created",
-      recordable: folder,
-      root_recording: root_recording,
-      parent_recording: root_recording
-    )
+    recording = record_child(billing_admin, root_recording)
 
-    assert_equal folder, event.recording.recordable
-    assert_equal root_recording, event.recording.parent_recording
+    assert_equal root_recording, recording.parent_recording
+    assert_equal root_recording, recording.root_recording
   end
 
-  test "page can be recorded under allowed workspace and folder parents" do
-    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Page Workspace")))
-    folder_recording = record_child(Folder.new(name: unique_name("Page Folder")), root_recording, root_recording)
+  test "billing children cannot be recorded under the wrong root type" do
+    admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
+    account = RecordingStudioBilling::Account.new(name: unique_name("Account"))
 
-    workspace_page_recording = record_child(
-      Page.new(title: unique_name("Workspace Page")),
-      root_recording,
-      root_recording
-    )
-    folder_page_recording = record_child(Page.new(title: unique_name("Folder Page")), root_recording, folder_recording)
+    error = assert_raises(RecordingStudio::InvalidParent) { record_child(account, admin_root) }
 
-    assert_equal root_recording, workspace_page_recording.parent_recording
-    assert_equal folder_recording, folder_page_recording.parent_recording
-  end
-
-  test "child recordable cannot be created as a root" do
-    folder = Folder.create!(name: unique_name("Root Rejected Folder"))
-
-    assert_raises(RecordingStudio::RootNotAllowed) do
-      RecordingStudio.root_recording_for(folder)
-    end
-  end
-
-  test "parentless child under an existing root is invalid" do
-    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Parentless Workspace")))
-    folder = Folder.create!(name: unique_name("Parentless Folder"))
-    recording = RecordingStudio::Recording.new(root_recording: root_recording, recordable: folder)
-
-    assert_not recording.valid?
-    assert_includes recording.errors[:parent_recording_id].join, "cannot be blank"
-  end
-
-  test "page cannot be recorded under another page" do
-    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Invalid Page Workspace")))
-    page_recording = record_child(Page.new(title: unique_name("Parent Page")), root_recording, root_recording)
-
-    error = assert_raises(RecordingStudio::InvalidParent) do
-      record_child(Page.new(title: unique_name("Nested Page")), root_recording, page_recording)
-    end
-    assert_equal "Page cannot be recorded under Page", error.message
+    assert_equal "RecordingStudioBilling::Account cannot be recorded under AdminRoot", error.message
   end
 
   private
 
-  def record_child(recordable, root_recording, parent_recording)
+  def record_child(recordable, root_recording)
     RecordingStudio.record!(
       action: "created",
       recordable: recordable,
       root_recording: root_recording,
-      parent_recording: parent_recording
+      parent_recording: root_recording
     ).recording
   end
 

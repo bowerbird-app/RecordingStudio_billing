@@ -16,6 +16,16 @@ GIT
       recording_studio (~> 3.0)
 
 GIT
+  remote: https://github.com/bowerbird-app/RecordingStudio_admin.git
+  revision: 1d60015619eb2cdad774435b588bc89b2bd29dee
+  branch: main
+  specs:
+    recording_studio_admin (1.1.0)
+      flat_pack (~> 0.1.124)
+      rails (~> 8.1.0)
+      recording_studio_accessible (~> 0.3)
+
+GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_root_switchable.git
   revision: 325881ed4c118f41a2f9e1c1196854e5d1557cc7
   tag: 0.3.0
@@ -40,8 +50,9 @@ GIT
 PATH
   remote: ../..
   specs:
-    gem_template (0.1.2)
+    recording_studio_billing (0.1.2)
       rails (~> 8.1.0)
+      recording_studio (~> 3.0)
 
 GEM
   remote: https://rubygems.org/
@@ -455,7 +466,8 @@ DEPENDENCIES
   debug
   devise
   flat_pack!
-  gem_template!
+  recording_studio_admin!
+  recording_studio_billing!
   image_processing (~> 1.2)
   importmap-rails
   jbuilder
@@ -525,7 +537,7 @@ CHECKSUMS
   ffi (1.17.2-x86_64-linux-musl) sha256=97c0eb3981414309285a64dc4d466bd149e981c279a56371ef811395d68cb95c
   flat_pack (0.1.129)
   fugit (1.12.1) sha256=5898f478ede9b415f0804e42b8f3fd53f814bd85eebffceebdbc34e1107aaf68
-  gem_template (0.1.2)
+  recording_studio_billing (0.1.2)
   globalid (1.3.0) sha256=05c639ad6eb4594522a0b07983022f04aa7254626ab69445a0e493aa3786ff11
   i18n (1.15.2) sha256=00f9eb62412fe593b2a65a97daa75300d37abb8f7202ec748e94b6d46a9dd1b5
   image_processing (1.14.0) sha256=754cc169c9c262980889bec6bfd325ed1dafad34f85242b5a07b60af004742fb

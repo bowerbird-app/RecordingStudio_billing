@@ -37,7 +37,7 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     get "/recording_studio_root_switchable/v1/root_switch?scope=all_workspaces"
 
     assert_response :success
-    assert_includes response.body, "Install"
+    assert_includes response.body, "Billing"
   end
 
   test "switching returns to the current page when it is a valid internal route" do
@@ -57,11 +57,11 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
       scope: "all_workspaces",
       root_switch: {
         root_recording_id: target_root_recording.id,
-        return_to: "/docs/install"
+        return_to: "/"
       }
     }
 
-    assert_redirected_to "/docs/install"
+    assert_redirected_to "/"
   end
 
   test "switching falls back to home when return_to is not a valid internal route" do
