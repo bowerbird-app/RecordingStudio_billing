@@ -26,6 +26,7 @@ module RecordingStudioBilling
       conditions: -> { where(state: "published") }
     }, if: -> { state == "published" }
     validate :package_size_matches_pricing_model
+    validate :published_price_is_immutable, on: :update
 
     private
 
@@ -35,6 +36,12 @@ module RecordingStudioBilling
       elsif package_size.present?
         errors.add(:package_size, "must be blank unless pricing_model is package")
       end
+    end
+
+    def published_price_is_immutable
+      return unless state_was == "published" && changed?
+
+      errors.add(:base, "published overage prices are immutable; create a replacement version")
     end
   end
 end

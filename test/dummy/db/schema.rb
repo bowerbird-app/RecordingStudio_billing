@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -43,6 +43,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.string "collection_method", default: "automatic", null: false
     t.datetime "created_at", null: false
     t.integer "default_quantity"
+    t.jsonb "feature_values", default: {}, null: false
     t.string "interval"
     t.integer "interval_count"
     t.string "key", null: false
@@ -61,19 +62,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "recording_studio_billing_billing_options_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_387e136700"
-    t.check_constraint "(\"interval\"::text = ANY (ARRAY['day'::character varying, 'week'::character varying, 'month'::character varying, 'year'::character varying]::text[])) OR \"interval\" IS NULL", name: "rs_billing_options_interval"
-    t.check_constraint "checkout_policy::text = ANY (ARRAY['allowed'::character varying, 'required'::character varying, 'disabled'::character varying]::text[])", name: "rs_billing_options_checkout_policy"
-    t.check_constraint "collection_method::text = ANY (ARRAY['automatic'::character varying, 'invoice'::character varying]::text[])", name: "rs_billing_options_collection_method"
+    t.check_constraint "(\"interval\"::text = ANY (ARRAY['day'::character varying::text, 'week'::character varying::text, 'month'::character varying::text, 'year'::character varying::text])) OR \"interval\" IS NULL", name: "rs_billing_options_interval"
+    t.check_constraint "checkout_policy::text = ANY (ARRAY['allowed'::character varying::text, 'required'::character varying::text, 'disabled'::character varying::text])", name: "rs_billing_options_checkout_policy"
+    t.check_constraint "collection_method::text = ANY (ARRAY['automatic'::character varying::text, 'invoice'::character varying::text])", name: "rs_billing_options_collection_method"
     t.check_constraint "interval_count > 0 OR interval_count IS NULL", name: "rs_billing_options_interval_count"
-    t.check_constraint "lifecycle_policy::text = ANY (ARRAY['immediate'::character varying, 'scheduled'::character varying]::text[])", name: "rs_billing_options_lifecycle_policy"
+    t.check_constraint "lifecycle_policy::text = ANY (ARRAY['immediate'::character varying::text, 'scheduled'::character varying::text])", name: "rs_billing_options_lifecycle_policy"
     t.check_constraint "payment_terms_days >= 0", name: "rs_billing_options_payment_terms_days"
-    t.check_constraint "pricing_model::text = ANY (ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying]::text[])", name: "rs_billing_options_pricing_model"
-    t.check_constraint "proration_policy::text = ANY (ARRAY['none'::character varying, 'prorate'::character varying]::text[])", name: "rs_billing_options_proration_policy"
-    t.check_constraint "quantity_mode::text = ANY (ARRAY['fixed'::character varying, 'adjustable'::character varying]::text[])", name: "rs_billing_options_quantity_mode"
-    t.check_constraint "recurrence::text = ANY (ARRAY['one_time'::character varying, 'recurring'::character varying]::text[])", name: "rs_billing_options_recurrence"
+    t.check_constraint "pricing_model::text = ANY (ARRAY['flat'::character varying::text, 'per_unit'::character varying::text, 'package'::character varying::text])", name: "rs_billing_options_pricing_model"
+    t.check_constraint "proration_policy::text = ANY (ARRAY['none'::character varying::text, 'prorate'::character varying::text])", name: "rs_billing_options_proration_policy"
+    t.check_constraint "quantity_mode::text = ANY (ARRAY['fixed'::character varying::text, 'adjustable'::character varying::text])", name: "rs_billing_options_quantity_mode"
+    t.check_constraint "recurrence::text = ANY (ARRAY['one_time'::character varying::text, 'recurring'::character varying::text])", name: "rs_billing_options_recurrence"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_billing_options_state"
-    t.check_constraint "tax_policy::text = ANY (ARRAY['exclusive'::character varying, 'inclusive'::character varying, 'automatic'::character varying]::text[])", name: "rs_billing_options_tax_policy"
+    t.check_constraint "tax_policy::text = ANY (ARRAY['exclusive'::character varying::text, 'inclusive'::character varying::text, 'automatic'::character varying::text])", name: "rs_billing_options_tax_policy"
     t.check_constraint "trial_days >= 0", name: "rs_billing_options_trial_days"
+  end
+
+  create_table "recording_studio_billing_commercial_manifests", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.jsonb "canonical_data", null: false
+    t.datetime "created_at", null: false
+    t.string "manifest_digest", null: false
+    t.jsonb "recording_snapshots", default: [], null: false
+    t.string "resolver_version", null: false
+    t.uuid "root_recording_id", null: false
+    t.string "schema_version", null: false
+    t.jsonb "snapshot_references", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.datetime "used_at"
+    t.index ["manifest_digest"], name: "idx_on_manifest_digest_b5d415588d", unique: true
+    t.index ["root_recording_id"], name: "idx_on_root_recording_id_d63849b28a"
+  end
+
+  create_table "recording_studio_billing_commercial_publication_candidates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "activated_at"
+    t.string "candidate_digest", null: false
+    t.datetime "created_at", null: false
+    t.datetime "effective_at", null: false
+    t.jsonb "manifest_digests", default: [], null: false
+    t.jsonb "recording_snapshots", default: [], null: false
+    t.uuid "root_recording_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["candidate_digest"], name: "rs_billing_publication_candidates_digest", unique: true
+    t.index ["effective_at"], name: "idx_on_effective_at_7e599d09df"
   end
 
   create_table "recording_studio_billing_cost_cards", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -122,6 +151,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
 
   create_table "recording_studio_billing_features", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.jsonb "definition", default: {}, null: false
     t.string "key", null: false
     t.string "kind", null: false
     t.uuid "product_recording_id", null: false
@@ -129,14 +159,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "recording_studio_billing_features_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_b3abe2c34c"
-    t.check_constraint "kind::text = ANY (ARRAY['boolean'::character varying, 'limit'::character varying, 'allowance'::character varying, 'variant'::character varying]::text[])", name: "rs_billing_features_kind"
+    t.check_constraint "kind::text = ANY (ARRAY['boolean'::character varying::text, 'limit'::character varying::text, 'allowance'::character varying::text, 'variant'::character varying::text])", name: "rs_billing_features_kind"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_features_state"
   end
 
   create_table "recording_studio_billing_markets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.jsonb "allowed_currency_codes", default: [], null: false
     t.jsonb "country_codes", default: [], null: false
+    t.jsonb "country_groups", default: {}, null: false
     t.datetime "created_at", null: false
+    t.string "default_currency_code"
     t.boolean "fallback", default: false, null: false
     t.string "key", null: false
     t.string "ppa_policy", default: "standard", null: false
@@ -164,7 +196,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.uuid "usage_unit_recording_id", null: false
     t.index ["key"], name: "recording_studio_billing_meters_key", unique: true
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_20bbb0eead"
-    t.check_constraint "aggregation::text = ANY (ARRAY['sum'::character varying, 'count'::character varying, 'maximum'::character varying, 'latest'::character varying]::text[])", name: "rs_billing_meters_aggregation"
+    t.check_constraint "aggregation::text = ANY (ARRAY['sum'::character varying::text, 'count'::character varying::text, 'maximum'::character varying::text, 'latest'::character varying::text])", name: "rs_billing_meters_aggregation"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_meters_state"
   end
 
@@ -215,6 +247,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.datetime "created_at", null: false
     t.string "currency_code", null: false
     t.integer "currency_exponent", null: false
+    t.jsonb "feature_values", default: {}, null: false
     t.string "key", null: false
     t.uuid "market_recording_id", null: false
     t.integer "package_size"
@@ -238,19 +271,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
   end
 
   create_table "recording_studio_billing_product_rules", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.jsonb "conditions", default: {}, null: false
     t.datetime "created_at", null: false
     t.string "key", null: false
     t.uuid "product_recording_id", null: false
     t.string "rule_type", null: false
     t.string "state", default: "draft", null: false
+    t.uuid "target_product_recording_id"
     t.datetime "updated_at", null: false
     t.index ["key"], name: "recording_studio_billing_product_rules_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_cca2c7df22"
+    t.index ["target_product_recording_id"], name: "idx_on_target_product_recording_id_2d78d41b32"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_product_rules_state"
   end
 
   create_table "recording_studio_billing_products", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.jsonb "feature_values", default: {}, null: false
     t.string "key", null: false
     t.string "kind", null: false
     t.uuid "provider_account_recording_id", null: false
@@ -258,7 +295,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
     t.datetime "updated_at", null: false
     t.index ["key"], name: "recording_studio_billing_products_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_75eb593078"
-    t.check_constraint "kind::text = ANY (ARRAY['plan'::character varying, 'addon'::character varying, 'credit_pack'::character varying, 'service'::character varying]::text[])", name: "rs_billing_products_kind"
+    t.check_constraint "kind::text = ANY (ARRAY['plan'::character varying::text, 'addon'::character varying::text, 'credit_pack'::character varying::text, 'service'::character varying::text])", name: "rs_billing_products_kind"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_products_state"
   end
 
@@ -410,6 +447,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000004) do
   add_foreign_key "recording_studio_billing_prices", "recording_studio_recordings", column: "billing_option_recording_id"
   add_foreign_key "recording_studio_billing_prices", "recording_studio_recordings", column: "market_recording_id"
   add_foreign_key "recording_studio_billing_product_rules", "recording_studio_recordings", column: "product_recording_id"
+  add_foreign_key "recording_studio_billing_product_rules", "recording_studio_recordings", column: "target_product_recording_id"
   add_foreign_key "recording_studio_billing_products", "recording_studio_recordings", column: "provider_account_recording_id"
   add_foreign_key "recording_studio_billing_provider_accounts", "recording_studio_recordings", column: "billing_admin_recording_id"
   add_foreign_key "recording_studio_billing_rate_cards", "recording_studio_recordings", column: "provider_account_recording_id"
