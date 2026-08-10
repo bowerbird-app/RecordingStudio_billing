@@ -17,8 +17,8 @@ GIT
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_admin.git
-  revision: 1d60015619eb2cdad774435b588bc89b2bd29dee
-  branch: main
+  revision: 0057bb66ca6cd6bbd0ee5378c4d838d49c5e247c
+  tag: 1.1.0
   specs:
     recording_studio_admin (1.1.0)
       flat_pack (~> 0.1.124)
@@ -27,14 +27,24 @@ GIT
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_root_switchable.git
-  revision: 325881ed4c118f41a2f9e1c1196854e5d1557cc7
-  tag: 0.3.0
+  revision: ea9a70b828420931048eb7eebbe8180228790959
+  tag: v0.3.1
   specs:
-    recording_studio_root_switchable (0.3.0)
+    recording_studio_root_switchable (0.3.1)
       flat_pack
       rails (~> 8.1.0)
       recording_studio (~> 3.0)
       recording_studio_accessible (~> 0.3)
+
+GIT
+  remote: https://github.com/bowerbird-app/RecordingStudio_webhooks.git
+  revision: 99a73c82a9078179c5a941135bdc893760890a48
+  tag: v0.1.0
+  specs:
+    recording_studio_webhooks (0.1.0)
+      rails (~> 8.1.0)
+      recording_studio (~> 3.0)
+      sidekiq (~> 8.1.6)
 
 GIT
   remote: https://github.com/bowerbird-app/flatpack.git
@@ -51,8 +61,13 @@ PATH
   remote: ../..
   specs:
     recording_studio_billing (0.1.2)
+      flat_pack (~> 0.1.129)
       rails (~> 8.1.0)
       recording_studio (~> 3.0)
+      recording_studio_accessible (~> 0.3.1)
+      recording_studio_admin (~> 1.1.0)
+      recording_studio_root_switchable (~> 0.3.1)
+      recording_studio_webhooks (~> 0.1.0)
 
 GEM
   remote: https://rubygems.org/
@@ -336,6 +351,8 @@ GEM
       prism (>= 1.6.0)
       rbs (>= 4.0.0)
       tsort
+    redis-client (0.30.1)
+      connection_pool
     regexp_parser (2.11.3)
     reline (0.6.3)
       io-console (~> 0.5)
@@ -375,6 +392,12 @@ GEM
       ffi (~> 1.12)
       logger
     securerandom (0.4.1)
+    sidekiq (8.1.6)
+      connection_pool (>= 3.0.0)
+      json (>= 2.16.0)
+      logger (>= 1.7.0)
+      rack (>= 3.2.0)
+      redis-client (>= 0.29.0)
     sin_lru_redux (2.5.2)
     solid_cable (3.0.12)
       actioncable (>= 7.2)
@@ -479,6 +502,7 @@ DEPENDENCIES
   recording_studio_admin!
   recording_studio_billing!
   recording_studio_root_switchable!
+  recording_studio_webhooks!
   rubocop-rails-omakase
   solid_cable
   solid_cache
@@ -607,7 +631,9 @@ CHECKSUMS
   recording_studio_accessible (0.3.1)
   recording_studio_admin (1.1.0)
   recording_studio_billing (0.1.2)
-  recording_studio_root_switchable (0.3.0)
+  recording_studio_root_switchable (0.3.1)
+  recording_studio_webhooks (0.1.0)
+  redis-client (0.30.1) sha256=5151bc5c7bbfe48623732cdae3b900d8a22dc691cc7cdfacfb351ac55116522d
   regexp_parser (2.11.3) sha256=ca13f381a173b7a93450e53459075c9b76a10433caadcb2f1180f2c741fc55a4
   reline (0.6.3) sha256=1198b04973565b36ec0f11542ab3f5cfeeec34823f4e54cebde90968092b1835
   responders (3.2.0) sha256=89c2d6ac0ae16f6458a11524cae4a8efdceba1a3baea164d28ee9046bd3df55a
@@ -619,6 +645,7 @@ CHECKSUMS
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   ruby-vips (2.2.5) sha256=f3c547a172c36ba26b8614c809f5823bc6199623ec6204ec7c3bce29037f7758
   securerandom (0.4.1) sha256=cc5193d414a4341b6e225f0cb4446aceca8e50d5e1888743fac16987638ea0b1
+  sidekiq (8.1.6) sha256=be20cd051124b1a16cf97ea9157137abbd30a515c16a5ae9312d2eadd045e40f
   sin_lru_redux (2.5.2) sha256=feed104c943afaeeecb1ad83f3f63562088b9785a816625c32b2305eccbd9963
   solid_cable (3.0.12) sha256=a168a54731a455d5627af48d8441ea3b554b8c1f6e6cd6074109de493e6b0460
   solid_cache (1.0.10) sha256=bc05a2fb3ac78a6f43cbb5946679cf9db67dd30d22939ededc385cb93e120d41

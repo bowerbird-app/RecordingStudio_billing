@@ -90,6 +90,12 @@ module RecordingStudioBilling
       RecordingStudioBilling.register_capabilities!
     end
 
+    initializer "recording_studio_billing.register_recordable_types", after: "recording_studio.load_config" do
+      RecordingStudioBilling::RECORDABLE_TYPES.each do |type|
+        RecordingStudio.register_recordable_type(type)
+      end
+    end
+
     # Apply model extensions when models are loaded
     initializer "recording_studio_billing.apply_model_extensions" do
       config.to_prepare do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -25,15 +25,243 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000001) do
   create_table "recording_studio_billing_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.uuid "root_recording_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["name"], name: "index_recording_studio_billing_accounts_on_name", unique: true
+    t.index ["root_recording_id"], name: "index_recording_studio_billing_accounts_on_root_recording_id", unique: true
   end
 
   create_table "recording_studio_billing_billing_admins", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
+    t.uuid "root_recording_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "index_recording_studio_billing_billing_admins_on_key", unique: true
+    t.index ["root_recording_id"], name: "idx_on_root_recording_id_b72e653703", unique: true
+  end
+
+  create_table "recording_studio_billing_billing_options", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "kind", null: false
+    t.uuid "product_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_recording_id"], name: "idx_on_product_recording_id_387e136700"
+    t.check_constraint "kind::text = ANY (ARRAY['recurring'::character varying, 'usage'::character varying]::text[])", name: "rs_billing_options_kind"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_billing_options_state"
+  end
+
+  create_table "recording_studio_billing_cost_cards", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.uuid "provider_account_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_de683655d9"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_cost_cards_state"
+  end
+
+  create_table "recording_studio_billing_cost_rates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.bigint "amount_minor", null: false
+    t.uuid "cost_card_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.string "currency_code", null: false
+    t.integer "currency_exponent", null: false
+    t.string "key", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "usage_unit_recording_id", null: false
+    t.index ["cost_card_recording_id"], name: "idx_on_cost_card_recording_id_f59059cf73"
+    t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_676a199a57"
+    t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_cost_rates_amount_minor"
+    t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_cost_rates_currency_code"
+    t.check_constraint "currency_exponent >= 0 AND currency_exponent <= 3", name: "recording_studio_billing_cost_rates_currency_exponent"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_cost_rates_state"
+  end
+
+  create_table "recording_studio_billing_feature_overrides", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "account_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.uuid "feature_recording_id", null: false
+    t.string "key", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.jsonb "value", default: {}, null: false
+    t.index ["account_recording_id"], name: "idx_on_account_recording_id_bf46d23ae6"
+    t.index ["feature_recording_id"], name: "idx_on_feature_recording_id_6dcf40615b"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_feature_overrides_state"
+  end
+
+  create_table "recording_studio_billing_features", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "kind", null: false
+    t.uuid "product_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_recording_id"], name: "idx_on_product_recording_id_b3abe2c34c"
+    t.check_constraint "kind::text = ANY (ARRAY['boolean'::character varying, 'quantity'::character varying]::text[])", name: "rs_billing_features_kind"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_features_state"
+  end
+
+  create_table "recording_studio_billing_markets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "country_code", null: false
+    t.datetime "created_at", null: false
+    t.string "currency_code", null: false
+    t.string "key", null: false
+    t.uuid "provider_account_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_917bf5f52e"
+    t.check_constraint "country_code::text ~ '^[A-Z]{2}$'::text", name: "recording_studio_billing_markets_country_code"
+    t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_markets_currency_code"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_markets_state"
+  end
+
+  create_table "recording_studio_billing_meters", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "aggregation", null: false
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "usage_unit_recording_id", null: false
+    t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_20bbb0eead"
+    t.check_constraint "aggregation::text = ANY (ARRAY['sum'::character varying, 'count'::character varying, 'last_value'::character varying]::text[])", name: "rs_billing_meters_aggregation"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_meters_state"
+  end
+
+  create_table "recording_studio_billing_overage_prices", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.bigint "amount_minor", null: false
+    t.uuid "billing_option_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.string "currency_code", null: false
+    t.integer "currency_exponent", null: false
+    t.string "key", null: false
+    t.uuid "market_recording_id", null: false
+    t.integer "package_size"
+    t.string "pricing_model", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "usage_unit_recording_id", null: false
+    t.integer "version", null: false
+    t.index ["billing_option_recording_id", "market_recording_id", "usage_unit_recording_id", "currency_code", "version"], name: "idx_rs_billing_active_overage_prices", unique: true, where: "((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[]))"
+    t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_4b4b3a8dfa"
+    t.index ["market_recording_id"], name: "idx_on_market_recording_id_2ba99ee38f"
+    t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_9e76a066d4"
+    t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_overage_prices_amount_minor"
+    t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_overage_prices_currency_code"
+    t.check_constraint "currency_exponent >= 0 AND currency_exponent <= 3", name: "recording_studio_billing_overage_prices_currency_exponent"
+    t.check_constraint "pricing_model::text = 'package'::text AND package_size IS NOT NULL AND package_size > 0 OR (pricing_model::text = ANY (ARRAY['flat'::character varying, 'per_unit'::character varying]::text[])) AND package_size IS NULL", name: "recording_studio_billing_overage_prices_package_size"
+    t.check_constraint "pricing_model::text = ANY (ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying]::text[])", name: "recording_studio_billing_overage_prices_pricing_model"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_overage_prices_state"
+    t.check_constraint "version >= 1", name: "recording_studio_billing_overage_prices_version"
+  end
+
+  create_table "recording_studio_billing_plan_updates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "billing_option_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_df8562f2e7"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_plan_updates_state"
+  end
+
+  create_table "recording_studio_billing_prices", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.bigint "amount_minor", null: false
+    t.uuid "billing_option_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.string "currency_code", null: false
+    t.integer "currency_exponent", null: false
+    t.string "key", null: false
+    t.uuid "market_recording_id", null: false
+    t.integer "package_size"
+    t.string "pricing_model", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.integer "version", null: false
+    t.index ["billing_option_recording_id", "market_recording_id", "currency_code", "version"], name: "idx_rs_billing_active_prices", unique: true, where: "((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[]))"
+    t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_f4dd8ca6e3"
+    t.index ["market_recording_id"], name: "index_recording_studio_billing_prices_on_market_recording_id"
+    t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_prices_amount_minor"
+    t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_prices_currency_code"
+    t.check_constraint "currency_exponent >= 0 AND currency_exponent <= 3", name: "recording_studio_billing_prices_currency_exponent"
+    t.check_constraint "pricing_model::text = 'package'::text AND package_size IS NOT NULL AND package_size > 0 OR (pricing_model::text = ANY (ARRAY['flat'::character varying, 'per_unit'::character varying]::text[])) AND package_size IS NULL", name: "recording_studio_billing_prices_package_size"
+    t.check_constraint "pricing_model::text = ANY (ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying]::text[])", name: "recording_studio_billing_prices_pricing_model"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_prices_state"
+    t.check_constraint "version >= 1", name: "recording_studio_billing_prices_version"
+  end
+
+  create_table "recording_studio_billing_product_rules", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.uuid "product_recording_id", null: false
+    t.string "rule_type", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_recording_id"], name: "idx_on_product_recording_id_cca2c7df22"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_product_rules_state"
+  end
+
+  create_table "recording_studio_billing_products", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "kind", null: false
+    t.uuid "provider_account_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_75eb593078"
+    t.check_constraint "kind::text = ANY (ARRAY['subscription'::character varying, 'one_time'::character varying]::text[])", name: "rs_billing_products_kind"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_products_state"
+  end
+
+  create_table "recording_studio_billing_provider_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "billing_admin_recording_id", null: false
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "provider", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["billing_admin_recording_id"], name: "idx_on_billing_admin_recording_id_e9c004ac4f"
+    t.check_constraint "provider::text ~ '^[a-z][a-z0-9_]*$'::text", name: "rs_billing_provider_accounts_provider_format"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_provider_accounts_state"
+  end
+
+  create_table "recording_studio_billing_rate_cards", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.uuid "provider_account_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_829622d336"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_rate_cards_state"
+  end
+
+  create_table "recording_studio_billing_rates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.bigint "amount_minor", null: false
+    t.datetime "created_at", null: false
+    t.string "currency_code", null: false
+    t.integer "currency_exponent", null: false
+    t.string "key", null: false
+    t.uuid "rate_card_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "usage_unit_recording_id", null: false
+    t.index ["rate_card_recording_id"], name: "index_recording_studio_billing_rates_on_rate_card_recording_id"
+    t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_737a9cb844"
+    t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_rates_amount_minor"
+    t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_rates_currency_code"
+    t.check_constraint "currency_exponent >= 0 AND currency_exponent <= 3", name: "recording_studio_billing_rates_currency_exponent"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_rates_state"
+  end
+
+  create_table "recording_studio_billing_usage_units", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.uuid "provider_account_recording_id", null: false
+    t.string "state", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_d0aeb02284"
+    t.check_constraint "state::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying]::text[])", name: "recording_studio_billing_usage_units_state"
   end
 
   create_table "recording_studio_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -106,6 +334,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000001) do
     t.datetime "updated_at", null: false
   end
 
+  add_foreign_key "recording_studio_billing_accounts", "recording_studio_recordings", column: "root_recording_id"
+  add_foreign_key "recording_studio_billing_billing_admins", "recording_studio_recordings", column: "root_recording_id"
+  add_foreign_key "recording_studio_billing_billing_options", "recording_studio_recordings", column: "product_recording_id"
+  add_foreign_key "recording_studio_billing_cost_cards", "recording_studio_recordings", column: "provider_account_recording_id"
+  add_foreign_key "recording_studio_billing_cost_rates", "recording_studio_recordings", column: "cost_card_recording_id"
+  add_foreign_key "recording_studio_billing_cost_rates", "recording_studio_recordings", column: "usage_unit_recording_id"
+  add_foreign_key "recording_studio_billing_feature_overrides", "recording_studio_recordings", column: "account_recording_id"
+  add_foreign_key "recording_studio_billing_feature_overrides", "recording_studio_recordings", column: "feature_recording_id"
+  add_foreign_key "recording_studio_billing_features", "recording_studio_recordings", column: "product_recording_id"
+  add_foreign_key "recording_studio_billing_markets", "recording_studio_recordings", column: "provider_account_recording_id"
+  add_foreign_key "recording_studio_billing_meters", "recording_studio_recordings", column: "usage_unit_recording_id"
+  add_foreign_key "recording_studio_billing_overage_prices", "recording_studio_recordings", column: "billing_option_recording_id"
+  add_foreign_key "recording_studio_billing_overage_prices", "recording_studio_recordings", column: "market_recording_id"
+  add_foreign_key "recording_studio_billing_overage_prices", "recording_studio_recordings", column: "usage_unit_recording_id"
+  add_foreign_key "recording_studio_billing_plan_updates", "recording_studio_recordings", column: "billing_option_recording_id"
+  add_foreign_key "recording_studio_billing_prices", "recording_studio_recordings", column: "billing_option_recording_id"
+  add_foreign_key "recording_studio_billing_prices", "recording_studio_recordings", column: "market_recording_id"
+  add_foreign_key "recording_studio_billing_product_rules", "recording_studio_recordings", column: "product_recording_id"
+  add_foreign_key "recording_studio_billing_products", "recording_studio_recordings", column: "provider_account_recording_id"
+  add_foreign_key "recording_studio_billing_provider_accounts", "recording_studio_recordings", column: "billing_admin_recording_id"
+  add_foreign_key "recording_studio_billing_rate_cards", "recording_studio_recordings", column: "provider_account_recording_id"
+  add_foreign_key "recording_studio_billing_rates", "recording_studio_recordings", column: "rate_card_recording_id"
+  add_foreign_key "recording_studio_billing_rates", "recording_studio_recordings", column: "usage_unit_recording_id"
+  add_foreign_key "recording_studio_billing_usage_units", "recording_studio_recordings", column: "provider_account_recording_id"
   add_foreign_key "recording_studio_events", "recording_studio_recordings", column: "recording_id"
   add_foreign_key "recording_studio_recordings", "recording_studio_recordings", column: "parent_recording_id"
   add_foreign_key "recording_studio_recordings", "recording_studio_recordings", column: "root_recording_id"

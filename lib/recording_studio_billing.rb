@@ -8,6 +8,27 @@ require "recording_studio_billing/billing_admin_support"
 require "recording_studio_billing/engine"
 
 module RecordingStudioBilling
+  RECORDABLE_TYPES = %w[
+    RecordingStudioBilling::Account
+    RecordingStudioBilling::BillingAdmin
+    RecordingStudioBilling::ProviderAccount
+    RecordingStudioBilling::Market
+    RecordingStudioBilling::Product
+    RecordingStudioBilling::BillingOption
+    RecordingStudioBilling::Price
+    RecordingStudioBilling::OveragePrice
+    RecordingStudioBilling::Feature
+    RecordingStudioBilling::FeatureOverride
+    RecordingStudioBilling::ProductRule
+    RecordingStudioBilling::PlanUpdate
+    RecordingStudioBilling::UsageUnit
+    RecordingStudioBilling::Meter
+    RecordingStudioBilling::RateCard
+    RecordingStudioBilling::Rate
+    RecordingStudioBilling::CostCard
+    RecordingStudioBilling::CostRate
+  ].freeze
+
   class << self
     def configuration
       @configuration ||= Configuration.new
@@ -17,6 +38,15 @@ module RecordingStudioBilling
       yield(configuration) if block_given?
     end
 
+    def ensure_account(...)
+      EnsureAccount.call(...)
+    end
+
+    def ensure_billing_admin(...)
+      EnsureBillingAdmin.call(...)
+    end
+
+    # rubocop:disable Metrics/MethodLength
     def register_capabilities!
       return unless defined?(RecordingStudio)
 
@@ -31,5 +61,6 @@ module RecordingStudioBilling
         child_recordables: "RecordingStudioBilling::BillingAdmin"
       )
     end
+    # rubocop:enable Metrics/MethodLength
   end
 end

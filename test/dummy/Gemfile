@@ -6,10 +6,11 @@ gem "recording_studio_billing", path: "../.."
 # RecordingStudio engine
 gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "recording_studio/v3.0.0"
 gem "recording_studio_accessible", github: "bowerbird-app/RecordingStudio_accessible", tag: "0.3.1"
-gem "recording_studio_admin", github: "bowerbird-app/RecordingStudio_admin", branch: "main"
+gem "recording_studio_admin", github: "bowerbird-app/RecordingStudio_admin", tag: "1.1.0"
+gem "recording_studio_webhooks", github: "bowerbird-app/RecordingStudio_webhooks", tag: "v0.1.0"
 
 # Root switcher for the top nav
-gem "recording_studio_root_switchable", github: "bowerbird-app/RecordingStudio_root_switchable", tag: "0.3.0"
+gem "recording_studio_root_switchable", github: "bowerbird-app/RecordingStudio_root_switchable", tag: "v0.3.1"
 
 # Devise authentication
 gem "devise"

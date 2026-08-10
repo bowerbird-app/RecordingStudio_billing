@@ -5,8 +5,7 @@ RecordingStudio.configure do |config|
   config.recordable_types = [
     "Workspace",
     "AdminRoot",
-    "RecordingStudioBilling::Account",
-    "RecordingStudioBilling::BillingAdmin"
+    *RecordingStudioBilling::RECORDABLE_TYPES
   ]
 
   # Require each configured ActiveRecord type to call recording_studio_recordable.
