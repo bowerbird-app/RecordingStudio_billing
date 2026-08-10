@@ -10,6 +10,8 @@ module RecordingStudioBilling
 
     belongs_to :billing_option_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :market_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :billing_option_recording, type: "RecordingStudioBilling::BillingOption"
+    commercial_reference :market_recording, type: "RecordingStudioBilling::Market"
 
     validates :amount_minor, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
     validates :currency_code, format: { with: /\A[A-Z]{3}\z/ }

@@ -350,7 +350,9 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
   private
 
   def clear_billing_test_data!
-    COMMERCIAL_RECORDABLES.each(&:delete_all)
+    connection = ActiveRecord::Base.connection
+    tables = COMMERCIAL_RECORDABLES.map(&:table_name).map { |table| connection.quote_table_name(table) }.join(", ")
+    connection.execute("TRUNCATE TABLE #{tables} RESTART IDENTITY CASCADE")
     RecordingStudioRootSwitchable::Selection.delete_all if defined?(RecordingStudioRootSwitchable::Selection)
     RecordingStudio::Event.unscoped.delete_all
     RecordingStudio::Recording.unscoped.delete_all

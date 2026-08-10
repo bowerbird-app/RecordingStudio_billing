@@ -9,6 +9,7 @@ module RecordingStudioBilling
     commercial_recordable label: "Feature", allowed_parent_types: "RecordingStudioBilling::Product"
 
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :product_recording, type: "RecordingStudioBilling::Product"
 
     validates :kind, inclusion: { in: TYPES }
   end

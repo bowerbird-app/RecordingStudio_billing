@@ -3,18 +3,19 @@
 module RecordingStudioBilling
   # Safe to run from a scheduler more than once or from concurrent workers.
   class DueCommercialPublicationActivator
-    def self.call(now: Time.current)
-      new(now:).call
+    def self.call(now: Time.current, actor:)
+      new(now:, actor:).call
     end
 
-    def initialize(now:)
+    def initialize(now:, actor:)
       @now = now
+      @actor = actor
     end
 
     def call
       CommercialPublicationCandidate.where(activated_at: nil).where(effective_at: ..@now).order(:effective_at, :id)
                                     .find_each.filter_map do |candidate|
-        CommercialPublisher.activate!(candidate:)
+        CommercialPublisher.activate!(candidate:, actor: @actor)
       rescue ActiveRecord::RecordNotFound
         nil
       end

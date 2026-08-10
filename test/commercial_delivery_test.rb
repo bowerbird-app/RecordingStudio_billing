@@ -20,6 +20,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       }
     }
     RecordingStudioBilling.configuration.tax_policy = {}
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
   end
 
   teardown { clear_data! }
@@ -32,6 +33,17 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
                  RecordingStudioBilling::CommercialManifestCanonicalizer.digest(second)
     assert_raises(RecordingStudioBilling::CommercialManifestCanonicalizer::UnsupportedValue) do
       RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize(1.25)
+    end
+    assert_raises(RecordingStudioBilling::CommercialManifestCanonicalizer::UnsupportedValue) do
+      RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize("a" => 1, a: 2)
+    end
+    assert_raises(RecordingStudioBilling::CommercialManifestCanonicalizer::UnsupportedValue) do
+      RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize("__time__" => "client value")
+    end
+    nested = "leaf"
+    34.times { nested = [nested] }
+    assert_raises(RecordingStudioBilling::CommercialManifestCanonicalizer::UnsupportedValue) do
+      RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize(nested)
     end
 
     data = JSON.parse(RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize("price" => 100))
@@ -66,7 +78,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_match(/draft/, error.message)
 
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
-      root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id]
+      root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
     )
     assert_predicate candidate, :activated?
     assert RecordingStudioBilling::Price.where(state: "published").exists?
@@ -83,7 +95,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     assert_raises(KeyError) do
       RecordingStudioBilling::CommercialPublisher.publish!(
-        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id]
+        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
       )
     end
     assert_equal 0, RecordingStudioBilling::CommercialManifest.count
@@ -97,17 +109,18 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     selection = [graph[:italy_price].recording.id]
 
     first = RecordingStudioBilling::CommercialPublisher.publish!(
-      root_recording: graph[:root], effective_at:, price_recording_ids: selection
+      root_recording: graph[:root], effective_at:, price_recording_ids: selection, actor: :test_actor
     )
     second = RecordingStudioBilling::CommercialPublisher.publish!(
-      root_recording: graph[:root], effective_at:, price_recording_ids: selection
+      root_recording: graph[:root], effective_at:, price_recording_ids: selection, actor: :test_actor
     )
 
     assert_equal first.id, second.id
     assert_equal "draft", graph[:germany_price].reload.state
     assert_raises(ArgumentError) do
       RecordingStudioBilling::CommercialPublisher.publish!(
-        root_recording: graph[:root], effective_at:, price_recording_ids: [graph[:germany_price].recording.id]
+        root_recording: graph[:root], effective_at:, price_recording_ids: [graph[:germany_price].recording.id],
+        actor: :test_actor
       )
     end
   end
@@ -116,13 +129,15 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     graph = commercial_graph
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root], effective_at: 2.minutes.from_now,
-      price_recording_ids: [graph[:italy_price].recording.id]
+      price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
     )
     manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: candidate.manifest_digests.first)
     manifest.update_column(:canonical_data, manifest.canonical_data.merge("tampered" => true))
 
     travel_to(3.minutes.from_now) do
-      error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate:) }
+      error = assert_raises(ArgumentError) do
+        RecordingStudioBilling::CommercialPublisher.activate!(candidate:, actor: :test_actor)
+      end
       assert_match(/manifest/, error.message)
     end
   end
@@ -138,18 +153,78 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_includes provider.errors[:configuration], "must not contain credentials or secrets"
   end
 
+  test "provider configuration is public allowlisted metadata only" do
+    provider = RecordingStudioBilling::ProviderAccount.new(
+      billing_admin_recording_id: SecureRandom.uuid, key: "invalid_provider_configuration", adapter_key: "stripe",
+      name: "Provider", environment: "production", configuration: { "provider_account_id" => "internal" },
+      capabilities: [], supported_markets: [], supported_currencies: []
+    )
+
+    assert_not provider.valid?
+    assert_includes provider.errors[:configuration], "contains unsupported keys: provider_account_id"
+  end
+
+  test "publication requires an actor and an authorizer" do
+    graph = commercial_graph
+    RecordingStudioBilling.configuration.instance_variable_set(:@commercial_authorizer, nil)
+
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialPublisher.publish!(
+        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
+      )
+    end
+    assert_match(/authorizer/, error.message)
+
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { false }
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialPublisher.publish!(
+        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
+      )
+    end
+    assert_match(/authorized/, error.message)
+  end
+
+  test "database history guard rejects direct published row deletion" do
+    graph = commercial_graph
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
+    )
+
+    assert_predicate candidate, :activated?
+    published_price = RecordingStudioBilling::Price.find_by!(state: "published")
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Price.where(id: published_price.id).delete_all
+    end
+  end
+
+  test "semantic recording references reject an unexpected recordable type" do
+    graph = commercial_graph
+    price = RecordingStudioBilling::Price.new(
+      billing_option_recording: graph[:italy_market].recording, market_recording: graph[:italy_market].recording,
+      key: "wrong_recordable_type", amount_minor: 100, currency_code: "EUR", currency_exponent: 2,
+      pricing_model: "flat", version: 1, scope: "default"
+    )
+
+    assert_not price.valid?
+    assert_includes price.errors[:billing_option_recording], "must reference RecordingStudioBilling::BillingOption"
+  end
+
   test "scheduled activation is idempotent and stale candidates fail closed" do
     graph = commercial_graph
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root], effective_at: 2.minutes.from_now,
-      price_recording_ids: [graph[:italy_price].recording.id]
+      price_recording_ids: [graph[:italy_price].recording.id], actor: :test_actor
     )
     assert_not_predicate candidate, :activated?
-    error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate) }
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate, actor: :test_actor)
+    end
     assert_match(/not effective/, error.message)
 
     candidate.update_column(:effective_at, 1.minute.ago)
-    error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate) }
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate, actor: :test_actor)
+    end
     assert_match(/persisted terms/, error.message)
     assert_equal "draft", graph[:italy_price].recording.reload.recordable.state
   end
@@ -159,12 +234,13 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     effective_at = 2.minutes.from_now
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:root],
                                                                      effective_at: effective_at,
-                                                                     price_recording_ids: [graph[:italy_price].recording.id])
+                                                                     price_recording_ids: [graph[:italy_price].recording.id],
+                                                                     actor: :test_actor)
 
     travel_to(effective_at + 1.second) do
-      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate)
+      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate, actor: :test_actor)
       events = RecordingStudio::Event.where(action: "commercial_published").count
-      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate.reload)
+      RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate.reload, actor: :test_actor)
       assert_equal events, RecordingStudio::Event.where(action: "commercial_published").count
     end
   end
@@ -273,9 +349,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
   end
 
   def record_child(recordable, root, parent)
-    RecordingStudio.record!(
+    event = RecordingStudio.record!(
       action: "created", recordable: recordable, root_recording: root, parent_recording: parent
-    ).recording
+    )
+    RecordingStudio::Recording.unscoped.find(event.recording.id)
   end
 
   def publish_recordable(recordable)
@@ -287,15 +364,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     RecordingStudioBilling::CommercialPublicationCandidate.delete_all
     RecordingStudioBilling::CommercialManifest.delete_all
     RecordingStudio::Event.unscoped.delete_all
-    [
-      RecordingStudioBilling::CostRate, RecordingStudioBilling::CostCard, RecordingStudioBilling::Rate,
-      RecordingStudioBilling::RateCard, RecordingStudioBilling::Meter, RecordingStudioBilling::UsageUnit,
-      RecordingStudioBilling::PlanUpdate, RecordingStudioBilling::ProductRule,
-      RecordingStudioBilling::FeatureOverride, RecordingStudioBilling::OveragePrice, RecordingStudioBilling::Price,
-      RecordingStudioBilling::Feature, RecordingStudioBilling::BillingOption, RecordingStudioBilling::Product,
-      RecordingStudioBilling::Market, RecordingStudioBilling::ProviderAccount, RecordingStudioBilling::BillingAdmin,
-      RecordingStudioBilling::Account
-    ].each(&:delete_all)
+    tables = RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize).map(&:table_name)
+    connection = ActiveRecord::Base.connection
+    quoted_tables = tables.map { |table| connection.quote_table_name(table) }.join(", ")
+    connection.execute("TRUNCATE TABLE #{quoted_tables} RESTART IDENTITY CASCADE")
     RecordingStudio::Recording.unscoped.delete_all
     AdminRoot.delete_all
   end

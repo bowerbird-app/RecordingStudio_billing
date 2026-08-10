@@ -23,9 +23,15 @@ class ConfigurationTest < Minitest::Test
     assert_equal "provider must be present", error.message
   end
 
-  def test_merge_ignores_unknown_keys
-    @configuration.merge!(unknown_key: "ignored")
+  def test_merge_rejects_unknown_keys
+    error = assert_raises(ArgumentError) { @configuration.merge!(unknown_key: "ignored") }
 
-    assert_equal :stripe, @configuration.provider
+    assert_equal "unsupported commercial configuration key: unknown_key", error.message
+  end
+
+  def test_authorizer_must_be_callable
+    error = assert_raises(ArgumentError) { @configuration.commercial_authorizer = :not_callable }
+
+    assert_equal "commercial_authorizer must respond to call", error.message
   end
 end

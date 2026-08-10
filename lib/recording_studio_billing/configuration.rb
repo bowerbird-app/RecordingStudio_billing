@@ -6,7 +6,7 @@ require_relative "hooks"
 
 module RecordingStudioBilling
   class Configuration
-    attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country
+    attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country, :commercial_authorizer
 
     def initialize
       @provider = :stripe
@@ -20,6 +20,7 @@ module RecordingStudioBilling
       }.freeze
       @feature_definitions = {}
       @market_default_country = nil
+      @commercial_authorizer = nil
     end
 
     def to_h
@@ -75,13 +76,21 @@ module RecordingStudioBilling
       @market_default_country = country
     end
 
+    def commercial_authorizer=(value)
+      raise ArgumentError, "commercial_authorizer must respond to call" unless value.respond_to?(:call)
+
+      @commercial_authorizer = value
+    end
+
     def merge!(hash)
-      return unless hash.respond_to?(:each)
+      raise ArgumentError, "commercial configuration must be an object" unless hash.respond_to?(:each)
 
       hash.each do |k, v|
         key = k.to_s
         setter = "#{key}="
-        public_send(setter, v) if respond_to?(setter)
+        raise ArgumentError, "unsupported commercial configuration key: #{key}" unless respond_to?(setter)
+
+        public_send(setter, v)
       end
     end
   end

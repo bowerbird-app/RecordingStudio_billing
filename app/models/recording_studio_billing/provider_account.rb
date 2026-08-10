@@ -5,8 +5,10 @@ module RecordingStudioBilling
     include CommercialRecordable
 
     commercial_recordable label: "Provider account", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
+    CONFIGURATION_KEYS = %w[merchant public_account_id display_name statement_descriptor].freeze
 
     belongs_to :billing_admin_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :billing_admin_recording, type: "RecordingStudioBilling::BillingAdmin"
 
     validates :adapter_key, presence: true, format: { with: CommercialRecordable::KEY_FORMAT }
     validates :name, :environment, presence: true
@@ -24,6 +26,11 @@ module RecordingStudioBilling
       end
 
       errors.add(:configuration, "must not contain credentials or secrets") if sensitive_key?(configuration)
+      unknown = configuration.keys.map(&:to_s) - CONFIGURATION_KEYS
+      errors.add(:configuration, "contains unsupported keys: #{unknown.sort.join(', ')}") if unknown.any?
+      unless configuration.values.all? { |value| value.is_a?(String) || value.is_a?(Integer) || value == true || value == false }
+        errors.add(:configuration, "values must be scalar public metadata")
+      end
     end
 
     def capabilities_are_safe

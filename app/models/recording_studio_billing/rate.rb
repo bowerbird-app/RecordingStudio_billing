@@ -8,6 +8,8 @@ module RecordingStudioBilling
 
     belongs_to :rate_card_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :usage_unit_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :rate_card_recording, type: "RecordingStudioBilling::RateCard"
+    commercial_reference :usage_unit_recording, type: "RecordingStudioBilling::UsageUnit"
 
     validates :conversion_numerator, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
     validates :conversion_denominator, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true

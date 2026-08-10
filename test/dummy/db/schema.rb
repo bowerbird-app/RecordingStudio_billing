@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_000007) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -442,4 +442,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000007) do
   add_foreign_key "recording_studio_events", "recording_studio_recordings", column: "recording_id"
   add_foreign_key "recording_studio_recordings", "recording_studio_recordings", column: "parent_recording_id"
   add_foreign_key "recording_studio_recordings", "recording_studio_recordings", column: "root_recording_id"
+
+  execute <<~SQL
+    CREATE FUNCTION rs_billing_protect_commercial_history() RETURNS trigger AS $$
+    BEGIN
+      IF OLD.state IN ('published', 'retired') THEN
+        RAISE EXCEPTION 'published and retired commercial records are immutable';
+      END IF;
+      RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DO $$
+    DECLARE table_name text;
+    BEGIN
+      FOREACH table_name IN ARRAY ARRAY[
+        'recording_studio_billing_provider_accounts', 'recording_studio_billing_markets',
+        'recording_studio_billing_products', 'recording_studio_billing_billing_options',
+        'recording_studio_billing_prices', 'recording_studio_billing_overage_prices',
+        'recording_studio_billing_features', 'recording_studio_billing_feature_overrides',
+        'recording_studio_billing_product_rules', 'recording_studio_billing_plan_updates',
+        'recording_studio_billing_usage_units', 'recording_studio_billing_meters',
+        'recording_studio_billing_rate_cards', 'recording_studio_billing_rates',
+        'recording_studio_billing_cost_cards', 'recording_studio_billing_cost_rates'
+      ]
+      LOOP
+        EXECUTE format(
+          'CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION rs_billing_protect_commercial_history()',
+          table_name || '_protect_history', table_name
+        );
+      END LOOP;
+    END;
+    $$;
+  SQL
 end

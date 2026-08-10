@@ -9,6 +9,7 @@ module RecordingStudioBilling
     commercial_recordable label: "Meter", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
 
     belongs_to :usage_unit_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :usage_unit_recording, type: "RecordingStudioBilling::UsageUnit"
 
     validates :aggregation, inclusion: { in: AGGREGATIONS }
   end

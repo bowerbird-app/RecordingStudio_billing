@@ -12,6 +12,9 @@ module RecordingStudioBilling
     commercial_recordable label: "Product rule", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
 
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    belongs_to :target_product_recording, class_name: "RecordingStudio::Recording", inverse_of: false, optional: true
+    commercial_reference :product_recording, type: "RecordingStudioBilling::Product"
+    commercial_reference :target_product_recording, type: "RecordingStudioBilling::Product"
 
     validates :rule_type, inclusion: { in: RULE_TYPES }
     validate :conditions_are_supported

@@ -28,18 +28,20 @@ module RecordingStudioBilling
     end
 
     def initialize(root_recording: nil, effective_at: Time.current, candidate: nil, price_recording_ids: nil,
-                   replacements: {}, rule_context: {})
+                   replacements: {}, rule_context: {}, actor: nil)
       @root_recording = root_recording
       @effective_at = effective_at
       @candidate = candidate
       @price_recording_ids = Array(price_recording_ids).compact.map(&:to_s).uniq.sort
       @replacements = replacements.to_h.stringify_keys
       @rule_context = rule_context.to_h
+      @actor = actor
     end
 
     def publish!
       CommercialPublicationCandidate.transaction do
         root = canonical_root!
+        authorize!(:publish, root:)
         graph = closure_for(root)
         lock_graph!(graph)
         graph = closure_for(root) # rebuild after every referenced row is locked
@@ -56,6 +58,8 @@ module RecordingStudioBilling
     def activate!
       CommercialPublicationCandidate.transaction do
         publication = CommercialPublicationCandidate.lock.find(candidate_or_id)
+        authorize!(:activate, root: RecordingStudio::Recording.unscoped.find(publication.root_recording_id),
+                             publication:)
         return publication if publication.activated?
         raise ArgumentError, "publication candidate is not effective yet" if publication.effective_at > Time.current
 
@@ -66,12 +70,21 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context
+    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor
 
     def canonical_root!
       root = RecordingStudio.root_recording_or_self(root_recording)
       RecordingStudio.assert_root_recording!(root)
       RecordingStudio::Recording.unscoped.lock.find(root.id)
+    end
+
+    def authorize!(action, root:, publication: nil)
+      authorizer = RecordingStudioBilling.configuration.commercial_authorizer
+      raise ArgumentError, "commercial publication requires an authorizer" unless authorizer
+      raise ArgumentError, "commercial publication requires an actor" if actor.nil?
+      return if authorizer.call(action:, actor:, root_recording: root, candidate: publication)
+
+      raise ArgumentError, "commercial publication is not authorized"
     end
 
     def selected_prices(root)
@@ -170,6 +183,7 @@ module RecordingStudioBilling
       validate_provider!(record, records) if record.is_a?(ProviderAccount)
       validate_market!(record, records) if record.is_a?(Market)
       validate_feature!(record) if record.is_a?(Feature)
+      record.validate_commercial_semantic_recordings! if record.respond_to?(:validate_commercial_semantic_recordings!)
       raise ArgumentError, "invalid #{record.class.name}" unless record.valid?
     end
 
@@ -339,6 +353,7 @@ module RecordingStudioBilling
 
       manifests = CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:manifest_digest).lock.to_a
       raise ArgumentError, "publication candidate manifests are missing" unless manifests.size == publication.manifest_digests.size
+      raise ArgumentError, "publication candidate manifests cross roots" unless manifests.all? { |manifest| manifest.root_recording_id == publication.root_recording_id }
       expected_manifests = envelope.fetch("manifests").index_by { |item| item.fetch("manifest_digest") }
       manifests.each do |manifest|
         expected = expected_manifests[manifest.manifest_digest]
@@ -353,6 +368,9 @@ module RecordingStudioBilling
       end
 
       snapshots = envelope.fetch("recordings")
+      unless snapshots.values.all? { |snapshot| snapshot["root_recording_id"] == publication.root_recording_id }
+        raise ArgumentError, "publication candidate snapshots cross roots"
+      end
       recordings = RecordingStudio::Recording.unscoped.where(id: snapshots.keys).order(:id).lock.to_a
       recordings.group_by(&:recordable_type).each do |type, rows|
         type.constantize.where(id: rows.map(&:recordable_id)).order(:id).lock.load

@@ -7,6 +7,7 @@ module RecordingStudioBilling
     commercial_recordable label: "Market", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
 
     belongs_to :provider_account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    commercial_reference :provider_account_recording, type: "RecordingStudioBilling::ProviderAccount"
 
     validates :priority, :specificity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
     validates :default_currency_code, format: { with: /\A[A-Z]{3}\z/ }, allow_nil: true

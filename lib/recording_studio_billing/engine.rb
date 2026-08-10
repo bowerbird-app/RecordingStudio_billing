@@ -48,15 +48,10 @@ module RecordingStudioBilling
     initializer "recording_studio_billing.load_config" do |app|
       # Load config/recording_studio_billing.yml via Rails config_for if present.
       if app.respond_to?(:config_for)
-        begin
-          yaml = begin
-            app.config_for(:recording_studio_billing)
-          rescue StandardError
-            nil
-          end
-          RecordingStudioBilling.configuration.merge!(yaml) if yaml.respond_to?(:each)
-        rescue StandardError => _e
-          # ignore load errors; host app can provide initializer overrides
+        configuration_file = File.join(app.paths["config"].first, "recording_studio_billing.yml")
+        if File.exist?(configuration_file)
+          yaml = app.config_for(:recording_studio_billing)
+          RecordingStudioBilling.configuration.merge!(yaml) unless yaml.nil?
         end
       end
 
@@ -66,14 +61,11 @@ module RecordingStudioBilling
         if xcfg.respond_to?(:to_h)
           RecordingStudioBilling.configuration.merge!(xcfg.to_h)
         else
-          begin
-            # try converting OrderedOptions
-            hash = {}
-            xcfg.each_pair { |k, v| hash[k] = v } if xcfg.respond_to?(:each_pair)
-            RecordingStudioBilling.configuration.merge!(hash) if hash&.any?
-          rescue StandardError => _e
-            # ignore
-          end
+          raise ArgumentError, "commercial configuration must be enumerable" unless xcfg.respond_to?(:each_pair)
+
+          hash = {}
+          xcfg.each_pair { |k, v| hash[k] = v }
+          RecordingStudioBilling.configuration.merge!(hash) if hash.any?
         end
       end
 
