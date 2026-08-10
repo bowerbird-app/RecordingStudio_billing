@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Prepare RuboCop cache
+        uses: actions/cache@v5
+        env:
+          DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '.rubocop.yml', 'Gemfile.lock') }}
+        with:
+          path: ${{ env.RUBOCOP_CACHE_ROOT }}
+          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
+          restore-keys: |
+            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
+
+      - name: Lint Ruby
+        run: bundle exec rubocop --format github
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gem_template_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby-version: ["3.3", "3.4"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+          cache-version: ${{ hashFiles('test/dummy/Gemfile.lock') }}
+
+      - name: Install dummy app dependencies
+        run: bundle install
+        working-directory: test/dummy
+        env:
+          BUNDLE_GITHUB__COM: x-access-token:${{ secrets.BOWERBIRD_ORG_CI_TOKEN }}
+
+      - name: Build dummy app Tailwind assets
+        run: bundle exec rails tailwindcss:build
+        working-directory: test/dummy
+
+      - name: Run tests
+        run: bundle exec rake test:all
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gem_template_test

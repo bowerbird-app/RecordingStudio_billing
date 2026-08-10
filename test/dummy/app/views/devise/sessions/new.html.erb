@@ -1,0 +1,55 @@
+<div class="fixed inset-0 p-4">
+  <%= render FlatPack::Grid::Component.new(cols: 1, align: :center, class: "h-full w-full place-content-center justify-items-center") do %>
+    <%= render FlatPack::Card::Component.new(style: :default, class: "w-full max-w-md h-auto") do |card| %>
+      <% card.body do %>
+        <div class="space-y-6">
+          <%= render FlatPack::PageTitle::Component.new(
+            title: "Login",
+            variant: :h2,
+            class: "mb-0 pb-0"
+          ) %>
+
+          <%= form_for(resource, as: resource_name, url: session_path(resource_name)) do |f| %>
+            <div class="space-y-4">
+            <%= render FlatPack::EmailInput::Component.new(
+              name: "user[email]",
+              label: "Email",
+              value: "admin@admin.com",
+              placeholder: "you@example.com"
+            ) %>
+
+            <%= render FlatPack::PasswordInput::Component.new(
+              name: "user[password]",
+              label: "Password",
+              value: "Password",
+              required: true
+            ) %>
+
+            <% if devise_mapping.rememberable? %>
+              <%= render FlatPack::Checkbox::Component.new(
+                name: "#{resource_name}[remember_me]",
+                label: "Remember me"
+              ) %>
+            <% end %>
+
+            <%= render FlatPack::Button::Component.new(
+              text: "Sign In",
+              style: :primary,
+              size: :md,
+              type: "submit"
+            ) %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% card.footer do %>
+        <%= render FlatPack::Badge::Component.new(
+          text: "Default: admin@admin.com / Password",
+          style: :info,
+          size: :sm
+        ) %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

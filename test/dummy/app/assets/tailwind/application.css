@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Include dummy app views for Tailwind CSS */
+@source "../../views/**/*.erb";
+
+/* Include RecordingStudio engine views for Tailwind CSS */
+@source "../../../vendor/bundle/**/recording_studio/app/views/**/*.erb";
+@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/recordingstudio-*/app/views/**/*.erb";
+
+/* Scan FlatPack components for classes used by the bundled ViewComponents */
+@source "../../../vendor/bundle/**/flatpack/app/components/**/*.{rb,erb}";
+@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
+
+/* Include the engine's views in the Tailwind build */
+@source "../../../../../app/views/**/*.erb";

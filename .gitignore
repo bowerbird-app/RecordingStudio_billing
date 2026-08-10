@@ -1,0 +1,47 @@
+# Dependencies
+vendor/bundle/
+node_modules/
+.bundle
+
+# Environment
+.env
+.env.local
+
+# Database
+*.sqlite3
+*.sqlite3-*
+
+# Logs
+log/*.log
+tmp/
+
+# Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Rails
+test/dummy/log/
+test/dummy/tmp/
+test/dummy/storage/
+test/dummy/vendor/bundle/
+test/dummy/app/assets/builds/
+test/dummy/public/assets/
+
+# Credentials
+test/dummy/config/master.key
+test/dummy/config/credentials/*.key
+
+# Build artifacts
+*.gem
+pkg/
+
+# Rename script state
+.rename_state.yml

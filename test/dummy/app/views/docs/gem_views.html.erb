@@ -1,0 +1,14 @@
+<div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+  <%= render FlatPack::PageTitle::Component.new(
+    title: "Gem Views",
+    subtitle: "These are the view templates currently shipped by the gem.",
+    variant: :h1
+  ) %>
+
+  <% view_rows = Array(@engine_views).map { |view_path| { path: view_path, source: "Gem engine" } } %>
+
+  <%= render FlatPack::Table::Component.new(data: view_rows, class: "text-sm") do |table| %>
+    <% table.column(title: "View path") { |view| view[:path] } %>
+    <% table.column(title: "Source") { |view| view[:source] } %>
+  <% end %>
+</div>

@@ -1,0 +1,34 @@
+<%= render FlatPack::TopNav::Component.new do |nav| %>
+  <% nav.left do %>
+    <%= render FlatPack::Button::Component.new(
+      icon: "menu",
+      icon_only: true,
+      style: :ghost,
+      size: :md,
+      aria: {label: "Toggle sidebar"},
+      data: {
+        "flat-pack--sidebar-layout-target": "mobileToggle",
+        action: "click->flat-pack--sidebar-layout#toggleMobile"
+      },
+      class: "md:hidden"
+    ) %>
+
+  <% end %>
+
+  <% nav.center do %>
+    <span aria-hidden="true"></span>
+  <% end %>
+
+  <% nav.right do %>
+    <% if user_signed_in? %>
+      <div class="flex items-center gap-3">
+        <%= recording_studio_root_switch_dropdown(style: :ghost, size: :md) %>
+
+        <%= render FlatPack::Avatar::Component.new(
+          name: current_user.try(:name).presence || current_user.email,
+          size: :sm
+        ) %>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

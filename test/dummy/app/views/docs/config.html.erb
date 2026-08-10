@@ -1,0 +1,14 @@
+<div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+  <%= render FlatPack::PageTitle::Component.new(
+    title: "Config",
+    subtitle: "Replace this placeholder with the configuration settings your generated gem exposes.",
+    variant: :h1
+  ) %>
+
+  <%= render FlatPack::CodeBlock::Component.new(
+    language: :ruby,
+    code: <<~'CODE'
+      # Add the config settings for the gem here.
+    CODE
+  ) %>
+</div>

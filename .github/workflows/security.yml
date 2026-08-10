@@ -1,0 +1,83 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bundler-audit:
+    name: Bundler Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: test/dummy/Gemfile
+          BUNDLE_GITHUB__COM: x-access-token:${{ secrets.BOWERBIRD_ORG_CI_TOKEN }}
+
+      - name: Scan gems for known vulnerabilities
+        run: bin/bundler-audit
+        working-directory: test/dummy
+
+  brakeman:
+    name: Brakeman
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: test/dummy/Gemfile
+          BUNDLE_GITHUB__COM: x-access-token:${{ secrets.BOWERBIRD_ORG_CI_TOKEN }}
+
+      - name: Scan Rails code for security vulnerabilities
+        run: bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+        working-directory: test/dummy
+
+  importmap-audit:
+    name: Importmap Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: test/dummy/Gemfile
+          BUNDLE_GITHUB__COM: x-access-token:${{ secrets.BOWERBIRD_ORG_CI_TOKEN }}
+
+      - name: Scan importmap dependencies for known vulnerabilities
+        run: bin/importmap audit
+        working-directory: test/dummy

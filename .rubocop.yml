@@ -1,0 +1,54 @@
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  Exclude:
+    - 'test/dummy/**/*'
+    - 'vendor/**/*'
+    - 'bin/**/*'
+
+Style/Documentation:
+  Enabled: false
+
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+
+Layout/LineLength:
+  Max: 120
+
+# Relax metrics for test files and generators
+Metrics/ClassLength:
+  Exclude:
+    - 'test/**/*'
+    - 'lib/gem_template/hooks.rb'
+
+Metrics/MethodLength:
+  Exclude:
+    - 'test/**/*'
+    - 'lib/generators/**/*'
+
+Metrics/AbcSize:
+  Exclude:
+    - 'test/**/*'
+    - 'lib/generators/**/*'
+
+# Allow empty blocks in tests (common for stubs/mocks)
+Lint/EmptyBlock:
+  Exclude:
+    - 'test/**/*'
+
+# Allow nested method definitions in tests (common for testing behavior)
+Lint/NestedMethodDefinition:
+  Exclude:
+    - 'test/**/*'
+
+# Allow underscores in test method names (test_something_100 is fine)
+Naming/VariableNumber:
+  Exclude:
+    - 'test/**/*'
+
+# Don't require super in service initialize methods
+Lint/MissingSuper:
+  Exclude:
+    - 'lib/gem_template/services/**/*'
+    - 'test/services/**/*'

@@ -1,0 +1,68 @@
+<%= render FlatPack::Sidebar::Component.new(side: sidebar_side) do |sidebar| %>
+  <% sidebar.header do %>
+    <%= render FlatPack::Sidebar::Header::Component.new(
+      brand_abbr: "RS",
+      title: "Addon Template",
+      subtitle: "Recording Studio"
+    ) %>
+  <% end %>
+
+  <% sidebar.items do %>
+    <nav class="py-4 space-y-1" aria-label="Main navigation">
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Home",
+        href: main_app.root_path,
+        icon: :home
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Install",
+        href: main_app.docs_install_path,
+        icon: :arrow_down_tray
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Config",
+        href: main_app.docs_config_path,
+        icon: :settings
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Methods",
+        href: main_app.docs_methods_path,
+        icon: :code_bracket
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Recordable types",
+        href: main_app.docs_recordable_types_path,
+        icon: :queue_list
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Recordings tree",
+        href: main_app.docs_recordings_tree_path,
+        icon: :folder
+      ) %>
+
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Gem Views",
+        href: main_app.docs_gem_views_path,
+        icon: :eye
+      ) %>
+
+    </nav>
+  <% end %>
+
+  <% sidebar.footer do %>
+    <%= render FlatPack::Sidebar::Footer::Component.new(class: "text-sm text-[var(--surface-muted-content-color)]") do %>
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Sign out",
+        href: main_app.destroy_user_session_path,
+        icon: :lock,
+        class: "mx-0",
+        data: { turbo_method: :delete }
+      ) %>
+    <% end %>
+  <% end %>
+<% end %>

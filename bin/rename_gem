@@ -1,0 +1,601 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# =============================================================================
+# Gem Renaming Script
+# =============================================================================
+#
+# Renames this gem and updates all related files and namespaces.
+#
+# USAGE:
+#   bin/rename_gem NEW_NAME [options]
+#
+# EXAMPLES:
+#   bin/rename_gem my_awesome_gem           # Auto-detect current name
+#   bin/rename_gem my_awesome_gem --from old_name  # Override detection
+#   bin/rename_gem my_awesome_gem --dry-run # Preview changes only
+#
+# =============================================================================
+
+require "fileutils"
+require "optparse"
+require "yaml"
+
+class GemRenamer
+  # State tracking file for resume capability
+  STATE_FILE = ".rename_state.yml"
+  
+  # Directories to completely exclude from processing
+  EXCLUDED_DIRS = %w[.git node_modules vendor tmp log].freeze
+  
+  # Files to exclude from content replacement (but still rename if needed)
+  EXCLUDED_FILES = %w[rename_verification_test.rb].freeze
+  
+  # File patterns to search for content replacement
+  CONTENT_FILE_PATTERNS = %w[*.rb *.gemspec *.md *.erb *.rake Rakefile Gemfile *.sh *.yml *.yaml].freeze
+  
+  # Specific files in test/dummy that should be updated
+  DUMMY_APP_FILES = %w[
+    test/dummy/Gemfile
+    test/dummy/config/routes.rb
+  ].freeze
+
+  def initialize(new_name, from: nil, dry_run: false)
+    @root = File.expand_path("..", __dir__)
+    @state_file_path = File.join(@root, STATE_FILE)
+    @new_name = normalize_name(new_name)
+    @old_name = from ? normalize_name(from) : detect_current_name
+    @dry_run = dry_run
+    @changes_made = { directories: [], files: [], content: [] }
+  end
+
+  def run
+    validate!
+    show_plan
+    return summary if @dry_run
+
+    confirm_proceed
+    perform_rename
+    run_verification
+    summary
+  end
+
+  private
+
+  # ===========================================================================
+  # Name Transformations
+  # ===========================================================================
+
+  def to_pascal_case(str)
+    str.split("_").map(&:capitalize).join
+  end
+
+  def to_kebab_case(str)
+    str.tr("_", "-")
+  end
+
+  def normalize_name(name)
+    name.to_s.strip.downcase.gsub(/[^a-z0-9_]/, "_").gsub(/_+/, "_").gsub(/^_|_$/, "")
+  end
+
+  def old_pascal
+    @old_pascal ||= to_pascal_case(@old_name)
+  end
+
+  def new_pascal
+    @new_pascal ||= to_pascal_case(@new_name)
+  end
+
+  # ===========================================================================
+  # Detection
+  # ===========================================================================
+
+  def detect_current_name
+    detect_from_gemspec_filename ||
+      detect_from_gemspec_content ||
+      detect_from_lib_directory ||
+      abort_with_error("Could not auto-detect gem name. Use --from to specify the current name.")
+  end
+
+  def detect_from_gemspec_filename
+    gemspec = Dir.glob(File.join(@root, "*.gemspec")).first
+    return nil unless gemspec
+
+    File.basename(gemspec, ".gemspec")
+  end
+
+  def detect_from_gemspec_content
+    gemspec = Dir.glob(File.join(@root, "*.gemspec")).first
+    return nil unless gemspec
+
+    content = File.read(gemspec)
+    match = content.match(/\.name\s*=\s*["']([^"']+)["']/)
+    match[1] if match
+  end
+
+  def detect_from_lib_directory
+    lib_dirs = Dir.glob(File.join(@root, "lib", "*")).select { |f| File.directory?(f) }
+    lib_dirs.reject! { |d| File.basename(d) == "generators" }
+    return nil if lib_dirs.empty?
+
+    File.basename(lib_dirs.first)
+  end
+
+  # ===========================================================================
+  # Validation
+  # ===========================================================================
+
+  def validate!
+    if @new_name.empty?
+      abort_with_error("New gem name cannot be empty")
+    end
+
+    if @new_name == @old_name
+      abort_with_error("New name '#{@new_name}' is the same as current name")
+    end
+
+    unless @new_name.match?(/\A[a-z][a-z0-9_]*\z/)
+      abort_with_error("Invalid gem name '#{@new_name}'. Must be lowercase, start with a letter, and contain only letters, numbers, and underscores.")
+    end
+
+    if @new_name.length < 2
+      abort_with_error("Gem name must be at least 2 characters")
+    end
+
+    # Check for uncommitted git changes
+    if git_repo? && uncommitted_changes?
+      puts colorize("\n⚠️  Warning: You have uncommitted git changes.", :yellow)
+      puts "   Consider committing or stashing before renaming.\n\n"
+    end
+  end
+
+  def git_repo?
+    Dir.exist?(File.join(@root, ".git"))
+  end
+
+  def uncommitted_changes?
+    system("git", "diff", "--quiet", "HEAD", chdir: @root) == false
+  end
+
+  # ===========================================================================
+  # Planning
+  # ===========================================================================
+
+  def show_plan
+    puts colorize("\n" + "=" * 60, :cyan)
+    puts colorize(" Gem Rename Plan", :cyan)
+    puts colorize("=" * 60, :cyan)
+
+    puts "\nDetected current gem name: #{colorize(@old_name, :yellow)}"
+    puts "New gem name:              #{colorize(@new_name, :green)}"
+
+    puts "\n#{colorize("Name Transformations:", :bold)}"
+    puts "  #{@old_name.ljust(30)} → #{@new_name}"
+    puts "  #{old_pascal.ljust(30)} → #{new_pascal}"
+
+    puts "\n#{colorize("Directories to rename:", :bold)}"
+    directories_to_rename.each do |old_path, new_path|
+      puts "  #{relative(old_path).ljust(38)} → #{relative(new_path)}"
+    end
+
+    puts "\n#{colorize("Files to rename:", :bold)}"
+    files_to_rename.each do |old_path, new_path|
+      puts "  #{relative(old_path).ljust(38)} → #{relative(new_path)}"
+    end
+
+    puts "\n#{colorize("Files to update (content):", :bold)}"
+    files_to_update_content.each do |path|
+      count = count_replacements(path)
+      puts "  #{relative(path).ljust(38)} (#{count} replacement#{"s" if count != 1})"
+    end
+
+    if @dry_run
+      puts colorize("\n[DRY RUN] No changes will be made.\n", :yellow)
+    end
+  end
+
+  def directories_to_rename
+    @directories_to_rename ||= [
+      ["lib/#{@old_name}", "lib/#{@new_name}"],
+      ["app/controllers/#{@old_name}", "app/controllers/#{@new_name}"],
+      ["app/views/#{@old_name}", "app/views/#{@new_name}"],
+      ["lib/generators/#{@old_name}", "lib/generators/#{@new_name}"]
+    ].map { |old, new| [File.join(@root, old), File.join(@root, new)] }
+     .select { |old, _| Dir.exist?(old) }
+  end
+
+  def files_to_rename
+    @files_to_rename ||= begin
+      # Start with known files
+      known_files = [
+        ["#{@old_name}.gemspec", "#{@new_name}.gemspec"],
+        ["lib/#{@old_name}.rb", "lib/#{@new_name}.rb"]
+      ]
+
+      # Find any other files containing the old name in their filename
+      all_files = Dir.glob(File.join(@root, "**", "*#{@old_name}*"))
+      all_files.reject! { |f| File.directory?(f) }
+      all_files.reject! { |f| EXCLUDED_DIRS.any? { |dir| f.include?("/#{dir}/") } }
+
+      # Add discovered files
+      all_files.each do |old_path|
+        rel_path = old_path.sub("#{@root}/", "")
+        new_rel_path = rel_path.gsub(@old_name, @new_name)
+        known_files << [rel_path, new_rel_path] unless known_files.any? { |k, _| k == rel_path }
+      end
+
+      known_files
+        .map { |old, new| [File.join(@root, old), File.join(@root, new)] }
+        .select { |old, _| File.exist?(old) }
+        .uniq
+    end
+  end
+
+  def files_to_update_content
+    @files_to_update_content ||= begin
+      patterns = CONTENT_FILE_PATTERNS.map { |p| File.join(@root, "**", p) }
+      files = patterns.flat_map { |p| Dir.glob(p) }
+
+      # Exclude files in excluded directories (but NOT test/dummy, we handle that separately)
+      files.reject! do |f|
+        EXCLUDED_DIRS.any? { |dir| f.include?("/#{dir}/") }
+      end
+      
+      # Exclude gem_template documentation directory (preserve as architectural reference)
+      files.reject! { |f| f.include?("/docs/gem_template/") }
+      
+      # For test/dummy, only include specific whitelisted files
+      files.reject! do |f|
+        if f.include?("/test/dummy/")
+          !DUMMY_APP_FILES.any? { |allowed| f.end_with?(allowed) }
+        else
+          false
+        end
+      end
+
+      # Exclude specific files that should not be modified
+      files.reject! do |f|
+        EXCLUDED_FILES.any? { |name| f.end_with?(name) }
+      end
+
+      # Only include files that actually contain the old name
+      files.select { |f| file_contains_old_name?(f) }.sort
+    end
+  end
+
+  def file_contains_old_name?(path)
+    return false unless File.file?(path)
+
+    content = File.read(path)
+    content.include?(@old_name) || content.include?(old_pascal) || content.include?(@old_name.upcase)
+  rescue StandardError
+    false
+  end
+
+  def count_replacements(path)
+    content = File.read(path)
+    content.scan(/#{Regexp.escape(@old_name)}|#{Regexp.escape(old_pascal)}|#{Regexp.escape(@old_name.upcase)}/).size
+  rescue StandardError
+    0
+  end
+
+  # ===========================================================================
+  # Execution
+  # ===========================================================================
+
+  def confirm_proceed
+    puts colorize("\nProceed with rename? [y/N] ", :bold)
+    response = $stdin.gets.strip.downcase
+    abort_with_error("Aborted.") unless response == "y"
+  end
+
+  def perform_rename
+    state = load_rename_state
+    
+    if state && state[:new_name] != @new_name
+      puts colorize("\n⚠️  Warning: Found incomplete rename from previous run", :yellow)
+      puts "   Previous: #{state[:old_name]} → #{state[:new_name]}"
+      puts "   Current:  #{@old_name} → #{@new_name}"
+      print "\nDelete previous state and start fresh? [y/N] "
+      response = $stdin.gets.chomp
+      if response.downcase == 'y'
+        delete_rename_state
+        state = nil
+      else
+        abort_with_error("Aborted. Delete #{STATE_FILE} manually to start a new rename.")
+      end
+    end
+
+    puts colorize("\nRenaming...\n", :cyan)
+    
+    # Phase 1: Update file contents
+    if !state || state[:phase] == 'not_started'
+      update_all_file_contents
+      save_rename_state(
+        phase: 'content_updated',
+        old_name: @old_name,
+        new_name: @new_name
+      )
+    elsif state[:phase] == 'content_updated'
+      puts colorize("↻ Resuming from previous run (content already updated)\n", :yellow)
+    end
+
+    # Phase 2: Validate no old references remain
+    begin
+      validate_no_old_references!
+      if state && state[:phase] == 'content_updated'
+        save_rename_state(
+          phase: 'validated',
+          old_name: @old_name,
+          new_name: @new_name
+        )
+      end
+    rescue StandardError => e
+      save_rename_state(
+        phase: 'validation_failed',
+        old_name: @old_name,
+        new_name: @new_name,
+        error: e.message
+      )
+      raise
+    end
+
+    # Phase 3: Rename files
+    rename_all_files
+
+    # Phase 4: Rename directories
+    rename_all_directories
+    
+    # Cleanup state file on success
+    delete_rename_state
+  end
+
+  def update_all_file_contents
+    files_to_update_content.each do |path|
+      update_file_content(path)
+    end
+  end
+
+  def update_file_content(path)
+    original = File.read(path)
+    updated = original.dup
+
+    # Replace snake_case name (with word boundaries)
+    updated.gsub!(/\b#{Regexp.escape(@old_name)}\b/, @new_name)
+
+    # Replace PascalCase name - handles both standalone and compound names like OldNameTest
+    updated.gsub!(/#{Regexp.escape(old_pascal)}/, new_pascal)
+
+    # Replace embedded snake_case tokens (no word boundaries) for names inside strings/identifiers
+    updated.gsub!(/#{Regexp.escape(@old_name)}/, @new_name)
+
+    # Replace upper snake case tokens (ENV vars, constants)
+    old_upper = @old_name.upcase
+    new_upper = @new_name.upcase
+    updated.gsub!(/#{Regexp.escape(old_upper)}/, new_upper)
+
+    # Migration-specific replacements for table/index names and migration filenames referenced in content
+    if path.include?("/db/migrate/")
+      updated.gsub!(/:#{Regexp.escape(@old_name)}_/, ":#{@new_name}_")
+      updated.gsub!(/create_#{Regexp.escape(@old_name)}_/, "create_#{@new_name}_")
+    end
+
+    if updated != original
+      File.write(path, updated)
+      @changes_made[:content] << path
+      puts "  ✓ Updated #{relative(path)}"
+    end
+  end
+
+  def validate_no_old_references!
+    scan_patterns = (CONTENT_FILE_PATTERNS + %w[*.yml *.yaml]).uniq
+    files = scan_patterns.flat_map { |p| Dir.glob(File.join(@root, "**", p)) }
+
+    # Exclude files in excluded directories (but NOT test/dummy, handled below)
+    files.reject! { |f| EXCLUDED_DIRS.any? { |dir| f.include?("/#{dir}/") } }
+
+    # Exclude gem_template documentation directory (preserve as architectural reference)
+    files.reject! { |f| f.include?("/docs/gem_template/") }
+
+    # Exclude files that are intentionally preserved (like verification tests)
+    files.reject! { |f| EXCLUDED_FILES.any? { |excluded| f.end_with?(excluded) } }
+
+    # For test/dummy, only include specific whitelisted files
+    files.reject! do |f|
+      if f.include?("/test/dummy/")
+        !DUMMY_APP_FILES.any? { |allowed| f.end_with?(allowed) }
+      else
+        false
+      end
+    end
+
+    leftovers = []
+    files.each do |path|
+      next unless File.file?(path)
+
+      content = File.read(path)
+      if content.include?(@old_name) || content.include?(old_pascal) || content.include?(@old_name.upcase)
+        leftovers << relative(path)
+      end
+    rescue StandardError
+      next
+    end
+
+    return if leftovers.empty?
+
+    error_msg = <<~ERROR
+      Found remaining references to #{@old_name} in: #{leftovers.join(', ')}
+      
+      ℹ️  Note: File contents have been updated but files/directories have NOT been renamed yet.
+      
+      To recover:
+      1. If these files should be excluded, add them to EXCLUDED_FILES in bin/rename_gem
+      2. Fix the references manually, then re-run the script to complete the rename
+      3. Or run 'git restore .' to undo all changes and start over
+      
+      The script will resume from where it left off when you run it again.
+    ERROR
+
+    abort_with_error(error_msg)
+  end
+
+  def rename_all_files
+    files_to_rename.each do |old_path, new_path|
+      rename_path(old_path, new_path)
+      @changes_made[:files] << [old_path, new_path]
+    end
+  end
+
+  def rename_all_directories
+    # Sort by depth (deepest first) to avoid path issues
+    sorted = directories_to_rename.sort_by { |old, _| -old.count("/") }
+
+    sorted.each do |old_path, new_path|
+      next unless Dir.exist?(old_path)
+
+      if Dir.exist?(new_path)
+        # If the target already exists (e.g., created by earlier file moves), merge contents then remove the old dir
+        FileUtils.cp_r(File.join(old_path, "."), new_path)
+        FileUtils.rm_rf(old_path)
+        puts "  ✓ Merged #{relative(old_path)} → #{relative(new_path)}"
+      else
+        rename_path(old_path, new_path)
+      end
+      @changes_made[:directories] << [old_path, new_path]
+    end
+  end
+
+  def rename_path(old_path, new_path)
+    if File.exist?(new_path)
+      abort_with_error("Target already exists: #{new_path}")
+    end
+
+    parent_dir = File.dirname(new_path)
+    FileUtils.mkdir_p(parent_dir) unless Dir.exist?(parent_dir)
+
+    FileUtils.mv(old_path, new_path)
+    puts "  ✓ Renamed #{relative(old_path)} → #{relative(new_path)}"
+  end
+
+  # ===========================================================================
+  # Verification
+  # ===========================================================================
+
+  def run_verification
+    verification_test = File.join(@root, "test", "rename_verification_test.rb")
+    return unless File.exist?(verification_test)
+
+    puts colorize("\nRunning verification tests...\n", :cyan)
+    system("ruby", verification_test, chdir: @root)
+  end
+
+  # ===========================================================================
+  # State Management
+  # ===========================================================================
+
+  def load_rename_state
+    return nil unless File.exist?(@state_file_path)
+
+    begin
+      YAML.load_file(@state_file_path, permitted_classes: [Symbol])
+    rescue StandardError
+      nil
+    end
+  end
+
+  def save_rename_state(state)
+    return if @dry_run
+
+    File.write(@state_file_path, state.to_yaml)
+  end
+
+  def delete_rename_state
+    return if @dry_run
+    return unless File.exist?(@state_file_path)
+
+    File.delete(@state_file_path)
+  end
+
+  # ===========================================================================
+  # Output Helpers
+  # ===========================================================================
+
+  def summary
+    puts colorize("\n" + "=" * 60, :green)
+    puts colorize(" Rename Complete!", :green)
+    puts colorize("=" * 60, :green)
+
+    puts "\nSummary:"
+    puts "  Directories renamed: #{@changes_made[:directories].size}"
+    puts "  Files renamed:       #{@changes_made[:files].size}"
+    puts "  Files updated:       #{@changes_made[:content].size}"
+
+    puts "\n#{colorize("Next steps:", :bold)}"
+    puts "  1. Review the changes: git diff"
+    puts "  2. Run tests: bundle exec rake test"
+    puts "  3. Commit: git add -A && git commit -m 'Rename gem to #{@new_name}'"
+    puts ""
+  end
+
+  def relative(path)
+    path.sub("#{@root}/", "")
+  end
+
+  def colorize(text, color)
+    return text unless $stdout.tty?
+
+    colors = {
+      red: 31,
+      green: 32,
+      yellow: 33,
+      blue: 34,
+      magenta: 35,
+      cyan: 36,
+      bold: 1
+    }
+
+    code = colors[color] || 0
+    "\e[#{code}m#{text}\e[0m"
+  end
+
+  def abort_with_error(message)
+    $stderr.puts colorize("\n❌ Error: #{message}\n", :red)
+    exit 1
+  end
+end
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+if __FILE__ == $PROGRAM_NAME
+  options = { from: nil, dry_run: false }
+
+  parser = OptionParser.new do |opts|
+    opts.banner = "Usage: #{$PROGRAM_NAME} NEW_NAME [options]"
+
+    opts.on("-f", "--from NAME", "Current gem name (overrides auto-detection)") do |name|
+      options[:from] = name
+    end
+
+    opts.on("-n", "--dry-run", "Show what would be changed without making changes") do
+      options[:dry_run] = true
+    end
+
+    opts.on("-h", "--help", "Show this help message") do
+      puts opts
+      exit
+    end
+  end
+
+  parser.parse!
+
+  if ARGV.empty?
+    puts parser
+    exit 1
+  end
+
+  new_name = ARGV.first
+  renamer = GemRenamer.new(new_name, from: options[:from], dry_run: options[:dry_run])
+  renamer.run
+end
