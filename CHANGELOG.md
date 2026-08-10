@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Renamed the engine to `recording_studio_billing` / `RecordingStudioBilling`.
 - Added the provider-agnostic billing root and child-recordable foundation with Stripe as the default provider.
+- Corrected the V1 commercial catalogue contract, including hierarchy,
+  provider/market metadata, billing-option policy fields, price version
+  constraints, and non-monetary unit conversion rates.
 
 ## [0.1.2] - 2026-07-21
 

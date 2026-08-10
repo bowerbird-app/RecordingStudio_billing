@@ -11,6 +11,7 @@ module RecordingStudioBilling
       has_one :recording, as: :recordable, class_name: "RecordingStudio::Recording", dependent: :restrict_with_error
 
       validates :key, presence: true, format: { with: KEY_FORMAT }
+      validates :key, uniqueness: true
       validates :state, inclusion: { in: STATES }
     end
 

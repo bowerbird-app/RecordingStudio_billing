@@ -4,7 +4,7 @@ module RecordingStudioBilling
   class ProductRule < ApplicationRecord
     include CommercialRecordable
 
-    commercial_recordable label: "Product rule", allowed_parent_types: "RecordingStudioBilling::Product"
+    commercial_recordable label: "Product rule", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
 
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
 

@@ -43,16 +43,48 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert RecordingStudio.capability_enabled?(:billing_admin, for: AdminRoot)
   end
 
+  test "V1 product, feature, and meter vocabularies are exact" do
+    assert_equal %w[plan addon credit_pack service], RecordingStudioBilling::Product::KINDS
+    assert_equal %w[boolean limit allowance variant], RecordingStudioBilling::Feature::TYPES
+    assert_equal %w[sum count maximum latest], RecordingStudioBilling::Meter::AGGREGATIONS
+
+    assert_not_includes RecordingStudioBilling::Meter::AGGREGATIONS, "distinct_count"
+    assert_not_includes RecordingStudioBilling::BillingOption::PRICING_MODELS, "graduated"
+    assert_not_includes RecordingStudioBilling::BillingOption::PRICING_MODELS, "volume"
+    assert_not_includes RecordingStudioBilling::BillingOption::PRICING_MODELS, "stairstep"
+  end
+
   test "commercial recordables declare the configuration tree" do
-    assert_includes RecordingStudio.configuration.recordable_types, "RecordingStudioBilling::CostRate"
-    assert_equal ["RecordingStudioBilling::BillingAdmin"],
-                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::ProviderAccount)
-    assert_equal ["RecordingStudioBilling::ProviderAccount"],
-                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Market)
+    direct_billing_admin_children = [
+      RecordingStudioBilling::ProviderAccount,
+      RecordingStudioBilling::Market,
+      RecordingStudioBilling::Product,
+      RecordingStudioBilling::ProductRule,
+      RecordingStudioBilling::PlanUpdate,
+      RecordingStudioBilling::UsageUnit,
+      RecordingStudioBilling::Meter,
+      RecordingStudioBilling::RateCard,
+      RecordingStudioBilling::CostCard
+    ]
+
+    direct_billing_admin_children.each do |recordable|
+      assert_equal ["RecordingStudioBilling::BillingAdmin"],
+                   RecordingStudio.allowed_parent_types_for(recordable),
+                   "#{recordable.name} must be a direct BillingAdmin child"
+    end
+
     assert_equal ["RecordingStudioBilling::Product"],
                  RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::BillingOption)
+    assert_equal ["RecordingStudioBilling::Product"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Feature)
     assert_equal ["RecordingStudioBilling::BillingOption"],
                  RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Price)
+    assert_equal ["RecordingStudioBilling::BillingOption"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::OveragePrice)
+    assert_equal ["RecordingStudioBilling::RateCard"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Rate)
+    assert_equal ["RecordingStudioBilling::CostCard"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::CostRate)
     assert_equal ["RecordingStudioBilling::Account"],
                  RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::FeatureOverride)
   end
@@ -124,7 +156,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
   end
 
   # rubocop:disable Metrics/BlockLength
-  test "commercial model validations and active price scope use stable recording ids" do
+  test "V1 billing models validate the corrected contract and price versioning" do
     admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
     billing_admin = RecordingStudioBilling.ensure_billing_admin(root_recording: admin_root, key: unique_name("billing"))
     billing_admin_recording = RecordingStudio::Recording.find_by!(recordable: billing_admin)
@@ -132,7 +164,13 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::ProviderAccount.new(
         billing_admin_recording: billing_admin_recording,
         key: "primary_provider",
-        provider: "stripe"
+        adapter_key: "stripe",
+        name: "Primary Stripe account",
+        environment: "production",
+        configuration: { "public_account_id" => "acct_public" },
+        capabilities: %w[checkout subscriptions],
+        supported_markets: ["US"],
+        supported_currencies: ["USD"]
       ),
       admin_root,
       billing_admin_recording
@@ -141,26 +179,47 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::Market.new(
         provider_account_recording: provider_recording,
         key: "us_market",
-        country_code: "US",
-        currency_code: "USD"
+        country_codes: %w[US CA],
+        allowed_currency_codes: %w[USD CAD],
+        priority: 10,
+        specificity: 2,
+        fallback: false,
+        ppa_policy: "standard",
+        rounding_policy: "half_up",
+        tax_presentation_policy: "exclusive",
+        verification_policy: "none"
       ),
       admin_root,
-      provider_recording
+      billing_admin_recording
     )
     product_recording = record_child(
       RecordingStudioBilling::Product.new(
         provider_account_recording: provider_recording,
         key: "studio",
-        kind: "subscription"
+        kind: "plan"
       ),
       admin_root,
-      provider_recording
+      billing_admin_recording
     )
     option_recording = record_child(
       RecordingStudioBilling::BillingOption.new(
         product_recording: product_recording,
         key: "monthly",
-        kind: "recurring"
+        recurrence: "recurring",
+        interval: "month",
+        interval_count: 1,
+        quantity_mode: "adjustable",
+        minimum_quantity: 1,
+        maximum_quantity: 10,
+        default_quantity: 1,
+        pricing_model: "flat",
+        collection_method: "automatic",
+        payment_terms_days: 0,
+        trial_days: 14,
+        proration_policy: "prorate",
+        lifecycle_policy: "immediate",
+        checkout_policy: "allowed",
+        tax_policy: "exclusive"
       ),
       admin_root,
       product_recording
@@ -174,19 +233,29 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       currency_code: "USD",
       currency_exponent: 2,
       pricing_model: "flat",
-      version: 1
+      version: 1,
+      scope: "standard",
+      state: "published"
     )
     assert_predicate price, :valid?
     record_child(price, admin_root, option_recording)
 
-    duplicate_price = price.dup
-    duplicate_price.key = "duplicate_monthly_usd_v1"
-    assert_raises(ActiveRecord::RecordNotUnique) { record_child(duplicate_price, admin_root, option_recording) }
+    active_replacement = price.dup
+    active_replacement.key = "monthly_usd_v2"
+    active_replacement.version = 2
+    assert_not_predicate active_replacement, :valid?
+    assert_includes active_replacement.errors[:billing_option_recording_id], "has already been taken"
+
+    historical_duplicate = price.dup
+    historical_duplicate.key = "monthly_usd_v1_retired"
+    historical_duplicate.state = "retired"
+    assert_not_predicate historical_duplicate, :valid?
+    assert_includes historical_duplicate.errors[:version], "has already been taken"
 
     invalid_product = RecordingStudioBilling::Product.new(
       provider_account_recording: provider_recording,
       key: "invalid_product",
-      kind: "metered"
+      kind: "subscription"
     )
     assert_not_predicate invalid_product, :valid?
     assert_includes invalid_product.errors[:kind], "is not included in the list"
@@ -194,12 +263,18 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     invalid_market = RecordingStudioBilling::Market.new(
       provider_account_recording: provider_recording,
       key: "invalid_market",
-      country_code: "usa",
-      currency_code: "usd"
+      country_codes: ["usa"],
+      allowed_currency_codes: ["usd"],
+      priority: 0,
+      specificity: 0,
+      ppa_policy: "standard",
+      rounding_policy: "half_up",
+      tax_presentation_policy: "exclusive",
+      verification_policy: "none"
     )
     assert_not_predicate invalid_market, :valid?
-    assert_includes invalid_market.errors[:country_code], "is invalid"
-    assert_includes invalid_market.errors[:currency_code], "is invalid"
+    assert_includes invalid_market.errors[:country_codes], "must be an array of ISO 3166-1 alpha-2 country codes"
+    assert_includes invalid_market.errors[:allowed_currency_codes], "must be an array of ISO 4217 currency codes"
 
     invalid_meter = RecordingStudioBilling::Meter.new(
       usage_unit_recording: provider_recording,
@@ -215,6 +290,61 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     invalid_price.package_size = 0
     assert_not_predicate invalid_price, :valid?
     assert_includes invalid_price.errors[:package_size], "must be a positive integer for package prices"
+  end
+
+  test "billing options reject unsupported tier pricing and rates never carry customer money" do
+    billing_option = RecordingStudioBilling::BillingOption.new(
+      key: "graduated",
+      recurrence: "recurring",
+      interval: "month",
+      interval_count: 1,
+      quantity_mode: "fixed",
+      pricing_model: "graduated",
+      collection_method: "automatic",
+      payment_terms_days: 0,
+      trial_days: 0,
+      proration_policy: "none",
+      lifecycle_policy: "immediate",
+      checkout_policy: "allowed",
+      tax_policy: "exclusive"
+    )
+    assert_not_predicate billing_option, :valid?
+    assert_includes billing_option.errors[:pricing_model], "is not included in the list"
+
+    rate = RecordingStudioBilling::Rate.new(
+      key: "bytes_to_gigabytes",
+      conversion_numerator: 1,
+      conversion_denominator: 1_073_741_824
+    )
+    rate.valid?
+    assert_empty rate.errors[:base]
+    assert_not_respond_to rate, :amount_minor
+    assert_not_respond_to rate, :currency_code
+
+    provider = RecordingStudioBilling::ProviderAccount.new(
+      key: "unsafe_provider",
+      adapter_key: "stripe",
+      name: "Unsafe account",
+      environment: "production",
+      configuration: { "api_key" => "must-not-be-stored" },
+      capabilities: [],
+      supported_markets: [],
+      supported_currencies: []
+    )
+    assert_not_predicate provider, :valid?
+    assert_includes provider.errors[:configuration], "must not contain credentials or secrets"
+  end
+
+  test "price identity indexes enforce stable keys, historic versions, and one published version" do
+    indexes = ActiveRecord::Base.connection.indexes(:recording_studio_billing_prices)
+
+    assert(indexes.any? { |index| index.name == "recording_studio_billing_prices_key" && index.unique })
+    assert(indexes.any? { |index| index.name == "recording_studio_billing_prices_historical_version" && index.unique })
+    assert indexes.any? do |index|
+      index.name == "recording_studio_billing_prices_published" &&
+        index.unique &&
+        index.where == "((state)::text = 'published'::text)"
+    end
   end
   # rubocop:enable Metrics/BlockLength
 

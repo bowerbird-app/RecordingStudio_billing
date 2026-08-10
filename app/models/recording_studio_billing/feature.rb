@@ -4,12 +4,12 @@ module RecordingStudioBilling
   class Feature < ApplicationRecord
     include CommercialRecordable
 
-    KINDS = %w[boolean quantity].freeze
+    TYPES = %w[boolean limit allowance variant].freeze
 
     commercial_recordable label: "Feature", allowed_parent_types: "RecordingStudioBilling::Product"
 
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
 
-    validates :kind, inclusion: { in: KINDS }
+    validates :kind, inclusion: { in: TYPES }
   end
 end

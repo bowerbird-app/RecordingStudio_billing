@@ -23,6 +23,40 @@ APIs. Capability ownership derives the correct parent types, so `Account`
 belongs below a billing-enabled workspace and `BillingAdmin` below a
 billing-admin-enabled root.
 
+## V1 commercial catalogue contract
+
+This engine declares a catalogue hierarchy only; it does not publish products,
+create provider objects, or process payments. `ProviderAccount`, `Market`,
+`Product`, `ProductRule`, `PlanUpdate`, `UsageUnit`, `Meter`, `RateCard`, and
+`CostCard` are direct `BillingAdmin` recording children. Their semantic links
+(for example, a product's provider account) remain stable
+`*_recording_id` references rather than recording-tree parents.
+
+- Product kinds are `plan`, `addon`, `credit_pack`, and `service`.
+- Feature types are `boolean`, `limit`, `allowance`, and `variant`.
+- Meter aggregations are `sum`, `count`, `maximum`, and `latest`.
+- Markets hold country and allowed-currency sets plus selection and policy
+  metadata; they do not represent a single country/currency pair.
+- Provider accounts contain neutral adapter metadata and safe capability
+  configuration only. Store credentials in the host application's credentials
+  or secret manager, never in this table.
+- Billing options support only `flat`, `per_unit`, and `package` pricing.
+  Graduated, volume, and stairstep pricing are intentionally out of scope.
+- A price version is unique for its billing option, scope, market, and
+  currency (and an overage price also includes its usage unit). At most one
+  `published` version exists for that identity. Zero-valued prices are valid.
+- Rates are unit conversions represented as either a positive rational
+  numerator/denominator or a positive decimal. They are not customer money;
+  `CostRate` retains monetary fields.
+
+### Upgrading from the initial commercial hierarchy
+
+Run the engine migrations after upgrading. The V1 correction removes the old
+single-country/single-currency market fields, provider name, billing option
+kind, and monetary rate fields. Before deploying, ensure retired price rows
+do not duplicate a historical version identity, because the migration adds
+that uniqueness guarantee.
+
 ## Installation
 
 Add the gem and its Recording Studio dependencies, then run:
