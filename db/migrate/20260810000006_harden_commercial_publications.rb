@@ -6,9 +6,11 @@ class HardenCommercialPublications < ActiveRecord::Migration[8.1]
                null: false, default: {}
     add_index :recording_studio_billing_commercial_publication_candidates,
               %i[root_recording_id effective_at], unique: true,
-              name: "rs_billing_publication_candidate_identity"
+                                                  name: "rs_billing_publication_candidate_identity"
+    conversion_present = "NOT (conversion_numerator IS NULL AND conversion_denominator IS NULL " \
+                         "AND conversion_decimal IS NULL)"
     add_check_constraint :recording_studio_billing_rates,
-                         "NOT (conversion_numerator IS NULL AND conversion_denominator IS NULL AND conversion_decimal IS NULL)",
+                         conversion_present,
                          name: "rs_billing_rates_conversion_present"
   end
 

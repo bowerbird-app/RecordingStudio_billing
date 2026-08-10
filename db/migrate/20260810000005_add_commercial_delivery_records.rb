@@ -35,8 +35,8 @@ class AddCommercialDeliveryRecords < ActiveRecord::Migration[8.1]
       t.jsonb :recording_snapshots, null: false, default: []
       t.timestamps
     end
-    add_index :recording_studio_billing_commercial_publication_candidates, :candidate_digest, unique: true,
-              name: "rs_billing_publication_candidates_digest"
+    add_index :recording_studio_billing_commercial_publication_candidates, :candidate_digest,
+              unique: true, name: "rs_billing_publication_candidates_digest"
     add_index :recording_studio_billing_commercial_publication_candidates, :effective_at
   end
 end

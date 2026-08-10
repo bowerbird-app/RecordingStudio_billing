@@ -194,7 +194,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "database history guard preserves recordables and delivery artifacts" do
     graph = commercial_graph
-    graph[:provider].update!(name: "Updated provider")
+    RecordingStudioBilling::ProviderAccount.where(id: graph[:provider].id).update_all(name: "Updated provider")
     assert_equal "Updated provider", graph[:provider].reload.name
 
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
@@ -238,7 +238,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     end
     assert_match(/not effective/, error.message)
 
-    graph[:italy_price].update!(amount_minor: 1_001)
+    RecordingStudioBilling::Price.where(id: graph[:italy_price].id).update_all(amount_minor: 1_001)
     assert_equal 1_001, graph[:italy_price].reload.amount_minor
     travel_to(3.minutes.from_now) do
       error = assert_raises(ArgumentError) do
@@ -252,10 +252,12 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
   test "scheduled activation is deterministic and does not duplicate events" do
     graph = commercial_graph
     effective_at = 2.minutes.from_now
-    candidate = RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:root],
-                                                                     effective_at: effective_at,
-                                                                     price_recording_ids: [graph[:italy_price].recording.id],
-                                                                     actor: :test_actor)
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root],
+      effective_at: effective_at,
+      price_recording_ids: [graph[:italy_price].recording.id],
+      actor: :test_actor
+    )
 
     travel_to(effective_at + 1.second) do
       RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate, actor: :test_actor)
@@ -458,9 +460,14 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "account feature overrides can reference the central catalogue and preserve false values" do
     graph = commercial_graph
+    product_recording = graph[:product].recording
+    option_recording = graph[:option].recording
+    price_recording = graph[:italy_price].recording
+    market_recording = graph[:italy_market].recording
+    feature_recording = graph[:enabled_feature].recording
     RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root],
-      price_recording_ids: [graph[:italy_price].recording.id],
+      price_recording_ids: [price_recording.id],
       actor: :test_actor
     )
     account_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
@@ -468,7 +475,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     override_recording = record_child(
       RecordingStudioBilling::FeatureOverride.new(
         account_recording: account.recording,
-        feature_recording: graph[:enabled_feature].recording,
+        feature_recording: feature_recording,
         key: unique_name("enabled_override").tr(" ", "_"),
         value: false
       ),
@@ -479,10 +486,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     override_recording.root_recording.revise(override_recording) { |revision| revision.state = "published" }
 
     result = RecordingStudioBilling::CommercialManifestResolver.new(
-      product: graph[:product].recording.reload.recordable,
-      billing_option: graph[:option].recording.reload.recordable,
-      price: graph[:italy_price].recording.reload.recordable,
-      market: graph[:italy_market].recording.reload.recordable,
+      product: product_recording.reload.recordable,
+      billing_option: option_recording.reload.recordable,
+      price: price_recording.reload.recordable,
+      market: market_recording.reload.recordable,
       currency_code: "EUR",
       account_recording: account.recording
     ).resolve!
@@ -551,10 +558,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       stage: :final_charge, account_country: "DE", previous: italy
     ).outcome
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::MarketResolver.new(markets: [
-                                                   graph[:italy_market],
-                                                   graph[:italy_market].dup
-                                                 ]).resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
+      resolver = RecordingStudioBilling::MarketResolver.new(
+        markets: [graph[:italy_market], graph[:italy_market].dup]
+      )
+      resolver.resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
     end
   end
 
@@ -591,7 +598,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     provider = record_child(
       RecordingStudioBilling::ProviderAccount.new(
         billing_admin_recording: admin_recording, key: unique_name("provider").tr(" ", "_"),
-        adapter_key: "stripe", name: "Provider", environment: "production", configuration: { "merchant" => "catalogue" },
+        adapter_key: "stripe", name: "Provider", environment: "production",
+        configuration: { "merchant" => "catalogue" },
         capabilities: [], supported_markets: %w[IT DE], supported_currencies: ["EUR"]
       ), root, admin_recording
     )
@@ -677,6 +685,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     quoted_tables = tables.map { |table| connection.quote_table_name(table) }.join(", ")
     connection.execute("TRUNCATE TABLE #{quoted_tables} RESTART IDENTITY CASCADE")
     RecordingStudio::Recording.unscoped.delete_all
+    Workspace.delete_all
     AdminRoot.delete_all
   end
 

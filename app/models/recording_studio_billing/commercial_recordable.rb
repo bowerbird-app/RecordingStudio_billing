@@ -27,10 +27,9 @@ module RecordingStudioBilling
 
       def commercial_reference(name, type:, same_root: true)
         self.commercial_references = commercial_references.merge(name.to_sym => {
-          type: type.to_s, same_root: same_root
-        }).freeze
+                                                                   type: type.to_s, same_root: same_root
+                                                                 }).freeze
       end
-
     end
 
     def validate_commercial_semantic_recordings!

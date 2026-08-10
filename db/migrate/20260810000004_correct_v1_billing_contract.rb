@@ -141,7 +141,8 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     add_check_constraint table, "maximum_quantity > 0 OR maximum_quantity IS NULL",
                          name: "rs_billing_options_maximum_quantity"
     add_check_constraint table, "default_quantity > 0", name: "rs_billing_options_default_quantity"
-    add_check_constraint table, "minimum_quantity IS NULL OR maximum_quantity IS NULL OR minimum_quantity <= maximum_quantity",
+    add_check_constraint table,
+                         "minimum_quantity IS NULL OR maximum_quantity IS NULL OR minimum_quantity <= maximum_quantity",
                          name: "rs_billing_options_quantity_bounds"
     add_check_constraint table, "minimum_quantity IS NULL OR default_quantity >= minimum_quantity",
                          name: "rs_billing_options_default_minimum"
@@ -204,9 +205,9 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
       WHERE (legacy_monetary_data->>'amount_minor')::numeric > 0
     SQL
     if select_value(<<~SQL.squish).to_i.positive?
-         SELECT COUNT(*) FROM #{table}
-         WHERE conversion_decimal IS NULL
-       SQL
+      SELECT COUNT(*) FROM #{table}
+      WHERE conversion_decimal IS NULL
+    SQL
       raise ActiveRecord::MigrationError,
             "Cannot convert zero-valued legacy Rate records safely. Export or retire them, then rerun this migration."
     end

@@ -17,7 +17,10 @@ module RecordingStudioBilling
       product_features.each_with_object({}) do |feature, resolved|
         feature_key = feature.definition.fetch("_commercial_source_key", feature.key)
         definition = FeatureDefinitionRegistry.fetch!(feature_key)
-        raise ArgumentError, "feature kind does not match its registered definition" unless definition.fetch("type") == feature.kind
+        unless definition.fetch("type") == feature.kind
+          raise ArgumentError,
+                "feature kind does not match its registered definition"
+        end
 
         value = definition.fetch("default")
         [product.feature_values, billing_option.feature_values, price.feature_values,

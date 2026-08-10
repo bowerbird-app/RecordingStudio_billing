@@ -15,7 +15,7 @@ class AllowStableCatalogueRevisionKeys < ActiveRecord::Migration[8.1]
   def up
     TABLES.each { |table| remove_index table, name: "#{table}_key" if index_exists?(table, :key, name: "#{table}_key") }
     remove_index :recording_studio_billing_prices, name: "recording_studio_billing_prices_historical_version",
-                                                    if_exists: true
+                                                   if_exists: true
     remove_index :recording_studio_billing_overage_prices,
                  name: "recording_studio_billing_overage_prices_historical_version", if_exists: true
   end

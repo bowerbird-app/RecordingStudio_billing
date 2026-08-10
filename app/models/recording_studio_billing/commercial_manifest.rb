@@ -22,12 +22,16 @@ module RecordingStudioBilling
     private
 
     def digest_matches_persisted_envelope
-      return if canonical_data.blank? || recording_snapshots.blank? || snapshot_references.blank? || manifest_digest.blank?
+      return unless persisted_envelope_complete?
 
       calculated = CommercialManifestCanonicalizer.digest(envelope)
       errors.add(:manifest_digest, "does not match persisted envelope") unless calculated == manifest_digest
     rescue CommercialManifestCanonicalizer::UnsupportedValue => e
       errors.add(:canonical_data, e.message)
+    end
+
+    def persisted_envelope_complete?
+      [canonical_data, recording_snapshots, snapshot_references, manifest_digest].all?(&:present?)
     end
 
     def envelope

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Lint/MissingCopEnableDirective
+# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
 
 require "digest"
 require "json"
@@ -44,7 +44,10 @@ module RecordingStudioBilling
             end
 
             normalized_key = key.to_s
-            raise UnsupportedValue, "manifest contains a reserved wrapper key" if RESERVED_WRAPPER_KEYS.include?(normalized_key)
+            if RESERVED_WRAPPER_KEYS.include?(normalized_key)
+              raise UnsupportedValue,
+                    "manifest contains a reserved wrapper key"
+            end
             raise UnsupportedValue, "manifest contains duplicate canonical keys" if result.key?(normalized_key)
 
             result[normalized_key] = normalize(nested, depth: depth + 1, node_count:)

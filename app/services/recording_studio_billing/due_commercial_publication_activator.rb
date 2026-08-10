@@ -3,7 +3,7 @@
 module RecordingStudioBilling
   # Safe to run from a scheduler more than once or from concurrent workers.
   class DueCommercialPublicationActivator
-    def self.call(now: Time.current, actor:)
+    def self.call(actor:, now: Time.current)
       new(now:, actor:).call
     end
 

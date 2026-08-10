@@ -24,12 +24,28 @@ module RecordingStudioBilling
         return
       end
 
+      validate_configuration_secrecy
+      validate_configuration_keys
+      validate_configuration_values
+    end
+
+    def validate_configuration_secrecy
       errors.add(:configuration, "must not contain credentials or secrets") if sensitive_key?(configuration)
+    end
+
+    def validate_configuration_keys
       unknown = configuration.keys.map(&:to_s) - CONFIGURATION_KEYS
       errors.add(:configuration, "contains unsupported keys: #{unknown.sort.join(', ')}") if unknown.any?
-      unless configuration.values.all? { |value| value.is_a?(String) || value.is_a?(Integer) || value == true || value == false }
-        errors.add(:configuration, "values must be scalar public metadata")
-      end
+    end
+
+    def validate_configuration_values
+      return if configuration.values.all? { |value| public_metadata_value?(value) }
+
+      errors.add(:configuration, "values must be scalar public metadata")
+    end
+
+    def public_metadata_value?(value)
+      value.is_a?(String) || value.is_a?(Integer) || value == true || value == false
     end
 
     def capabilities_are_safe

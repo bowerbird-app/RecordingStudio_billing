@@ -337,9 +337,9 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
   test "price identity constraints defer uniqueness to current Recording revisions" do
     indexes = ActiveRecord::Base.connection.indexes(:recording_studio_billing_prices)
 
-    assert_not indexes.any? { |index| index.name == "recording_studio_billing_prices_key" }
-    assert_not indexes.any? { |index| index.name == "recording_studio_billing_prices_historical_version" }
-    assert_not indexes.any? { |index| index.name == "recording_studio_billing_prices_published" }
+    assert_not(indexes.any? { |index| index.name == "recording_studio_billing_prices_key" })
+    assert_not(indexes.any? { |index| index.name == "recording_studio_billing_prices_historical_version" })
+    assert_not(indexes.any? { |index| index.name == "recording_studio_billing_prices_published" })
 
     default_quantity = ActiveRecord::Base.connection.columns(
       :recording_studio_billing_billing_options
@@ -350,7 +350,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     foreign_keys = ActiveRecord::Base.connection.foreign_keys(
       :recording_studio_billing_commercial_manifests
     )
-    assert foreign_keys.any? { |foreign_key| foreign_key.options[:name] == "fk_rs_billing_manifests_root" }
+    assert(foreign_keys.any? { |foreign_key| foreign_key.options[:name] == "fk_rs_billing_manifests_root" })
   end
   # rubocop:enable Metrics/BlockLength
 

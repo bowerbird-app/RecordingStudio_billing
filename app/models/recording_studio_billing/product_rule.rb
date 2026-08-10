@@ -29,14 +29,23 @@ module RecordingStudioBilling
     end
 
     def conditions_are_supported
-      unless conditions.is_a?(Hash) && (conditions.keys.map(&:to_s) - CONDITION_KEYS).empty?
+      unless supported_condition_keys?
         errors.add(:conditions, "contains unsupported conditions")
         return
       end
 
-      errors.add(:conditions, "values must be scalar values or arrays") unless conditions.values.all? do |value|
-        value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Array) && value.all? { |item| item.is_a?(String) }
-      end
+      return if conditions.values.all? { |value| supported_condition_value?(value) }
+
+      errors.add(:conditions, "values must be scalar values or arrays")
+    end
+
+    def supported_condition_keys?
+      conditions.is_a?(Hash) && (conditions.keys.map(&:to_s) - CONDITION_KEYS).empty?
+    end
+
+    def supported_condition_value?(value)
+      value.is_a?(String) || value.is_a?(Integer) ||
+        (value.is_a?(Array) && value.all? { |item| item.is_a?(String) })
     end
   end
 end

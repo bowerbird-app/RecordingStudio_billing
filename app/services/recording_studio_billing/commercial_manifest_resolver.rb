@@ -8,7 +8,8 @@ module RecordingStudioBilling
     RESOLVER_VERSION = CommercialManifest::RESOLVER_VERSION
 
     def initialize(product:, billing_option:, price:, market:, currency_code:, quantity: nil,
-                   overage_price: nil, overage_prices: nil, publication_candidate: false, trusted_context: {}, account_recording: nil)
+                   overage_price: nil, overage_prices: nil, publication_candidate: false,
+                   trusted_context: {}, account_recording: nil)
       @product = product
       @billing_option = billing_option
       @price = price
@@ -51,16 +52,18 @@ module RecordingStudioBilling
 
     def validate_commercial_state!
       primary_records = [product, billing_option, price, market, *overage_prices].compact
-      unless primary_records.all? { |record| record.recording.present? }
+      unless primary_records.all? { |record| currently_recorded?(record) }
         raise ArgumentError,
               "historical commercial revisions cannot be resolved"
       end
 
       records = referenced_records
       allowed_states = publication_candidate ? %w[draft published] : ["published"]
-      return if records.all? { |record| record.recording.present? && allowed_states.include?(record.state) }
+      invalid = records.reject { |record| currently_recorded?(record) && allowed_states.include?(record.state) }
+      return if invalid.empty?
 
-      raise ArgumentError, "draft or retired commercial records cannot be resolved"
+      details = invalid.map { |record| "#{record.class.name}(#{record.state})" }.join(", ")
+      raise ArgumentError, "draft, retired, or historical commercial records cannot be resolved: #{details}"
     end
 
     def validate_graph!
@@ -92,6 +95,7 @@ module RecordingStudioBilling
          !provider.capabilities.intersect?(%w[catalogue commercial_catalogue])
         raise ArgumentError, "provider lacks commercial catalogue capability"
       end
+
       unless billing_option.product_recording_id == product.recording.id
         raise ArgumentError,
               "billing option is not owned by product"
@@ -99,6 +103,7 @@ module RecordingStudioBilling
       unless billing_option.pricing_model == price.pricing_model
         raise ArgumentError, "billing option and price pricing models do not agree"
       end
+
       validate_quantity!
       overage_prices.each do |overage_price|
         valid_overage = overage_price.billing_option_recording_id == billing_option.recording.id &&
@@ -108,14 +113,17 @@ module RecordingStudioBilling
                         overage_price.usage_unit_recording&.recordable.is_a?(UsageUnit) &&
                         overage_price.pricing_model == price.pricing_model &&
                         overage_price.usage_unit_recording.recordable.provider_account_recording_id ==
-                          product.provider_account_recording_id
+                        product.provider_account_recording_id
         raise ArgumentError, "overage price does not match selected commercial graph" unless valid_overage
       end
       validate_catalogue_roots!
     end
 
     def validate_quantity!
-      raise ArgumentError, "quantity must be a positive integer" unless quantity.to_i.positive? && quantity.to_i == quantity
+      unless quantity.to_i.positive? && quantity.to_i == quantity
+        raise ArgumentError,
+              "quantity must be a positive integer"
+      end
       if billing_option.quantity_mode == "fixed" && quantity.to_i != billing_option.default_quantity.to_i
         raise ArgumentError, "fixed quantity billing options require the default quantity"
       end
@@ -141,9 +149,9 @@ module RecordingStudioBilling
       if trusted_context["currency_code"].present? && trusted_context["currency_code"] != currency_code
         raise ArgumentError, "trusted currency does not match selected currency"
       end
-      if trusted_context["quantity"].present? && trusted_context["quantity"].to_i != quantity.to_i
-        raise ArgumentError, "trusted quantity does not match selected quantity"
-      end
+      return unless trusted_context["quantity"].present? && trusted_context["quantity"].to_i != quantity.to_i
+
+      raise ArgumentError, "trusted quantity does not match selected quantity"
     end
 
     def market_covers?(country)
@@ -161,21 +169,27 @@ module RecordingStudioBilling
         "references" => snapshot_references,
         "product" => terms(product, %w[key kind]),
         "billing_option" => terms(billing_option, %w[
-                                    key recurrence interval interval_count quantity_mode minimum_quantity maximum_quantity default_quantity
-                                    pricing_model collection_method payment_terms_days trial_days proration_policy lifecycle_policy
+                                    key recurrence interval interval_count quantity_mode minimum_quantity
+                                    maximum_quantity
+                                    default_quantity pricing_model collection_method payment_terms_days trial_days
+                                    proration_policy lifecycle_policy
                                     checkout_policy tax_policy
                                   ]),
         "market" => terms(market, %w[
-                            key country_codes country_groups allowed_currency_codes default_currency_code priority specificity fallback
+                            key country_codes country_groups allowed_currency_codes default_currency_code priority
+                            specificity fallback
                             ppa_policy rounding_policy tax_presentation_policy verification_policy
                           ]),
         "price" => terms(price, %w[
                            key amount_minor currency_code currency_exponent pricing_model package_size version scope
                          ]).merge("quantity" => quantity),
         "features" => resolved_features,
-        "overage_prices" => overage_prices.map { |overage_price| terms(overage_price, %w[
-          key amount_minor currency_code currency_exponent pricing_model package_size version scope usage_unit_recording_id
-        ]) },
+        "overage_prices" => overage_prices.map do |overage_price|
+          terms(overage_price, %w[
+                  key amount_minor currency_code currency_exponent pricing_model package_size version scope
+                  usage_unit_recording_id
+                ])
+        end,
         "tax_policy" => tax_policy_snapshot,
         "discount_policy" => { "enabled" => false, "source" => "none" },
         "rounding" => { "policy" => market.rounding_policy },
@@ -245,7 +259,10 @@ module RecordingStudioBilling
         "recording_updated_at" => recording.updated_at.utc.iso8601(6),
         "recording_trashed_at" => recording.attributes["trashed_at"]&.utc&.iso8601(6),
         "recordable_created_at" => record.created_at.utc.iso8601(6),
-        "recordable_updated_at" => record.updated_at.utc.iso8601(6)
+        "recordable_updated_at" => record.updated_at.utc.iso8601(6),
+        "recordable_digest" => CommercialManifestCanonicalizer.digest(
+          record.attributes.except("created_at", "updated_at")
+        )
       }
     end
 
@@ -278,6 +295,7 @@ module RecordingStudioBilling
               "commercial manifest references multiple catalogue roots"
       end
       return unless account_recording
+
       unless account_recording.recordable.is_a?(Account)
         raise ArgumentError,
               "feature overrides require a billing account recording"
@@ -287,6 +305,11 @@ module RecordingStudioBilling
       end
 
       raise ArgumentError, "feature override belongs to a different billing account"
+    end
+
+    def currently_recorded?(record)
+      recording = record.recording
+      recording.present? && recording.recordable_type == record.class.name && recording.recordable_id == record.id
     end
 
     def manifest_envelope(canonical_data, snapshots, references)

@@ -20,17 +20,24 @@ Layout/LineLength:
 Metrics/ClassLength:
   Exclude:
     - 'test/**/*'
+    - 'db/migrate/**/*'
     - 'lib/recording_studio_billing/hooks.rb'
 
 Metrics/MethodLength:
   Exclude:
     - 'test/**/*'
+    - 'db/migrate/**/*'
     - 'lib/generators/**/*'
 
 Metrics/AbcSize:
   Exclude:
     - 'test/**/*'
+    - 'db/migrate/**/*'
     - 'lib/generators/**/*'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'test/**/*'
 
 # Allow empty blocks in tests (common for stubs/mocks)
 Lint/EmptyBlock:

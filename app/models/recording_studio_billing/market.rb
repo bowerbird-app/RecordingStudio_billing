@@ -37,13 +37,20 @@ module RecordingStudioBilling
     end
 
     def country_groups_are_iso_codes
-      return if country_groups.is_a?(Hash) && country_groups.all? do |name, countries|
-        name.to_s.match?(CommercialRecordable::KEY_FORMAT) &&
-          countries.is_a?(Array) && countries.present? &&
-          countries.all? { |country| country.is_a?(String) && country.match?(/\A[A-Z]{2}\z/) }
-      end
+      return if valid_country_groups?
 
       errors.add(:country_groups, "must map group keys to non-empty ISO country code arrays")
+    end
+
+    def valid_country_groups?
+      country_groups.is_a?(Hash) &&
+        country_groups.all? { |name, countries| valid_country_group?(name, countries) }
+    end
+
+    def valid_country_group?(name, countries)
+      name.to_s.match?(CommercialRecordable::KEY_FORMAT) &&
+        countries.is_a?(Array) && countries.present? &&
+        countries.all? { |country| country.is_a?(String) && country.match?(/\A[A-Z]{2}\z/) }
     end
 
     def default_currency_is_allowed
