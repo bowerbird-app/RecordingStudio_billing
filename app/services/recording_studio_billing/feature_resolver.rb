@@ -17,6 +17,8 @@ module RecordingStudioBilling
       product_features.each_with_object({}) do |feature, resolved|
         feature_key = feature.definition.fetch("_commercial_source_key", feature.key)
         definition = FeatureDefinitionRegistry.fetch!(feature_key)
+        raise ArgumentError, "feature kind does not match its registered definition" unless definition.fetch("type") == feature.kind
+
         value = definition.fetch("default")
         [product.feature_values, billing_option.feature_values, price.feature_values,
          feature.definition].each do |values|
@@ -36,9 +38,15 @@ module RecordingStudioBilling
     attr_reader :product, :billing_option, :price, :account_recording
 
     def product_features
-      scope = Feature.where(product_recording_id: product.recording.id)
-      scope = scope.where(state: "published") unless @allow_unpublished
-      scope.order(:key, :id)
+      @product_features ||= begin
+        scope = Feature.with_current_recording.where(product_recording_id: product.recording.id)
+        scope = @allow_unpublished ? scope.where.not(state: "retired") : scope.where(state: "published")
+        features = scope.order(:key, :id).to_a
+        keys = features.map { |feature| feature.definition.fetch("_commercial_source_key", feature.key) }
+        raise ArgumentError, "feature keys are ambiguous for this product" if keys.uniq.size != keys.size
+
+        features
+      end
     end
 
     def merge(rule, current, incoming)
@@ -55,8 +63,11 @@ module RecordingStudioBilling
     def apply_overrides(feature, definition, value)
       return value unless account_recording
 
-      FeatureOverride.where(account_recording_id: account_recording.id, feature_recording_id: feature.recording.id,
-                            state: "published").order(:key, :id).each do |override|
+      FeatureOverride.with_current_recording.where(
+        account_recording_id: account_recording.id,
+        feature_recording_id: feature.recording.id,
+        state: "published"
+      ).order(:key, :id).each do |override|
         value = merge(definition.fetch("merge_rule"), value, override.value)
       end
       value
@@ -66,7 +77,8 @@ module RecordingStudioBilling
       return unless account_recording
 
       feature_ids = product_features.map { |feature| feature.recording.id }
-      invalid = FeatureOverride.where(account_recording_id: account_recording.id, state: "published")
+      invalid = FeatureOverride.with_current_recording
+                               .where(account_recording_id: account_recording.id, state: "published")
                                .where.not(feature_recording_id: feature_ids).exists?
       raise ArgumentError, "feature override references an unknown feature for this product" if invalid
     end

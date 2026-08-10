@@ -88,7 +88,7 @@ module RecordingStudioBilling
     end
 
     def selected_prices(root)
-      scope = Price.joins(:recording).where(recording_studio_recordings: { root_recording_id: root.id })
+      scope = Price.with_current_recording.where(recording_studio_recordings: { root_recording_id: root.id })
       return scope.where(recording_studio_recordings: { id: price_recording_ids }).order(:id).to_a if price_recording_ids.any?
 
       drafts = scope.where(state: "draft").order(:id).to_a
@@ -104,33 +104,43 @@ module RecordingStudioBilling
       options = records_for(BillingOption, prices.map(&:billing_option_recording_id))
       markets = records_for(Market, prices.map(&:market_recording_id))
       products = records_for(Product, options.map(&:product_recording_id))
-      providers = records_for(ProviderAccount, (products + markets).map(&:provider_account_recording_id))
-      features = Feature.where(product_recording_id: products.map { |item| item.recording.id })
-                        .where.not(state: "retired").order(:id).to_a
-      rules = ProductRule.where(product_recording_id: products.map { |item| item.recording.id }).order(:id).to_a
+      features = Feature.with_current_recording.where(
+        product_recording_id: products.map { |item| item.recording.id }
+      ).where.not(state: "retired").order(:id).to_a
+      rules = ProductRule.with_current_recording.where(
+        product_recording_id: products.map { |item| item.recording.id }
+      ).where.not(state: "retired").order(:id).to_a
       target_products = records_for(Product, rules.filter_map(&:target_product_recording_id))
+      providers = records_for(
+        ProviderAccount,
+        (products + target_products + markets).map(&:provider_account_recording_id)
+      )
+      plan_updates = PlanUpdate.with_current_recording.where(
+        billing_option_recording_id: options.map { |item| item.recording.id }
+      ).where.not(state: "retired").order(:id).to_a
       overages = prices.flat_map do |price|
-        OveragePrice.where(billing_option_recording_id: price.billing_option_recording_id,
-                           market_recording_id: price.market_recording_id, currency_code: price.currency_code,
-                           scope: price.scope).where.not(state: "retired").order(:id).to_a
+        OveragePrice.with_current_recording.where(
+          billing_option_recording_id: price.billing_option_recording_id,
+          market_recording_id: price.market_recording_id,
+          currency_code: price.currency_code,
+          scope: price.scope
+        ).where.not(state: "retired").order(:id).to_a
       end.reject { |overage| replacements.value?(overage.recording.id) }
       usage_units = records_for(UsageUnit, overages.map(&:usage_unit_recording_id))
-      meters = Meter.where(usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+      usage_unit_ids = usage_units.map { |item| item.recording.id }
+      meters = Meter.with_current_recording.where(usage_unit_recording_id: usage_unit_ids)
                     .where.not(state: "retired").order(:id).to_a
-      rate_cards = RateCard.where(provider_account_recording_id: providers.map { |item| item.recording.id })
-                           .where.not(state: "retired").order(:id).to_a
-      cost_cards = CostCard.where(provider_account_recording_id: providers.map { |item| item.recording.id })
-                           .where.not(state: "retired").order(:id).to_a
-      rates = Rate.where(rate_card_recording_id: rate_cards.map { |item| item.recording.id },
-                         usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+      rates = Rate.with_current_recording.where(usage_unit_recording_id: usage_unit_ids)
                   .where.not(state: "retired").order(:id).to_a
-      cost_rates = CostRate.where(cost_card_recording_id: cost_cards.map { |item| item.recording.id },
-                                  usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+      rate_cards = records_for(RateCard, rates.map(&:rate_card_recording_id))
+      cost_rates = CostRate.with_current_recording.where(usage_unit_recording_id: usage_unit_ids)
                           .where.not(state: "retired").order(:id).to_a
+      cost_cards = records_for(CostCard, cost_rates.map(&:cost_card_recording_id))
       replacements_records = replacement_records
 
-      (prices + options + markets + products + providers + features + rules + target_products + overages +
-        usage_units + meters + rate_cards + rates + cost_cards + cost_rates + replacements_records).uniq
+      (prices + options + markets + products + providers + features + rules + target_products + plan_updates +
+        overages + usage_units + meters + rate_cards + rates + cost_cards + cost_rates +
+        replacements_records).uniq
     end
 
     def replacement_records
@@ -149,7 +159,7 @@ module RecordingStudioBilling
       ids = Array(recording_ids).compact.uniq
       return [] if ids.empty?
 
-      records = klass.joins(:recording).where(recording_studio_recordings: { id: ids }).order(:id).to_a
+      records = klass.with_current_recording.where(recording_studio_recordings: { id: ids }).order(:id).to_a
       return records if records.size == ids.size
 
       raise ArgumentError, "missing #{klass.name.demodulize.underscore.tr('_', ' ')} reference"
@@ -163,10 +173,12 @@ module RecordingStudioBilling
 
     def validate_graph!(root, graph)
       records = graph.index_by { |record| record.recording.id }
+      prices = selected_prices(root)
+      validate_selected_price_identities!(prices)
       graph.each { |record| validate_record!(root, record, records) }
-      selected_prices(root).each { |price| validate_price!(price, records) }
+      prices.each { |price| validate_price!(price, records) }
       validate_overages!(graph.grep(OveragePrice), records)
-      validate_rules!(graph.grep(ProductRule), records)
+      validate_rules!(graph.grep(ProductRule), records, prices)
       validate_replacements!(records)
     end
 
@@ -183,6 +195,8 @@ module RecordingStudioBilling
       validate_provider!(record, records) if record.is_a?(ProviderAccount)
       validate_market!(record, records) if record.is_a?(Market)
       validate_feature!(record) if record.is_a?(Feature)
+      validate_rate!(record, records) if record.is_a?(Rate)
+      validate_cost_rate!(record, records) if record.is_a?(CostRate)
       record.validate_commercial_semantic_recordings! if record.respond_to?(:validate_commercial_semantic_recordings!)
       raise ArgumentError, "invalid #{record.class.name}" unless record.valid?
     end
@@ -208,7 +222,53 @@ module RecordingStudioBilling
     end
 
     def validate_feature!(feature)
-      FeatureDefinitionRegistry.fetch!(feature.key)
+      definition = FeatureDefinitionRegistry.fetch!(feature.key)
+      return if definition.fetch("type") == feature.kind
+
+      raise ArgumentError, "feature kind does not match its registered definition"
+    end
+
+    def validate_rate!(rate, records)
+      card = records[rate.rate_card_recording_id]
+      usage_unit = records[rate.usage_unit_recording_id]
+      unless card.is_a?(RateCard) && usage_unit.is_a?(UsageUnit)
+        raise ArgumentError,
+              "rate has incomplete references"
+      end
+      return if card.provider_account_recording_id == usage_unit.provider_account_recording_id
+
+      raise ArgumentError, "rate card and usage unit use different providers"
+    end
+
+    def validate_cost_rate!(rate, records)
+      card = records[rate.cost_card_recording_id]
+      usage_unit = records[rate.usage_unit_recording_id]
+      unless card.is_a?(CostCard) && usage_unit.is_a?(UsageUnit)
+        raise ArgumentError,
+              "cost rate has incomplete references"
+      end
+      return if card.provider_account_recording_id == usage_unit.provider_account_recording_id
+
+      raise ArgumentError, "cost card and usage unit use different providers"
+    end
+
+    def validate_selected_price_identities!(prices)
+      duplicates = prices.group_by { |price| price_identity(price) }
+      raise ArgumentError, "ambiguous selected price identity" if duplicates.values.any? { |items| items.size > 1 }
+
+      prices.each do |price|
+        validate_current_version!(price)
+        published = current_identity_scope(price).where(state: "published")
+                                                   .where.not(recording_studio_recordings: { id: price.recording.id })
+                                                   .to_a
+        next if published.empty?
+
+        prior_id = replacements[price.recording.id]
+        unless published.one? && prior_id == published.first.recording.id
+          raise ArgumentError,
+                "a published price identity requires an explicit replacement"
+        end
+      end
     end
 
     def validate_price!(price, records)
@@ -229,6 +289,7 @@ module RecordingStudioBilling
       raise ArgumentError, "ambiguous overage price identity" if duplicates.values.any? { |items| items.size > 1 }
 
       overages.each do |overage|
+        validate_current_version!(overage)
         option = records[overage.billing_option_recording_id]
         market = records[overage.market_recording_id]
         usage_unit = records[overage.usage_unit_recording_id]
@@ -239,15 +300,39 @@ module RecordingStudioBilling
       end
     end
 
-    def validate_rules!(rules, records)
+    def validate_rules!(rules, records, prices)
+      selected_product_ids = prices.map do |price|
+        records.fetch(price.billing_option_recording_id).product_recording_id
+      end
       rules.each do |rule|
         target = records[rule.target_product_recording_id]
         raise ArgumentError, "product rule target is missing or outside the selected graph" unless target.is_a?(Product)
-        result = ProductRuleEvaluator.new(product: records.fetch(rule.product_recording_id),
-                                          selected_products: records.values.grep(Product), context: rule_context,
-                                          rules: [rule]).evaluate
-        raise ArgumentError, "product rule conditions are not satisfied: #{rule.key}" unless result.eligible
+        next if target.state == "published" || selected_product_ids.include?(target.recording.id)
+
+        raise ArgumentError, "product rule targets must be published or selected for publication"
       end
+    end
+
+    def validate_current_version!(record)
+      duplicate = current_identity_scope(record).where(version: record.version)
+                                               .where.not(recording_studio_recordings: { id: record.recording.id })
+                                               .exists?
+      raise ArgumentError, "commercial price version is already used" if duplicate
+    end
+
+    def current_identity_scope(record)
+      record.class.with_current_recording.where(price_identity(record))
+    end
+
+    def price_identity(record)
+      identity = {
+        billing_option_recording_id: record.billing_option_recording_id,
+        scope: record.scope,
+        market_recording_id: record.market_recording_id,
+        currency_code: record.currency_code
+      }
+      identity[:usage_unit_recording_id] = record.usage_unit_recording_id if record.is_a?(OveragePrice)
+      identity
     end
 
     def validate_replacements!(records)

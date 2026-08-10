@@ -20,7 +20,10 @@ class ProtectCommercialHistory < ActiveRecord::Migration[8.1]
         IF OLD.state IN ('published', 'retired') THEN
           RAISE EXCEPTION 'published and retired commercial records are immutable';
         END IF;
-        RETURN OLD;
+        IF TG_OP = 'DELETE' THEN
+          RETURN OLD;
+        END IF;
+        RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;
     SQL

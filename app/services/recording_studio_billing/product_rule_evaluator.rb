@@ -26,7 +26,10 @@ module RecordingStudioBilling
     def published_rules
       return Array(rules).sort_by(&:key) if rules
 
-      ProductRule.where(product_recording_id: product.recording.id, state: "published").order(:key)
+      ProductRule.with_current_recording.where(
+        product_recording_id: product.recording.id,
+        state: "published"
+      ).order(:key)
     end
 
     def violation_for(rule)

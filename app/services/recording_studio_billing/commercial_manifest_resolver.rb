@@ -50,9 +50,15 @@ module RecordingStudioBilling
     end
 
     def validate_commercial_state!
-      records = [product, billing_option, price, market, *overage_prices].compact
-      return if publication_candidate && records.all? { |record| %w[draft published].include?(record.state) }
-      return if records.all? { |record| record.state == "published" }
+      primary_records = [product, billing_option, price, market, *overage_prices].compact
+      unless primary_records.all? { |record| record.recording.present? }
+        raise ArgumentError,
+              "historical commercial revisions cannot be resolved"
+      end
+
+      records = referenced_records
+      allowed_states = publication_candidate ? %w[draft published] : ["published"]
+      return if records.all? { |record| record.recording.present? && allowed_states.include?(record.state) }
 
       raise ArgumentError, "draft or retired commercial records cannot be resolved"
     end
@@ -77,6 +83,15 @@ module RecordingStudioBilling
         raise ArgumentError,
               "product and market use different providers"
       end
+      provider = product.provider_account_recording&.recordable
+      unless provider.is_a?(ProviderAccount) && provider.active?
+        raise ArgumentError,
+              "product provider is missing or inactive"
+      end
+      if provider.capabilities.present? &&
+         !provider.capabilities.intersect?(%w[catalogue commercial_catalogue])
+        raise ArgumentError, "provider lacks commercial catalogue capability"
+      end
       unless billing_option.product_recording_id == product.recording.id
         raise ArgumentError,
               "billing option is not owned by product"
@@ -91,9 +106,12 @@ module RecordingStudioBilling
                         overage_price.currency_code == currency_code &&
                         overage_price.scope == price.scope &&
                         overage_price.usage_unit_recording&.recordable.is_a?(UsageUnit) &&
-                        overage_price.pricing_model == price.pricing_model
+                        overage_price.pricing_model == price.pricing_model &&
+                        overage_price.usage_unit_recording.recordable.provider_account_recording_id ==
+                          product.provider_account_recording_id
         raise ArgumentError, "overage price does not match selected commercial graph" unless valid_overage
       end
+      validate_catalogue_roots!
     end
 
     def validate_quantity!
@@ -232,15 +250,43 @@ module RecordingStudioBilling
     end
 
     def referenced_records
-      features = Feature.where(product_recording_id: product.recording.id).where.not(state: "retired").order(:id).to_a
-      usage_units = overage_prices.filter_map { |overage_price| overage_price.usage_unit_recording&.recordable }
-      provider = product.provider_account_recording.recordable
-      overrides = if account_recording
-                    FeatureOverride.where(account_recording_id: account_recording.id, state: "published").order(:id).to_a
-                  else
-                    []
-                  end
-      [product, billing_option, price, market, provider, *overage_prices, *usage_units, *features, *overrides].compact.uniq
+      @referenced_records ||= begin
+        features = Feature.with_current_recording.where(product_recording_id: product.recording.id)
+        features = publication_candidate ? features.where.not(state: "retired") : features.where(state: "published")
+        usage_units = overage_prices.filter_map { |overage_price| overage_price.usage_unit_recording&.recordable }
+        provider = product.provider_account_recording&.recordable
+        overrides = if account_recording
+                      FeatureOverride.with_current_recording.where(
+                        account_recording_id: account_recording.id,
+                        state: "published"
+                      ).order(:id).to_a
+                    else
+                      []
+                    end
+        [
+          product, billing_option, price, market, provider, *overage_prices,
+          *usage_units, *features.order(:id).to_a, *overrides
+        ].compact.uniq
+      end
+    end
+
+    def validate_catalogue_roots!
+      root_id = product.recording.root_recording_id
+      catalogue_records = referenced_records.reject { |record| record.is_a?(FeatureOverride) }
+      unless catalogue_records.all? { |record| record.recording.root_recording_id == root_id }
+        raise ArgumentError,
+              "commercial manifest references multiple catalogue roots"
+      end
+      return unless account_recording
+      unless account_recording.recordable.is_a?(Account)
+        raise ArgumentError,
+              "feature overrides require a billing account recording"
+      end
+      return if referenced_records.grep(FeatureOverride).all? do |override|
+        override.account_recording_id == account_recording.id
+      end
+
+      raise ArgumentError, "feature override belongs to a different billing account"
     end
 
     def manifest_envelope(canonical_data, snapshots, references)

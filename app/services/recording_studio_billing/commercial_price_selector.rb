@@ -10,7 +10,7 @@ module RecordingStudioBilling
     end
 
     def price!
-      Price.where(
+      Price.with_current_recording.where(
         billing_option_recording_id: billing_option.recording.id,
         market_recording_id: market.recording.id,
         currency_code: currency_code,

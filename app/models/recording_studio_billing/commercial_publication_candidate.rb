@@ -5,6 +5,7 @@ module RecordingStudioBilling
     validates :candidate_digest, format: { with: /\A\h{64}\z/ }, uniqueness: true
     validates :effective_at, :manifest_digests, :recording_snapshots, :snapshot_envelope, presence: true
     validate :immutable_after_creation, on: :update
+    before_destroy :prevent_destruction
 
     def activated?
       activated_at?
@@ -17,6 +18,11 @@ module RecordingStudioBilling
       return if allowed_activation || !changed?
 
       errors.add(:base, "commercial publication candidates are immutable")
+    end
+
+    def prevent_destruction
+      errors.add(:base, "commercial publication candidates are immutable")
+      throw :abort
     end
   end
 end

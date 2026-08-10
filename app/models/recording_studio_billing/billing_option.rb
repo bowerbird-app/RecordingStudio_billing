@@ -23,8 +23,11 @@ module RecordingStudioBilling
     validates :interval, inclusion: { in: INTERVALS }, allow_nil: true
     validates :interval_count, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
     validates :quantity_mode, inclusion: { in: QUANTITY_MODES }
-    validates :minimum_quantity, :maximum_quantity, :default_quantity,
+    validates :minimum_quantity,
               numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
+    validates :maximum_quantity,
+              numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+    validates :default_quantity, numericality: { only_integer: true, greater_than: 0 }
     validates :pricing_model, inclusion: { in: PRICING_MODELS }
     validates :collection_method, inclusion: { in: COLLECTION_METHODS }
     validates :payment_terms_days, :trial_days,

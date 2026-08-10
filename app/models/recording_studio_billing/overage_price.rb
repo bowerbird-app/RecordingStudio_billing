@@ -23,7 +23,7 @@ module RecordingStudioBilling
     validates :version, numericality: { only_integer: true, greater_than_or_equal_to: 1 }
     validates :billing_option_recording_id, uniqueness: {
       scope: %i[scope market_recording_id usage_unit_recording_id currency_code],
-      conditions: -> { where(state: "published") }
+      conditions: -> { with_current_recording.where(state: "published") }
     }, if: -> { state == "published" }
     validate :package_size_matches_pricing_model
     validate :published_price_is_immutable, on: :update

@@ -28,7 +28,6 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     correct_billing_options
     correct_prices
     correct_rates
-    add_stable_key_indexes
     correct_recording_hierarchy
   end
   # rubocop:enable Metrics/ClassLength
@@ -113,7 +112,7 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     add_column table, :quantity_mode, :string, null: false, default: "fixed"
     add_column table, :minimum_quantity, :integer
     add_column table, :maximum_quantity, :integer
-    add_column table, :default_quantity, :integer
+    add_column table, :default_quantity, :integer, null: false, default: 1
     add_column table, :pricing_model, :string, null: false, default: "flat"
     add_column table, :collection_method, :string, null: false, default: "automatic"
     add_column table, :payment_terms_days, :integer, null: false, default: 0
@@ -137,6 +136,17 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     add_check_constraint table, "interval_count > 0 OR interval_count IS NULL",
                          name: "rs_billing_options_interval_count"
     add_check_constraint table, "quantity_mode IN ('fixed', 'adjustable')", name: "rs_billing_options_quantity_mode"
+    add_check_constraint table, "minimum_quantity >= 0 OR minimum_quantity IS NULL",
+                         name: "rs_billing_options_minimum_quantity"
+    add_check_constraint table, "maximum_quantity > 0 OR maximum_quantity IS NULL",
+                         name: "rs_billing_options_maximum_quantity"
+    add_check_constraint table, "default_quantity > 0", name: "rs_billing_options_default_quantity"
+    add_check_constraint table, "minimum_quantity IS NULL OR maximum_quantity IS NULL OR minimum_quantity <= maximum_quantity",
+                         name: "rs_billing_options_quantity_bounds"
+    add_check_constraint table, "minimum_quantity IS NULL OR default_quantity >= minimum_quantity",
+                         name: "rs_billing_options_default_minimum"
+    add_check_constraint table, "maximum_quantity IS NULL OR default_quantity <= maximum_quantity",
+                         name: "rs_billing_options_default_maximum"
     add_check_constraint table, "pricing_model IN ('flat', 'per_unit', 'package')",
                          name: "rs_billing_options_pricing_model"
     add_check_constraint table, "collection_method IN ('automatic', 'invoice')",
@@ -206,12 +216,6 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
       (conversion_numerator IS NULL AND conversion_denominator IS NULL AND
        conversion_decimal IS NOT NULL AND conversion_decimal > 0)
     SQL
-  end
-
-  def add_stable_key_indexes
-    COMMERCIAL_TABLES.each do |table|
-      add_index table, :key, unique: true, name: "#{table}_key"
-    end
   end
 
   # Semantic links (such as product_recording_id) deliberately remain untouched.

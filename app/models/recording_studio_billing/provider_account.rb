@@ -12,7 +12,6 @@ module RecordingStudioBilling
 
     validates :adapter_key, presence: true, format: { with: CommercialRecordable::KEY_FORMAT }
     validates :name, :environment, presence: true
-    validates :configuration, presence: true
     validate :safe_configuration
     validate :capabilities_are_safe
     validate :supported_codes

@@ -13,6 +13,7 @@ module RecordingStudioBilling
     validates :canonical_data, :recording_snapshots, :snapshot_references, presence: true
     validate :digest_matches_persisted_envelope
     validate :immutable_after_creation, on: :update
+    before_destroy :prevent_destruction
 
     def mark_used!
       update!(used_at: Time.current) unless used_at?
@@ -45,6 +46,11 @@ module RecordingStudioBilling
       return if allowed_use_mark || !changed?
 
       errors.add(:base, "commercial manifests are immutable")
+    end
+
+    def prevent_destruction
+      errors.add(:base, "commercial manifests are immutable")
+      throw :abort
     end
   end
 end

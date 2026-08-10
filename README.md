@@ -53,9 +53,9 @@ it does not create provider objects or process payments. `ProviderAccount`, `Mar
 
 Run the engine migrations after upgrading. The V1 correction removes the old
 single-country/single-currency market fields, provider name, billing option
-kind, and monetary rate fields. Before deploying, ensure retired price rows
-do not duplicate a historical version identity, because the migration adds
-that uniqueness guarantee.
+kind, and monetary rate fields. Logical price identities and versions are
+validated against current Recording Studio revisions while immutable physical
+snapshots remain available as commercial history.
 
 ## Installation
 

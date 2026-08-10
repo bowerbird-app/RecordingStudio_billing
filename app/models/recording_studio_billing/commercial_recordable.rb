@@ -10,6 +10,7 @@ module RecordingStudioBilling
     included do
       class_attribute :commercial_references, default: {}
       has_one :recording, as: :recordable, class_name: "RecordingStudio::Recording", dependent: :restrict_with_error
+      scope :with_current_recording, -> { joins(:recording) }
 
       validates :key, presence: true, format: { with: KEY_FORMAT }
       # Recording Studio revisions duplicate immutable recordables. Keys are

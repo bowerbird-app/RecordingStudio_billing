@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_000009) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -42,7 +42,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
     t.string "checkout_policy", default: "allowed", null: false
     t.string "collection_method", default: "automatic", null: false
     t.datetime "created_at", null: false
-    t.integer "default_quantity"
+    t.integer "default_quantity", default: 1, null: false
     t.jsonb "feature_values", default: {}, null: false
     t.string "interval"
     t.integer "interval_count"
@@ -64,12 +64,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
     t.check_constraint "(\"interval\"::text = ANY (ARRAY['day'::character varying::text, 'week'::character varying::text, 'month'::character varying::text, 'year'::character varying::text])) OR \"interval\" IS NULL", name: "rs_billing_options_interval"
     t.check_constraint "checkout_policy::text = ANY (ARRAY['allowed'::character varying::text, 'required'::character varying::text, 'disabled'::character varying::text])", name: "rs_billing_options_checkout_policy"
     t.check_constraint "collection_method::text = ANY (ARRAY['automatic'::character varying::text, 'invoice'::character varying::text])", name: "rs_billing_options_collection_method"
+    t.check_constraint "default_quantity > 0", name: "rs_billing_options_default_quantity"
+    t.check_constraint "maximum_quantity IS NULL OR default_quantity <= maximum_quantity", name: "rs_billing_options_default_maximum"
+    t.check_constraint "minimum_quantity IS NULL OR default_quantity >= minimum_quantity", name: "rs_billing_options_default_minimum"
     t.check_constraint "interval_count > 0 OR interval_count IS NULL", name: "rs_billing_options_interval_count"
     t.check_constraint "lifecycle_policy::text = ANY (ARRAY['immediate'::character varying::text, 'scheduled'::character varying::text])", name: "rs_billing_options_lifecycle_policy"
+    t.check_constraint "maximum_quantity > 0 OR maximum_quantity IS NULL", name: "rs_billing_options_maximum_quantity"
+    t.check_constraint "minimum_quantity >= 0 OR minimum_quantity IS NULL", name: "rs_billing_options_minimum_quantity"
     t.check_constraint "payment_terms_days >= 0", name: "rs_billing_options_payment_terms_days"
     t.check_constraint "pricing_model::text = ANY (ARRAY['flat'::character varying::text, 'per_unit'::character varying::text, 'package'::character varying::text])", name: "rs_billing_options_pricing_model"
     t.check_constraint "proration_policy::text = ANY (ARRAY['none'::character varying::text, 'prorate'::character varying::text])", name: "rs_billing_options_proration_policy"
     t.check_constraint "quantity_mode::text = ANY (ARRAY['fixed'::character varying::text, 'adjustable'::character varying::text])", name: "rs_billing_options_quantity_mode"
+    t.check_constraint "minimum_quantity IS NULL OR maximum_quantity IS NULL OR minimum_quantity <= maximum_quantity", name: "rs_billing_options_quantity_bounds"
     t.check_constraint "recurrence::text = ANY (ARRAY['one_time'::character varying::text, 'recurring'::character varying::text])", name: "rs_billing_options_recurrence"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_billing_options_state"
     t.check_constraint "tax_policy::text = ANY (ARRAY['exclusive'::character varying::text, 'inclusive'::character varying::text, 'automatic'::character varying::text])", name: "rs_billing_options_tax_policy"
@@ -210,7 +216,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
     t.datetime "updated_at", null: false
     t.uuid "usage_unit_recording_id", null: false
     t.integer "version", null: false
-    t.index ["billing_option_recording_id", "scope", "market_recording_id", "usage_unit_recording_id", "currency_code"], name: "recording_studio_billing_overage_prices_published", unique: true, where: "((state)::text = 'published'::text)"
     t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_4b4b3a8dfa"
     t.index ["market_recording_id"], name: "idx_on_market_recording_id_2ba99ee38f"
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_9e76a066d4"
@@ -248,7 +253,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
     t.integer "version", null: false
-    t.index ["billing_option_recording_id", "scope", "market_recording_id", "currency_code"], name: "recording_studio_billing_prices_published", unique: true, where: "((state)::text = 'published'::text)"
     t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_f4dd8ca6e3"
     t.index ["market_recording_id"], name: "index_recording_studio_billing_prices_on_market_recording_id"
     t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_prices_amount_minor"
@@ -417,6 +421,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
   add_foreign_key "recording_studio_billing_accounts", "recording_studio_recordings", column: "root_recording_id"
   add_foreign_key "recording_studio_billing_billing_admins", "recording_studio_recordings", column: "root_recording_id"
   add_foreign_key "recording_studio_billing_billing_options", "recording_studio_recordings", column: "product_recording_id"
+  add_foreign_key "recording_studio_billing_commercial_manifests", "recording_studio_recordings", column: "root_recording_id", name: "fk_rs_billing_manifests_root"
+  add_foreign_key "recording_studio_billing_commercial_publication_candidates", "recording_studio_recordings", column: "root_recording_id", name: "fk_rs_billing_candidates_root"
   add_foreign_key "recording_studio_billing_cost_cards", "recording_studio_recordings", column: "provider_account_recording_id"
   add_foreign_key "recording_studio_billing_cost_rates", "recording_studio_recordings", column: "cost_card_recording_id"
   add_foreign_key "recording_studio_billing_cost_rates", "recording_studio_recordings", column: "usage_unit_recording_id"
@@ -449,7 +455,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
       IF OLD.state IN ('published', 'retired') THEN
         RAISE EXCEPTION 'published and retired commercial records are immutable';
       END IF;
-      RETURN OLD;
+      IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+      END IF;
+      RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
 
@@ -474,5 +483,41 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000008) do
       END LOOP;
     END;
     $$;
+
+    CREATE FUNCTION rs_billing_protect_manifest_history() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'commercial manifests are immutable';
+      END IF;
+      IF OLD.used_at IS NULL AND NEW.used_at IS NOT NULL AND
+         (to_jsonb(OLD) - 'used_at' - 'updated_at') =
+           (to_jsonb(NEW) - 'used_at' - 'updated_at') THEN
+        RETURN NEW;
+      END IF;
+      RAISE EXCEPTION 'commercial manifests are immutable';
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE FUNCTION rs_billing_protect_candidate_history() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'commercial publication candidates are immutable';
+      END IF;
+      IF OLD.activated_at IS NULL AND NEW.activated_at IS NOT NULL AND
+         (to_jsonb(OLD) - 'activated_at' - 'updated_at') =
+           (to_jsonb(NEW) - 'activated_at' - 'updated_at') THEN
+        RETURN NEW;
+      END IF;
+      RAISE EXCEPTION 'commercial publication candidates are immutable';
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER rs_billing_manifests_protect_history
+    BEFORE UPDATE OR DELETE ON recording_studio_billing_commercial_manifests
+    FOR EACH ROW EXECUTE FUNCTION rs_billing_protect_manifest_history();
+
+    CREATE TRIGGER rs_billing_candidates_protect_history
+    BEFORE UPDATE OR DELETE ON recording_studio_billing_commercial_publication_candidates
+    FOR EACH ROW EXECUTE FUNCTION rs_billing_protect_candidate_history();
   SQL
 end

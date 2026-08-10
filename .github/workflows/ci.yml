@@ -91,4 +91,4 @@ jobs:
       - name: Run tests
         run: bundle exec rake test:all
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gem_template_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/recording_studio_billing_test

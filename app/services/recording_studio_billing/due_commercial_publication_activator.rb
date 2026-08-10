@@ -14,7 +14,7 @@ module RecordingStudioBilling
 
     def call
       CommercialPublicationCandidate.where(activated_at: nil).where(effective_at: ..@now).order(:effective_at, :id)
-                                    .find_each.filter_map do |candidate|
+                                    .filter_map do |candidate|
         CommercialPublisher.activate!(candidate:, actor: @actor)
       rescue ActiveRecord::RecordNotFound
         nil

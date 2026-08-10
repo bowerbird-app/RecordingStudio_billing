@@ -42,7 +42,8 @@ end
 def dummy_bundle_base_env
   {
     "BUNDLE_GEMFILE" => DUMMY_GEMFILE,
-    "DISABLE_SIMPLECOV" => "true"
+    "DISABLE_SIMPLECOV" => "true",
+    "RAILS_ENV" => "test"
   }
 end
 
@@ -68,7 +69,7 @@ namespace :test do
     Dir.chdir(DUMMY_APP_ROOT) do
       env = dummy_bundle_env
 
-      run_command!(env, "bundle", "exec", "bin/rails", "db:prepare")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:drop", "db:create", "db:migrate")
       run_command!(env, "bundle", "exec", "bin/rails", "test")
       DUMMY_TEST_FILES.each do |test_file|
         run_command!(env, "bundle", "exec", "ruby", "-I#{TEST_ROOT}", test_file)

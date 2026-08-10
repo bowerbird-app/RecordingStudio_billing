@@ -2,12 +2,6 @@
 
 class HardenCommercialPublications < ActiveRecord::Migration[8.1]
   def up
-    CorrectV1BillingContract::COMMERCIAL_TABLES.each do |table|
-      remove_index table, name: "#{table}_key" if index_exists?(table, :key, name: "#{table}_key")
-    end
-    remove_index :recording_studio_billing_prices, name: "recording_studio_billing_prices_historical_version"
-    remove_index :recording_studio_billing_overage_prices,
-                 name: "recording_studio_billing_overage_prices_historical_version"
     add_column :recording_studio_billing_commercial_publication_candidates, :snapshot_envelope, :jsonb,
                null: false, default: {}
     add_index :recording_studio_billing_commercial_publication_candidates,
@@ -23,14 +17,5 @@ class HardenCommercialPublications < ActiveRecord::Migration[8.1]
     remove_index :recording_studio_billing_commercial_publication_candidates,
                  name: "rs_billing_publication_candidate_identity"
     remove_column :recording_studio_billing_commercial_publication_candidates, :snapshot_envelope
-    CorrectV1BillingContract::COMMERCIAL_TABLES.each do |table|
-      add_index table, :key, unique: true, name: "#{table}_key"
-    end
-    add_index :recording_studio_billing_prices,
-              %i[billing_option_recording_id scope market_recording_id currency_code version],
-              unique: true, name: "recording_studio_billing_prices_historical_version"
-    add_index :recording_studio_billing_overage_prices,
-              %i[billing_option_recording_id scope market_recording_id usage_unit_recording_id currency_code version],
-              unique: true, name: "recording_studio_billing_overage_prices_historical_version"
   end
 end
