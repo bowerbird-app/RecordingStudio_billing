@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class BillingOption < ApplicationRecord
+  class BillingOption < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     RECURRENCES = %w[one_time recurring].freeze

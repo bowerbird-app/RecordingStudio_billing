@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected the V1 commercial catalogue contract, including hierarchy,
   provider/market metadata, billing-option policy fields, price version
   constraints, and non-monetary unit conversion rates.
+- Added deterministic, selected commercial publication candidates and verified
+  manifest envelopes. Publication preserves stable Recording Studio identities,
+  supports atomic price replacement, and leaves unrelated drafts untouched.
+- Hardened market/overage resolution, rule/feature validation, and nested
+  provider configuration secret detection.
 
 ## [0.1.2] - 2026-07-21
 

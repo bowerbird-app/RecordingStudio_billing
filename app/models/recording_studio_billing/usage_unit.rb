@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class UsageUnit < ApplicationRecord
+  class UsageUnit < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     commercial_recordable label: "Usage unit", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class Meter < ApplicationRecord
+  class Meter < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     AGGREGATIONS = %w[sum count maximum latest].freeze

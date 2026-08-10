@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class PlanUpdate < ApplicationRecord
+  class PlanUpdate < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     commercial_recordable label: "Plan update", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"

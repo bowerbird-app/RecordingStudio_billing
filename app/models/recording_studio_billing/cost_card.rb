@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class CostCard < ApplicationRecord
+  class CostCard < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     commercial_recordable label: "Cost card", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"

@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
+  # Produces a deliberately small publication.  A publication is selected by its
+  # Price recording identities; it never means "publish every draft below root".
   class CommercialPublisher
-    RECORDABLE_TYPES = %w[
-      ProviderAccount Market Product BillingOption Price OveragePrice Feature ProductRule UsageUnit
-    ].freeze.map { |name| "RecordingStudioBilling::#{name}" }.freeze
+    SUPPORTED_MANIFEST_SCHEMA = CommercialManifest::SCHEMA_VERSION
+    SUPPORTED_RESOLVER_VERSION = CommercialManifest::RESOLVER_VERSION
 
     def self.publish!(...)
       new(...).publish!
@@ -16,39 +17,56 @@ module RecordingStudioBilling
       new(...).activate!
     end
 
-    def initialize(root_recording: nil, effective_at: Time.current, candidate: nil)
+    def self.replace_price!(prior_price:, replacement_price:, **options)
+      new(**options, price_recording_ids: [replacement_price.recording.id],
+          replacements: { replacement_price.recording.id => prior_price.recording.id }).publish!
+    end
+
+    def self.replace_overage_price!(prior_overage_price:, replacement_overage_price:, price_recording_id:, **options)
+      new(**options, price_recording_ids: [price_recording_id],
+          replacements: { replacement_overage_price.recording.id => prior_overage_price.recording.id }).publish!
+    end
+
+    def initialize(root_recording: nil, effective_at: Time.current, candidate: nil, price_recording_ids: nil,
+                   replacements: {}, rule_context: {})
       @root_recording = root_recording
       @effective_at = effective_at
       @candidate = candidate
+      @price_recording_ids = Array(price_recording_ids).compact.map(&:to_s).uniq.sort
+      @replacements = replacements.to_h.stringify_keys
+      @rule_context = rule_context.to_h
     end
 
     def publish!
       CommercialPublicationCandidate.transaction do
         root = canonical_root!
-        recordings = lock_recordings(root)
-        validate_root!(root, recordings)
-        validate_graph!(root, recordings)
-        manifests = build_and_persist_manifests(root, recordings)
-        candidate = create_candidate(root, manifests, recordings)
-        activate_candidate!(candidate) if effective_at <= Time.current
+        graph = closure_for(root)
+        lock_graph!(graph)
+        graph = closure_for(root) # rebuild after every referenced row is locked
+        validate_graph!(root, graph)
+
+        manifests = persist_manifests(root, graph)
+        envelope = snapshot_envelope(root, graph, manifests)
+        candidate = find_or_create_candidate!(root, manifests, envelope)
+        activate_candidate!(candidate) if candidate.effective_at <= Time.current
         candidate
       end
     end
 
     def activate!
       CommercialPublicationCandidate.transaction do
-        candidate = CommercialPublicationCandidate.lock.find(candidate_or_id)
-        return candidate if candidate.activated?
-        raise ArgumentError, "publication candidate is not effective yet" if candidate.effective_at > Time.current
+        publication = CommercialPublicationCandidate.lock.find(candidate_or_id)
+        return publication if publication.activated?
+        raise ArgumentError, "publication candidate is not effective yet" if publication.effective_at > Time.current
 
-        verify_candidate!(candidate)
-        activate_candidate!(candidate)
+        verify_candidate!(publication)
+        activate_candidate!(publication)
       end
     end
 
     private
 
-    attr_reader :root_recording, :effective_at, :candidate
+    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context
 
     def canonical_root!
       root = RecordingStudio.root_recording_or_self(root_recording)
@@ -56,234 +74,332 @@ module RecordingStudioBilling
       RecordingStudio::Recording.unscoped.lock.find(root.id)
     end
 
-    def lock_recordings(root)
-      RecordingStudio::Recording.unscoped
-                                .where(root_recording_id: root.id, recordable_type: RECORDABLE_TYPES)
-                                .order(:id).lock.to_a
+    def selected_prices(root)
+      scope = Price.joins(:recording).where(recording_studio_recordings: { root_recording_id: root.id })
+      return scope.where(recording_studio_recordings: { id: price_recording_ids }).order(:id).to_a if price_recording_ids.any?
+
+      drafts = scope.where(state: "draft").order(:id).to_a
+      raise ArgumentError, "a price_recording_ids selection is required when more than one draft price exists" unless drafts.one?
+
+      drafts
     end
 
-    def validate_root!(root, recordings)
-      admin = BillingAdmin.find_by!(root_recording_id: root.id)
-      admin_recording = admin.recording
-      unless admin_recording.parent_recording_id == root.id
-        raise ArgumentError,
-              "billing administration is not under its root"
-      end
-      raise ArgumentError, "commercial records are required" if recordings.empty?
-      raise ArgumentError, "commercial recording has wrong root" unless recordings.all? do |recording|
-        recording.root_recording_id == root.id
+    def closure_for(root)
+      prices = selected_prices(root)
+      raise ArgumentError, "no selected draft or published price exists" if prices.empty?
+
+      options = records_for(BillingOption, prices.map(&:billing_option_recording_id))
+      markets = records_for(Market, prices.map(&:market_recording_id))
+      products = records_for(Product, options.map(&:product_recording_id))
+      providers = records_for(ProviderAccount, (products + markets).map(&:provider_account_recording_id))
+      features = Feature.where(product_recording_id: products.map { |item| item.recording.id })
+                        .where.not(state: "retired").order(:id).to_a
+      rules = ProductRule.where(product_recording_id: products.map { |item| item.recording.id }).order(:id).to_a
+      target_products = records_for(Product, rules.filter_map(&:target_product_recording_id))
+      overages = prices.flat_map do |price|
+        OveragePrice.where(billing_option_recording_id: price.billing_option_recording_id,
+                           market_recording_id: price.market_recording_id, currency_code: price.currency_code,
+                           scope: price.scope).where.not(state: "retired").order(:id).to_a
+      end.reject { |overage| replacements.value?(overage.recording.id) }
+      usage_units = records_for(UsageUnit, overages.map(&:usage_unit_recording_id))
+      meters = Meter.where(usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+                    .where.not(state: "retired").order(:id).to_a
+      rate_cards = RateCard.where(provider_account_recording_id: providers.map { |item| item.recording.id })
+                           .where.not(state: "retired").order(:id).to_a
+      cost_cards = CostCard.where(provider_account_recording_id: providers.map { |item| item.recording.id })
+                           .where.not(state: "retired").order(:id).to_a
+      rates = Rate.where(rate_card_recording_id: rate_cards.map { |item| item.recording.id },
+                         usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+                  .where.not(state: "retired").order(:id).to_a
+      cost_rates = CostRate.where(cost_card_recording_id: cost_cards.map { |item| item.recording.id },
+                                  usage_unit_recording_id: usage_units.map { |item| item.recording.id })
+                          .where.not(state: "retired").order(:id).to_a
+      replacements_records = replacement_records
+
+      (prices + options + markets + products + providers + features + rules + target_products + overages +
+        usage_units + meters + rate_cards + rates + cost_cards + cost_rates + replacements_records).uniq
+    end
+
+    def replacement_records
+      ids = replacements.values
+      return [] if ids.empty?
+
+      RecordingStudio::Recording.unscoped.where(id: ids).order(:id).map do |recording|
+        record = recording.recordable
+        raise ArgumentError, "replacement reference must be a Price or OveragePrice" unless record.is_a?(Price) || record.is_a?(OveragePrice)
+
+        record
       end
     end
 
-    def validate_graph!(_root, recordings)
-      recordables = recordings.index_by(&:id).transform_values(&:recordable)
-      validate_recording_parents!(recordings, recordables)
-      validate_provider_consistency!(recordables)
-      validate_prices!(recordables)
-      validate_features_and_rules!(recordables)
-      raise ArgumentError, "no publishable draft price exists" if publishable_prices(recordables).empty?
+    def records_for(klass, recording_ids)
+      ids = Array(recording_ids).compact.uniq
+      return [] if ids.empty?
+
+      records = klass.joins(:recording).where(recording_studio_recordings: { id: ids }).order(:id).to_a
+      return records if records.size == ids.size
+
+      raise ArgumentError, "missing #{klass.name.demodulize.underscore.tr('_', ' ')} reference"
     end
 
-    def validate_recording_parents!(recordings, recordables)
-      recordings.each do |recording|
-        recordable = recordables.fetch(recording.id)
-        allowed = Array(RecordingStudio.allowed_parent_types_for(recordable.class))
-        parent_type = recording.parent_recording&.recordable_type
-        next if allowed.include?(parent_type)
-
-        raise ArgumentError, "#{recordable.class.name} has an invalid recording parent"
-      end
+    def lock_graph!(graph)
+      recording_ids = graph.map { |record| record.recording.id }.sort
+      RecordingStudio::Recording.unscoped.where(id: recording_ids).order(:id).lock.load
+      graph.group_by(&:class).each { |klass, records| klass.where(id: records.map(&:id)).order(:id).lock.load }
     end
 
-    def validate_provider_consistency!(recordables)
-      markets = recordables.values.grep(Market)
-      products = recordables.values.grep(Product)
-      providers = recordables.values.grep(ProviderAccount).index_by { |provider| provider.recording.id }
-      (markets + products).each do |record|
-        provider = providers.fetch(record.provider_account_recording_id) do
-          raise ArgumentError, "missing provider account"
-        end
-        raise ArgumentError, "provider account is not publishable" unless %w[draft published].include?(provider.state)
-      end
-      markets.each do |market|
-        provider = providers.fetch(market.provider_account_recording_id)
-        unless Array(market.country_codes).all? do |country|
-          provider.supported_markets.empty? || provider.supported_markets.include?(country)
-        end
-          raise ArgumentError, "market country is unsupported by provider"
-        end
-        next if Array(market.allowed_currency_codes).all? do |currency|
-          provider.supported_currencies.empty? || provider.supported_currencies.include?(currency)
-        end
+    def validate_graph!(root, graph)
+      records = graph.index_by { |record| record.recording.id }
+      graph.each { |record| validate_record!(root, record, records) }
+      selected_prices(root).each { |price| validate_price!(price, records) }
+      validate_overages!(graph.grep(OveragePrice), records)
+      validate_rules!(graph.grep(ProductRule), records)
+      validate_replacements!(records)
+    end
 
+    def validate_record!(root, record, records)
+      recording = record.recording
+      raise ArgumentError, "commercial record is outside the selected root" unless recording.root_recording_id == root.id
+      raise ArgumentError, "trashed commercial records cannot be published" if recording.attributes["trashed_at"].present?
+      raise ArgumentError, "retired commercial records cannot be published" if record.state == "retired"
+
+      allowed = Array(RecordingStudio.allowed_parent_types_for(record.class))
+      parent_type = recording.parent_recording&.recordable_type
+      raise ArgumentError, "#{record.class.name} has an invalid recording parent" unless allowed.include?(parent_type)
+
+      validate_provider!(record, records) if record.is_a?(ProviderAccount)
+      validate_market!(record, records) if record.is_a?(Market)
+      validate_feature!(record) if record.is_a?(Feature)
+      raise ArgumentError, "invalid #{record.class.name}" unless record.valid?
+    end
+
+    def validate_provider!(provider, _records)
+      raise ArgumentError, "provider account is inactive" unless provider.active?
+      return if provider.capabilities.blank? || provider.capabilities.intersect?(%w[catalogue commercial_catalogue])
+
+      raise ArgumentError, "provider lacks commercial catalogue capability"
+    end
+
+    def validate_market!(market, records)
+      provider = records.fetch(market.provider_account_recording_id)
+      raise ArgumentError, "market provider is missing" unless provider.is_a?(ProviderAccount)
+      unless Array(market.country_codes).all? { |code| provider.supported_markets.blank? || provider.supported_markets.include?(code) }
+        raise ArgumentError, "market country is unsupported by provider"
+      end
+      unless Array(market.allowed_currency_codes).all? do |code|
+        provider.supported_currencies.blank? || provider.supported_currencies.include?(code)
+      end
         raise ArgumentError, "market currency is unsupported by provider"
       end
     end
 
-    def validate_prices!(recordables)
-      prices = recordables.values.grep(Price)
-      identity = lambda { |price|
-        [price.billing_option_recording_id, price.scope, price.market_recording_id, price.currency_code]
+    def validate_feature!(feature)
+      FeatureDefinitionRegistry.fetch!(feature.key)
+    end
+
+    def validate_price!(price, records)
+      option = records[price.billing_option_recording_id]
+      market = records[price.market_recording_id]
+      raise ArgumentError, "price has incomplete billing option or market reference" unless option.is_a?(BillingOption) && market.is_a?(Market)
+      product = records[option.product_recording_id]
+      raise ArgumentError, "price graph crosses provider accounts" unless product&.provider_account_recording_id == market.provider_account_recording_id
+      raise ArgumentError, "price currency is not permitted by market" unless market.allowed_currency_codes.include?(price.currency_code)
+      raise ArgumentError, "price pricing model does not match billing option" unless price.pricing_model == option.pricing_model
+    end
+
+    def validate_overages!(overages, records)
+      duplicates = overages.group_by do |overage|
+        [overage.billing_option_recording_id, overage.scope, overage.market_recording_id,
+         overage.usage_unit_recording_id, overage.currency_code]
+      end
+      raise ArgumentError, "ambiguous overage price identity" if duplicates.values.any? { |items| items.size > 1 }
+
+      overages.each do |overage|
+        option = records[overage.billing_option_recording_id]
+        market = records[overage.market_recording_id]
+        usage_unit = records[overage.usage_unit_recording_id]
+        raise ArgumentError, "overage has incomplete references" unless option.is_a?(BillingOption) && market.is_a?(Market) && usage_unit.is_a?(UsageUnit)
+        raise ArgumentError, "overage pricing model does not match billing option" unless overage.pricing_model == option.pricing_model
+        raise ArgumentError, "overage currency is not permitted by market" unless market.allowed_currency_codes.include?(overage.currency_code)
+        raise ArgumentError, "overage usage unit provider does not match product provider" unless usage_unit.provider_account_recording_id == records[option.product_recording_id].provider_account_recording_id
+      end
+    end
+
+    def validate_rules!(rules, records)
+      rules.each do |rule|
+        target = records[rule.target_product_recording_id]
+        raise ArgumentError, "product rule target is missing or outside the selected graph" unless target.is_a?(Product)
+        result = ProductRuleEvaluator.new(product: records.fetch(rule.product_recording_id),
+                                          selected_products: records.values.grep(Product), context: rule_context,
+                                          rules: [rule]).evaluate
+        raise ArgumentError, "product rule conditions are not satisfied: #{rule.key}" unless result.eligible
+      end
+    end
+
+    def validate_replacements!(records)
+      replacements.each do |replacement_id, prior_id|
+        replacement = records.fetch(replacement_id)
+        prior = records.fetch(prior_id)
+        unless replacement.is_a?(Price) && prior.is_a?(Price) ||
+               replacement.is_a?(OveragePrice) && prior.is_a?(OveragePrice)
+          raise ArgumentError, "replacement identities must have the same type"
+        end
+        raise ArgumentError, "replacement must be draft and prior price published" unless replacement.state == "draft" && prior.state == "published"
+        identity = %i[billing_option_recording_id scope market_recording_id currency_code]
+        identity << :usage_unit_recording_id if replacement.is_a?(OveragePrice)
+        raise ArgumentError, "replacement price identity does not match prior price" unless identity.all? { |name| replacement.public_send(name) == prior.public_send(name) }
+        raise ArgumentError, "replacement price version must be greater than prior price version" unless replacement.version > prior.version
+      end
+    end
+
+    def persist_manifests(root, graph)
+      prices = selected_prices(root)
+      records = graph.index_by { |record| record.recording.id }
+      prices.map do |price|
+        option = records.fetch(price.billing_option_recording_id)
+        market = records.fetch(price.market_recording_id)
+        overages = graph.grep(OveragePrice).select do |overage|
+          overage.billing_option_recording_id == price.billing_option_recording_id &&
+            overage.market_recording_id == price.market_recording_id &&
+            overage.currency_code == price.currency_code && overage.scope == price.scope
+        end
+        result = CommercialManifestResolver.new(product: records.fetch(option.product_recording_id), billing_option: option,
+                                                price: price, market: market, currency_code: price.currency_code,
+                                                overage_prices: overages, publication_candidate: true).resolve!
+        CommercialManifest.find_by(manifest_digest: result.fetch(:manifest_digest)) || CommercialManifest.create! do |manifest|
+          manifest.root_recording_id = root.id
+          manifest.schema_version = SUPPORTED_MANIFEST_SCHEMA
+          manifest.resolver_version = SUPPORTED_RESOLVER_VERSION
+          manifest.manifest_digest = result.fetch(:manifest_digest)
+          manifest.canonical_data = result.fetch(:canonical_data)
+          manifest.recording_snapshots = result.fetch(:recording_snapshots)
+          manifest.snapshot_references = result.fetch(:snapshot_references)
+        end
+      end
+    end
+
+    def snapshot_envelope(root, graph, manifests)
+      snapshots = graph.map { |record| snapshot(record) }.sort.to_h
+      {
+        "schema_version" => SUPPORTED_MANIFEST_SCHEMA,
+        "resolver_version" => SUPPORTED_RESOLVER_VERSION,
+        "root_recording_id" => root.id,
+        "effective_at" => effective_at.utc.iso8601(6),
+        "selection" => { "price_recording_ids" => selected_prices(root).map { |price| price.recording.id }.sort,
+                         "replacements" => replacements.sort.to_h },
+        "recordings" => snapshots,
+        "manifests" => manifests.sort_by(&:manifest_digest).map do |manifest|
+          { "manifest_digest" => manifest.manifest_digest, "schema_version" => manifest.schema_version,
+            "resolver_version" => manifest.resolver_version, "canonical_data" => manifest.canonical_data,
+            "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references }
+        end
       }
-      duplicates = prices.select do |price|
-        price.state == "published"
-      end.group_by(&identity).values.any? { |items| items.size > 1 }
-      raise ArgumentError, "multiple active prices share an identity" if duplicates
-
-      prices.each do |price|
-        option = recordables[price.billing_option_recording_id]
-        market = recordables[price.market_recording_id]
-        unless option.is_a?(BillingOption) && market.is_a?(Market)
-          raise ArgumentError,
-                "price has incomplete billing option or market reference"
-        end
-
-        product = recordables[option.product_recording_id]
-        unless product&.provider_account_recording_id == market.provider_account_recording_id
-          raise ArgumentError,
-                "price graph crosses provider accounts"
-        end
-        unless market.allowed_currency_codes.include?(price.currency_code)
-          raise ArgumentError,
-                "price currency is not permitted by market"
-        end
-      end
     end
 
-    def validate_features_and_rules!(recordables)
-      recordables.values.grep(Feature).each { |feature| FeatureDefinitionRegistry.fetch!(feature.key) }
-      recordables.values.grep(ProductRule).each do |rule|
-        raise ArgumentError, "product rule target is required" if rule.target_product_recording_id.blank?
-
-        unless recordables[rule.target_product_recording_id].is_a?(Product)
-          raise ArgumentError,
-                "product rule target is missing"
-        end
-      end
+    def snapshot(record)
+      recording = record.recording
+      [recording.id, {
+        "recording_id" => recording.id, "root_recording_id" => recording.root_recording_id,
+        "parent_recording_id" => recording.parent_recording_id, "recordable_type" => recording.recordable_type,
+        "recordable_id" => recording.recordable_id, "recording_created_at" => recording.created_at.utc.iso8601(6),
+        "recording_updated_at" => recording.updated_at.utc.iso8601(6),
+        "recording_trashed_at" => recording.attributes["trashed_at"]&.utc&.iso8601(6),
+        "recordable_created_at" => record.created_at.utc.iso8601(6),
+        "recordable_updated_at" => record.updated_at.utc.iso8601(6)
+      }]
     end
 
-    def build_and_persist_manifests(root, recordings)
-      recordables = recordings.index_by(&:id).transform_values(&:recordable)
-      publishable_prices(recordables).map do |price|
-        option = recordables.fetch(price.billing_option_recording_id)
-        product = recordables.fetch(option.product_recording_id)
-        market = recordables.fetch(price.market_recording_id)
-        overage = matching_overage(recordables, price)
-        result = CommercialManifestResolver.new(
-          product: product, billing_option: option, price: price, market: market,
-          currency_code: price.currency_code, overage_price: overage, publication_candidate: true
-        ).resolve!
-        CommercialManifest.create!(
-          root_recording_id: root.id, schema_version: CommercialManifest::SCHEMA_VERSION,
-          resolver_version: CommercialManifest::RESOLVER_VERSION, **result
-        )
-      rescue ActiveRecord::RecordNotUnique
-        CommercialManifest.find_by!(manifest_digest: result.fetch(:manifest_digest))
-      end
-    end
+    def find_or_create_candidate!(root, manifests, envelope)
+      digest = CommercialManifestCanonicalizer.digest(envelope)
+      existing = CommercialPublicationCandidate.lock.find_by(root_recording_id: root.id, effective_at: effective_at)
+      if existing
+        raise ArgumentError, "effective time is already used by a different publication" unless existing.candidate_digest == digest
 
-    def matching_overage(recordables, price)
-      recordables.values.grep(OveragePrice).find do |overage|
-        overage.billing_option_recording_id == price.billing_option_recording_id &&
-          overage.market_recording_id == price.market_recording_id &&
-          overage.currency_code == price.currency_code && %w[draft published].include?(overage.state)
+        return existing
       end
-    end
 
-    def create_candidate(root, manifests, recordings)
-      snapshots = recordings.map do |recording|
-        recordable = recording.recordable
-        {
-          "recording_id" => recording.id,
-          "recordable_type" => recording.recordable_type,
-          "recordable_id" => recording.recordable_id,
-          "recordable_updated_at" => recordable.updated_at.utc.iso8601(6)
-        }
-      end.sort_by { |snapshot| snapshot.fetch("recording_id") }
-      digest = CommercialManifestCanonicalizer.digest(
-        "root_recording_id" => root.id, "effective_at" => effective_at, "manifest_digests" => manifests.map(&:manifest_digest).sort,
-        "recording_snapshots" => snapshots
-      )
       CommercialPublicationCandidate.create!(
         root_recording_id: root.id, effective_at: effective_at, candidate_digest: digest,
-        manifest_digests: manifests.map(&:manifest_digest).sort, recording_snapshots: snapshots
+        manifest_digests: manifests.map(&:manifest_digest).sort, recording_snapshots: envelope.fetch("recordings"),
+        snapshot_envelope: envelope
       )
-    rescue ActiveRecord::RecordNotUnique
-      CommercialPublicationCandidate.find_by!(candidate_digest: digest)
     end
 
-    def verify_candidate!(candidate)
-      expected = CommercialManifestCanonicalizer.digest(
-        "root_recording_id" => candidate.root_recording_id, "effective_at" => candidate.effective_at,
-        "manifest_digests" => candidate.manifest_digests.sort, "recording_snapshots" => candidate.recording_snapshots.sort_by do |snapshot|
-                                                                 snapshot.fetch("recording_id")
-                                                               end
-      )
-      raise ArgumentError, "publication candidate digest mismatch" unless expected == candidate.candidate_digest
-
-      manifests = CommercialManifest.where(manifest_digest: candidate.manifest_digests)
-      unless manifests.count == candidate.manifest_digests.size
-        raise ArgumentError,
-              "publication candidate manifests are missing"
+    def verify_candidate!(publication)
+      envelope = publication.snapshot_envelope
+      raise ArgumentError, "publication candidate envelope is invalid" unless envelope.is_a?(Hash)
+      raise ArgumentError, "unsupported publication candidate version" unless envelope["schema_version"] == SUPPORTED_MANIFEST_SCHEMA &&
+                                                                        envelope["resolver_version"] == SUPPORTED_RESOLVER_VERSION
+      unless envelope["root_recording_id"] == publication.root_recording_id &&
+             envelope["effective_at"] == publication.effective_at.utc.iso8601(6)
+        raise ArgumentError, "publication candidate envelope does not match its persisted terms"
       end
-      unless manifests.all? do |manifest|
-        manifest.schema_version == CommercialManifest::SCHEMA_VERSION &&
-        manifest.resolver_version == CommercialManifest::RESOLVER_VERSION
-      end
-        raise ArgumentError, "publication candidate uses an unsupported manifest version"
-      end
-      raise ArgumentError, "publication candidate manifest digest mismatch" unless manifests.all? do |manifest|
-        CommercialManifestCanonicalizer.digest(manifest.canonical_data) == manifest.manifest_digest
+      raise ArgumentError, "publication candidate digest mismatch" unless CommercialManifestCanonicalizer.digest(envelope) == publication.candidate_digest
+      raise ArgumentError, "publication candidate snapshots differ from envelope" unless publication.recording_snapshots == envelope["recordings"]
+
+      manifests = CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:manifest_digest).lock.to_a
+      raise ArgumentError, "publication candidate manifests are missing" unless manifests.size == publication.manifest_digests.size
+      expected_manifests = envelope.fetch("manifests").index_by { |item| item.fetch("manifest_digest") }
+      manifests.each do |manifest|
+        expected = expected_manifests[manifest.manifest_digest]
+        raise ArgumentError, "publication candidate manifest is missing from envelope" unless expected
+        raise ArgumentError, "unsupported commercial manifest version" unless manifest.schema_version == SUPPORTED_MANIFEST_SCHEMA &&
+                                                                           manifest.resolver_version == SUPPORTED_RESOLVER_VERSION
+        actual = { "schema_version" => manifest.schema_version, "resolver_version" => manifest.resolver_version,
+                   "root_recording_id" => manifest.root_recording_id, "canonical_data" => manifest.canonical_data,
+                   "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references }
+        raise ArgumentError, "commercial manifest envelope mismatch" unless CommercialManifestCanonicalizer.digest(actual) == manifest.manifest_digest &&
+                                                                         expected.except("manifest_digest") == actual.except("root_recording_id")
       end
 
-      candidate.recording_snapshots.each do |snapshot|
-        recording = RecordingStudio::Recording.find(snapshot.fetch("recording_id"))
-        recordable = recording.recordable
-        unless recording.recordable_type == snapshot.fetch("recordable_type") &&
-               recording.recordable_id == snapshot.fetch("recordable_id")
-          raise ArgumentError, "publication candidate recording snapshot mismatch"
-        end
-
-        unless recordable.updated_at.utc.iso8601(6) == snapshot.fetch("recordable_updated_at")
-          raise ArgumentError,
-                "publication candidate is stale"
-        end
+      snapshots = envelope.fetch("recordings")
+      recordings = RecordingStudio::Recording.unscoped.where(id: snapshots.keys).order(:id).lock.to_a
+      recordings.group_by(&:recordable_type).each do |type, rows|
+        type.constantize.where(id: rows.map(&:recordable_id)).order(:id).lock.load
       end
-    end
-
-    def activate_candidate!(candidate)
-      manifests = CommercialManifest.where(manifest_digest: candidate.manifest_digests)
-      recordings = candidate.recording_snapshots.map { |snapshot| RecordingStudio::Recording.find(snapshot.fetch("recording_id")) }
-      recordings.sort_by(&:id).each do |recording|
-        next unless recording.recordable.respond_to?(:state) && recording.recordable.state == "draft"
-
-        recording.root_recording.revise(recording,
-                                        metadata: { "commercial_candidate_digest" => candidate.candidate_digest }) do |revision|
-          revision.state = "published"
-          revision.key = "#{revision.key}_#{candidate.candidate_digest.first(8)}" if revision.respond_to?(:key)
-          revision.version += 1 if revision.is_a?(Price) || revision.is_a?(OveragePrice)
-          if revision.is_a?(Feature)
-            revision.definition = revision.definition.merge("_commercial_source_key" => recording.recordable.key)
-          end
-        end
-      end
-      manifests.each(&:mark_used!)
-      candidate.update!(activated_at: Time.current)
-      record_publication_event!(candidate, recordings)
-      candidate
-    end
-
-    def record_publication_event!(candidate, recordings)
       recordings.each do |recording|
-        recording.log_event!(
-          action: "commercial_published",
-          metadata: { "candidate_digest" => candidate.candidate_digest }
-        )
+        verify_snapshot!(recording, snapshots.fetch(recording.id))
       end
+      raise ArgumentError, "publication candidate recording is missing" unless snapshots.keys.sort == RecordingStudio::Recording.unscoped.where(id: snapshots.keys).pluck(:id).sort
     end
 
-    def publishable_prices(recordables)
-      recordables.values.grep(Price).select { |price| price.state == "draft" }
+    def verify_snapshot!(recording, expected)
+      record = recording.recordable
+      actual = snapshot(record).last
+      raise ArgumentError, "publication candidate is stale or tampered" unless actual == expected
+    end
+
+    def activate_candidate!(publication)
+      verify_candidate!(publication)
+      envelope = publication.snapshot_envelope
+      records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
+      replacements_for(envelope).each do |prior|
+        prior.recording.root_recording.revise(
+          prior.recording, metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+        ) { |revision| revision.state = "retired" }
+      end
+      records.each do |recording|
+        record = recording.recordable
+        next unless record.respond_to?(:state) && record.state == "draft"
+
+        recording.root_recording.revise(
+          recording, metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+        ) { |revision| revision.state = "published" }
+      end
+      CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
+      publication.update!(activated_at: Time.current)
+      records.each { |recording| recording.log_event!(action: "commercial_published", metadata: { "candidate_digest" => publication.candidate_digest }) }
+      publication
+    end
+
+    def replacements_for(envelope)
+      envelope.dig("selection", "replacements").to_h.values.map do |recording_id|
+        recording = RecordingStudio::Recording.unscoped.lock.find(recording_id)
+        record = recording.recordable
+        raise ArgumentError, "replacement reference must be a Price or OveragePrice" unless record.is_a?(Price) || record.is_a?(OveragePrice)
+
+        record
+      end
     end
 
     def candidate_or_id

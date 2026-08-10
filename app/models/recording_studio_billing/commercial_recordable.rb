@@ -11,7 +11,9 @@ module RecordingStudioBilling
       has_one :recording, as: :recordable, class_name: "RecordingStudio::Recording", dependent: :restrict_with_error
 
       validates :key, presence: true, format: { with: KEY_FORMAT }
-      validates :key, uniqueness: true
+      # Recording Studio revisions duplicate immutable recordables. Keys are
+      # stable catalogue terms, not database identities; Recording IDs provide
+      # the stable, namespace-isolated identity across revisions.
       validates :state, inclusion: { in: STATES }
     end
 

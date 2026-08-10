@@ -53,7 +53,12 @@ module RecordingStudioBilling
     end
 
     def select_market(country)
-      matches = markets.filter_map { |market| score(market, country) && [market, score(market, country)] }
+      matches = markets.filter_map do |market|
+        next unless eligible?(market)
+
+        market_score = score(market, country)
+        [market, market_score] if market_score
+      end
       raise ArgumentError, "no eligible market for #{country}" if matches.empty?
 
       highest_score = matches.map(&:last).max
@@ -64,19 +69,23 @@ module RecordingStudioBilling
     end
 
     def score(market, country)
-      return [3, market.priority] if Array(market.country_codes).include?(country)
+      return [3, market.specificity, market.priority] if Array(market.country_codes).include?(country)
 
       group_sizes = market.country_groups.to_h.values.filter_map do |countries|
         Array(countries).include?(country) ? Array(countries).size : nil
       end
-      return [2, -group_sizes.min, market.priority] if group_sizes.any?
-      return [1, market.priority] if market.fallback?
+      return [2, market.specificity, -group_sizes.min, market.priority] if group_sizes.any?
+      return [1, market.specificity, market.priority] if market.fallback?
 
       nil
     end
 
     def select_currency(market, explicit, account, billing_option)
       permitted = Array(market.allowed_currency_codes)
+      if explicit.present? && !permitted.include?(explicit.to_s.upcase)
+        raise ArgumentError, "explicit currency is not permitted by market #{market.key}"
+      end
+
       [explicit, account, market.default_currency_code,
        billing_option].compact.map(&:to_s).map(&:upcase).find do |currency|
         permitted.include?(currency)
@@ -88,6 +97,13 @@ module RecordingStudioBilling
       return :confirmed if previous.market == market && previous.currency_code == currency
 
       %w[reject review restart].include?(market.verification_policy) ? market.verification_policy.to_sym : :requote
+    end
+
+    def eligible?(market)
+      return false unless market.respond_to?(:state) && market.state == "published"
+
+      provider = market.provider_account_recording&.recordable
+      provider.is_a?(ProviderAccount) && provider.state == "published" && provider.active?
     end
 
     def valid_country?(value)

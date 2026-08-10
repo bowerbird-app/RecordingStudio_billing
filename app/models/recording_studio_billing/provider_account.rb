@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class ProviderAccount < ApplicationRecord
+  class ProviderAccount < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     commercial_recordable label: "Provider account", allowed_parent_types: "RecordingStudioBilling::BillingAdmin"
@@ -46,9 +46,15 @@ module RecordingStudioBilling
     end
 
     def sensitive_key?(value)
-      value.any? do |key, nested_value|
-        key.to_s.match?(/credential|password|secret|token|api[_-]?key/i) ||
-          (nested_value.is_a?(Hash) && sensitive_key?(nested_value))
+      case value
+      when Hash
+        value.any? do |key, nested_value|
+          key.to_s.match?(/credential|password|secret|token|api[_-]?key/i) || sensitive_key?(nested_value)
+        end
+      when Array
+        value.any? { |nested_value| sensitive_key?(nested_value) }
+      else
+        false
       end
     end
   end

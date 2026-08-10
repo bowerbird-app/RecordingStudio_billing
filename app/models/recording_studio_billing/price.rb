@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class Price < ApplicationRecord
+  class Price < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     PRICING_MODELS = %w[flat per_unit package].freeze
@@ -17,9 +17,6 @@ module RecordingStudioBilling
     validates :pricing_model, inclusion: { in: PRICING_MODELS }
     validates :scope, presence: true
     validates :version, numericality: { only_integer: true, greater_than_or_equal_to: 1 }
-    validates :version, uniqueness: {
-      scope: %i[billing_option_recording_id scope market_recording_id currency_code]
-    }
     validates :billing_option_recording_id, uniqueness: {
       scope: %i[scope market_recording_id currency_code],
       conditions: -> { where(state: "published") }

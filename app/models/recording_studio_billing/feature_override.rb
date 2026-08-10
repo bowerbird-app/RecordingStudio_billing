@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class FeatureOverride < ApplicationRecord
+  class FeatureOverride < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     commercial_recordable label: "Feature override", allowed_parent_types: "RecordingStudioBilling::Account"

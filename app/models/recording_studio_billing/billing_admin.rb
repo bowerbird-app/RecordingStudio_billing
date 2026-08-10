@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class BillingAdmin < ApplicationRecord
+  class BillingAdmin < RecordingStudioBilling::ApplicationRecord
     recording_studio_recordable label: "Billing administration", root: false
 
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false

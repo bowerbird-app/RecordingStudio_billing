@@ -63,12 +63,20 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
 
   def correct_markets
     table = :recording_studio_billing_markets
+    # Add and populate the replacement fields before dropping the original
+    # scalar values.  This migration is run against real, populated catalogues.
+    add_column table, :country_codes, :jsonb, null: false, default: []
+    add_column table, :allowed_currency_codes, :jsonb, null: false, default: []
+    execute <<~SQL.squish
+      UPDATE #{table}
+      SET country_codes = jsonb_build_array(country_code),
+          allowed_currency_codes = jsonb_build_array(currency_code)
+      WHERE country_code IS NOT NULL AND currency_code IS NOT NULL
+    SQL
     remove_check_constraint table, name: "recording_studio_billing_markets_country_code"
     remove_check_constraint table, name: "recording_studio_billing_markets_currency_code"
     remove_column table, :country_code
     remove_column table, :currency_code
-    add_column table, :country_codes, :jsonb, null: false, default: []
-    add_column table, :allowed_currency_codes, :jsonb, null: false, default: []
     add_column table, :priority, :integer, null: false, default: 0
     add_column table, :specificity, :integer, null: false, default: 0
     add_column table, :fallback, :boolean, null: false, default: false
@@ -81,6 +89,13 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
   end
 
   def correct_kinds
+    transform_or_fail!(:recording_studio_billing_products, :kind,
+                       "subscription" => "plan", "one_time" => "service")
+    transform_or_fail!(:recording_studio_billing_features, :kind,
+                       "boolean" => "boolean", "quantity" => "limit")
+    transform_or_fail!(:recording_studio_billing_meters, :aggregation,
+                       "sum" => "sum", "count" => "count", "maximum" => "maximum",
+                       "last_value" => "latest", "latest" => "latest")
     replace_check_constraint :recording_studio_billing_products, "rs_billing_products_kind",
                              "kind IN ('plan', 'addon', 'credit_pack', 'service')"
     replace_check_constraint :recording_studio_billing_features, "rs_billing_features_kind",
@@ -91,8 +106,7 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
 
   def correct_billing_options
     table = :recording_studio_billing_billing_options
-    remove_check_constraint table, name: "rs_billing_options_kind"
-    remove_column table, :kind
+    transform_or_fail!(table, :kind, "recurring" => "recurring", "usage" => "usage")
     add_column table, :recurrence, :string, null: false, default: "one_time"
     add_column table, :interval, :string
     add_column table, :interval_count, :integer
@@ -108,6 +122,15 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     add_column table, :lifecycle_policy, :string, null: false, default: "immediate"
     add_column table, :checkout_policy, :string, null: false, default: "allowed"
     add_column table, :tax_policy, :string, null: false, default: "exclusive"
+    execute <<~SQL.squish
+      UPDATE #{table}
+      SET recurrence = CASE kind WHEN 'recurring' THEN 'recurring' ELSE 'one_time' END,
+          interval = CASE kind WHEN 'recurring' THEN 'month' ELSE NULL END,
+          interval_count = CASE kind WHEN 'recurring' THEN 1 ELSE NULL END,
+          pricing_model = CASE kind WHEN 'usage' THEN 'per_unit' ELSE 'flat' END
+    SQL
+    remove_check_constraint table, name: "rs_billing_options_kind"
+    remove_column table, :kind
     add_check_constraint table, "recurrence IN ('one_time', 'recurring')", name: "rs_billing_options_recurrence"
     add_check_constraint table, "interval IN ('day', 'week', 'month', 'year') OR interval IS NULL",
                          name: "rs_billing_options_interval"
@@ -151,6 +174,13 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
 
   def correct_rates
     table = :recording_studio_billing_rates
+    add_column table, :legacy_monetary_data, :jsonb, null: false, default: {}
+    execute <<~SQL.squish
+      UPDATE #{table}
+      SET legacy_monetary_data = jsonb_build_object(
+        'amount_minor', amount_minor, 'currency_code', currency_code, 'currency_exponent', currency_exponent
+      )
+    SQL
     %w[amount_minor currency_code currency_exponent].each do |column|
       remove_check_constraint table, name: "#{table}_#{column}"
       remove_column table, column
@@ -158,9 +188,23 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     add_column table, :conversion_numerator, :bigint
     add_column table, :conversion_denominator, :bigint
     add_column table, :conversion_decimal, :decimal, precision: 30, scale: 12
+    execute <<~SQL.squish
+      UPDATE #{table}
+      SET conversion_decimal = (legacy_monetary_data->>'amount_minor')::numeric
+      WHERE (legacy_monetary_data->>'amount_minor')::numeric > 0
+    SQL
+    if select_value(<<~SQL.squish).to_i.positive?
+         SELECT COUNT(*) FROM #{table}
+         WHERE conversion_decimal IS NULL
+       SQL
+      raise ActiveRecord::MigrationError,
+            "Cannot convert zero-valued legacy Rate records safely. Export or retire them, then rerun this migration."
+    end
     add_check_constraint table, <<~SQL.squish, name: "rs_billing_rates_conversion"
-      (conversion_numerator > 0 AND conversion_denominator > 0 AND conversion_decimal IS NULL) OR
-      (conversion_numerator IS NULL AND conversion_denominator IS NULL AND conversion_decimal > 0)
+      (conversion_numerator IS NOT NULL AND conversion_numerator > 0 AND
+       conversion_denominator IS NOT NULL AND conversion_denominator > 0 AND conversion_decimal IS NULL) OR
+      (conversion_numerator IS NULL AND conversion_denominator IS NULL AND
+       conversion_decimal IS NOT NULL AND conversion_decimal > 0)
     SQL
   end
 
@@ -199,6 +243,20 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
   def replace_check_constraint(table, name, expression)
     remove_check_constraint table, name: name
     add_check_constraint table, expression, name: name
+  end
+
+  def transform_or_fail!(table, column, mapping)
+    values = select_values("SELECT DISTINCT #{column} FROM #{table}").compact
+    unsupported = values - mapping.keys
+    if unsupported.any?
+      raise ActiveRecord::MigrationError,
+            "#{table}.#{column} contains unsupported values: #{unsupported.join(', ')}. " \
+            "Update or retire those records before running the V1 correction."
+    end
+
+    mapping.each do |from, to|
+      execute "UPDATE #{table} SET #{column} = #{connection.quote(to)} WHERE #{column} = #{connection.quote(from)}"
+    end
   end
   # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 end

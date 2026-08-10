@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class Product < ApplicationRecord
+  class Product < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     KINDS = %w[plan addon credit_pack service].freeze

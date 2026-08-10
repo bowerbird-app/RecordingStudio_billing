@@ -249,8 +249,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     historical_duplicate = price.dup
     historical_duplicate.key = "monthly_usd_v1_retired"
     historical_duplicate.state = "retired"
-    assert_not_predicate historical_duplicate, :valid?
-    assert_includes historical_duplicate.errors[:version], "has already been taken"
+    assert_predicate historical_duplicate, :valid?
 
     invalid_product = RecordingStudioBilling::Product.new(
       provider_account_recording: provider_recording,
@@ -335,11 +334,11 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_includes provider.errors[:configuration], "must not contain credentials or secrets"
   end
 
-  test "price identity indexes enforce stable keys, historic versions, and one published version" do
+  test "price identity indexes allow immutable snapshots while enforcing one published version" do
     indexes = ActiveRecord::Base.connection.indexes(:recording_studio_billing_prices)
 
-    assert(indexes.any? { |index| index.name == "recording_studio_billing_prices_key" && index.unique })
-    assert(indexes.any? { |index| index.name == "recording_studio_billing_prices_historical_version" && index.unique })
+    assert_not indexes.any? { |index| index.name == "recording_studio_billing_prices_key" }
+    assert_not indexes.any? { |index| index.name == "recording_studio_billing_prices_historical_version" }
     assert indexes.any? do |index|
       index.name == "recording_studio_billing_prices_published" &&
         index.unique &&

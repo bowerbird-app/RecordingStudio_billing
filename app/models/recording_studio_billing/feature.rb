@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class Feature < ApplicationRecord
+  class Feature < RecordingStudioBilling::ApplicationRecord
     include CommercialRecordable
 
     TYPES = %w[boolean limit allowance variant].freeze

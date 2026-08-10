@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_000007) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -60,7 +60,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "tax_policy", default: "exclusive", null: false
     t.integer "trial_days", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_billing_options_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_387e136700"
     t.check_constraint "(\"interval\"::text = ANY (ARRAY['day'::character varying::text, 'week'::character varying::text, 'month'::character varying::text, 'year'::character varying::text])) OR \"interval\" IS NULL", name: "rs_billing_options_interval"
     t.check_constraint "checkout_policy::text = ANY (ARRAY['allowed'::character varying::text, 'required'::character varying::text, 'disabled'::character varying::text])", name: "rs_billing_options_checkout_policy"
@@ -100,9 +99,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.jsonb "manifest_digests", default: [], null: false
     t.jsonb "recording_snapshots", default: [], null: false
     t.uuid "root_recording_id", null: false
+    t.jsonb "snapshot_envelope", default: {}, null: false
     t.datetime "updated_at", null: false
     t.index ["candidate_digest"], name: "rs_billing_publication_candidates_digest", unique: true
     t.index ["effective_at"], name: "idx_on_effective_at_7e599d09df"
+    t.index ["root_recording_id", "effective_at"], name: "rs_billing_publication_candidate_identity", unique: true
   end
 
   create_table "recording_studio_billing_cost_cards", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -111,7 +112,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.uuid "provider_account_recording_id", null: false
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_cost_cards_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_de683655d9"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_cost_cards_state"
   end
@@ -127,7 +127,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.datetime "updated_at", null: false
     t.uuid "usage_unit_recording_id", null: false
     t.index ["cost_card_recording_id"], name: "idx_on_cost_card_recording_id_f59059cf73"
-    t.index ["key"], name: "recording_studio_billing_cost_rates_key", unique: true
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_676a199a57"
     t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_cost_rates_amount_minor"
     t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_cost_rates_currency_code"
@@ -145,7 +144,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.jsonb "value", default: {}, null: false
     t.index ["account_recording_id"], name: "idx_on_account_recording_id_bf46d23ae6"
     t.index ["feature_recording_id"], name: "idx_on_feature_recording_id_6dcf40615b"
-    t.index ["key"], name: "recording_studio_billing_feature_overrides_key", unique: true
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_feature_overrides_state"
   end
 
@@ -157,7 +155,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.uuid "product_recording_id", null: false
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_features_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_b3abe2c34c"
     t.check_constraint "kind::text = ANY (ARRAY['boolean'::character varying::text, 'limit'::character varying::text, 'allowance'::character varying::text, 'variant'::character varying::text])", name: "rs_billing_features_kind"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_features_state"
@@ -180,7 +177,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "tax_presentation_policy", default: "exclusive", null: false
     t.datetime "updated_at", null: false
     t.string "verification_policy", default: "none", null: false
-    t.index ["key"], name: "recording_studio_billing_markets_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_917bf5f52e"
     t.check_constraint "priority >= 0", name: "rs_billing_markets_priority"
     t.check_constraint "specificity >= 0", name: "rs_billing_markets_specificity"
@@ -194,7 +190,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
     t.uuid "usage_unit_recording_id", null: false
-    t.index ["key"], name: "recording_studio_billing_meters_key", unique: true
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_20bbb0eead"
     t.check_constraint "aggregation::text = ANY (ARRAY['sum'::character varying::text, 'count'::character varying::text, 'maximum'::character varying::text, 'latest'::character varying::text])", name: "rs_billing_meters_aggregation"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_meters_state"
@@ -215,10 +210,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.datetime "updated_at", null: false
     t.uuid "usage_unit_recording_id", null: false
     t.integer "version", null: false
-    t.index ["billing_option_recording_id", "scope", "market_recording_id", "usage_unit_recording_id", "currency_code", "version"], name: "recording_studio_billing_overage_prices_historical_version", unique: true
     t.index ["billing_option_recording_id", "scope", "market_recording_id", "usage_unit_recording_id", "currency_code"], name: "recording_studio_billing_overage_prices_published", unique: true, where: "((state)::text = 'published'::text)"
     t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_4b4b3a8dfa"
-    t.index ["key"], name: "recording_studio_billing_overage_prices_key", unique: true
     t.index ["market_recording_id"], name: "idx_on_market_recording_id_2ba99ee38f"
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_9e76a066d4"
     t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_overage_prices_amount_minor"
@@ -237,7 +230,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
     t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_df8562f2e7"
-    t.index ["key"], name: "recording_studio_billing_plan_updates_key", unique: true
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_plan_updates_state"
   end
 
@@ -256,10 +248,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
     t.integer "version", null: false
-    t.index ["billing_option_recording_id", "scope", "market_recording_id", "currency_code", "version"], name: "recording_studio_billing_prices_historical_version", unique: true
     t.index ["billing_option_recording_id", "scope", "market_recording_id", "currency_code"], name: "recording_studio_billing_prices_published", unique: true, where: "((state)::text = 'published'::text)"
     t.index ["billing_option_recording_id"], name: "idx_on_billing_option_recording_id_f4dd8ca6e3"
-    t.index ["key"], name: "recording_studio_billing_prices_key", unique: true
     t.index ["market_recording_id"], name: "index_recording_studio_billing_prices_on_market_recording_id"
     t.check_constraint "amount_minor >= 0", name: "recording_studio_billing_prices_amount_minor"
     t.check_constraint "currency_code::text ~ '^[A-Z]{3}$'::text", name: "recording_studio_billing_prices_currency_code"
@@ -279,7 +269,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "state", default: "draft", null: false
     t.uuid "target_product_recording_id"
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_product_rules_key", unique: true
     t.index ["product_recording_id"], name: "idx_on_product_recording_id_cca2c7df22"
     t.index ["target_product_recording_id"], name: "idx_on_target_product_recording_id_2d78d41b32"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_product_rules_state"
@@ -293,7 +282,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.uuid "provider_account_recording_id", null: false
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_products_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_75eb593078"
     t.check_constraint "kind::text = ANY (ARRAY['plan'::character varying::text, 'addon'::character varying::text, 'credit_pack'::character varying::text, 'service'::character varying::text])", name: "rs_billing_products_kind"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_products_state"
@@ -315,7 +303,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.jsonb "supported_markets", default: [], null: false
     t.datetime "updated_at", null: false
     t.index ["billing_admin_recording_id"], name: "idx_on_billing_admin_recording_id_e9c004ac4f"
-    t.index ["key"], name: "recording_studio_billing_provider_accounts_key", unique: true
     t.check_constraint "adapter_key::text ~ '^[a-z][a-z0-9_]*$'::text", name: "rs_billing_provider_accounts_provider_format"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_provider_accounts_state"
   end
@@ -326,7 +313,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.uuid "provider_account_recording_id", null: false
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_rate_cards_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_829622d336"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_rate_cards_state"
   end
@@ -341,9 +327,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
     t.uuid "usage_unit_recording_id", null: false
-    t.index ["key"], name: "recording_studio_billing_rates_key", unique: true
     t.index ["rate_card_recording_id"], name: "index_recording_studio_billing_rates_on_rate_card_recording_id"
     t.index ["usage_unit_recording_id"], name: "idx_on_usage_unit_recording_id_737a9cb844"
+    t.check_constraint "NOT (conversion_numerator IS NULL AND conversion_denominator IS NULL AND conversion_decimal IS NULL)", name: "rs_billing_rates_conversion_present"
     t.check_constraint "conversion_numerator > 0 AND conversion_denominator > 0 AND conversion_decimal IS NULL OR conversion_numerator IS NULL AND conversion_denominator IS NULL AND conversion_decimal > 0::numeric", name: "rs_billing_rates_conversion"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_rates_state"
   end
@@ -354,7 +340,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_000005) do
     t.uuid "provider_account_recording_id", null: false
     t.string "state", default: "draft", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "recording_studio_billing_usage_units_key", unique: true
     t.index ["provider_account_recording_id"], name: "idx_on_provider_account_recording_id_d0aeb02284"
     t.check_constraint "state::text = ANY (ARRAY['draft'::character varying::text, 'published'::character varying::text, 'retired'::character varying::text])", name: "recording_studio_billing_usage_units_state"
   end

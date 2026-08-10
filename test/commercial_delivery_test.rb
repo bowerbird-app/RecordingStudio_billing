@@ -35,10 +35,16 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     end
 
     data = JSON.parse(RecordingStudioBilling::CommercialManifestCanonicalizer.canonicalize("price" => 100))
+    snapshots = [{ "recording_id" => SecureRandom.uuid }]
+    references = { "recording" => {} }
+    envelope = {
+      "schema_version" => "v1", "resolver_version" => "v1", "root_recording_id" => SecureRandom.uuid,
+      "canonical_data" => data, "recording_snapshots" => snapshots, "snapshot_references" => references
+    }
     manifest = RecordingStudioBilling::CommercialManifest.create!(
-      root_recording_id: SecureRandom.uuid, schema_version: "v1", resolver_version: "v1",
-      canonical_data: data, manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(data),
-      recording_snapshots: [{ "recording_id" => SecureRandom.uuid }], snapshot_references: { "price" => {} }
+      root_recording_id: envelope.fetch("root_recording_id"), schema_version: "v1", resolver_version: "v1",
+      canonical_data: data, manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope),
+      recording_snapshots: snapshots, snapshot_references: references
     )
     assert_not manifest.update(schema_version: "v2")
     assert_includes manifest.errors[:base], "commercial manifests are immutable"
@@ -59,7 +65,9 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     end
     assert_match(/draft/, error.message)
 
-    candidate = RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:root])
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id]
+    )
     assert_predicate candidate, :activated?
     assert RecordingStudioBilling::Price.where(state: "published").exists?
     assert RecordingStudioBilling::CommercialManifest.where(used_at: ..Time.current).exists?
@@ -73,16 +81,68 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     graph = commercial_graph
     RecordingStudioBilling.configuration.feature_definitions = {}
 
-    assert_raises(KeyError) { RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:root]) }
+    assert_raises(KeyError) do
+      RecordingStudioBilling::CommercialPublisher.publish!(
+        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id]
+      )
+    end
     assert_equal 0, RecordingStudioBilling::CommercialManifest.count
     assert_equal 0, RecordingStudioBilling::CommercialPublicationCandidate.count
     assert_equal "draft", RecordingStudioBilling::Price.find_by!(key: "italy_eur_price").state
   end
 
+  test "publication selection is explicit, idempotent, and leaves unrelated drafts untouched" do
+    graph = commercial_graph
+    effective_at = 5.minutes.from_now.change(usec: 0)
+    selection = [graph[:italy_price].recording.id]
+
+    first = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at:, price_recording_ids: selection
+    )
+    second = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at:, price_recording_ids: selection
+    )
+
+    assert_equal first.id, second.id
+    assert_equal "draft", graph[:germany_price].reload.state
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialPublisher.publish!(
+        root_recording: graph[:root], effective_at:, price_recording_ids: [graph[:germany_price].recording.id]
+      )
+    end
+  end
+
+  test "candidate and manifest envelope tampering fails closed" do
+    graph = commercial_graph
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at: 2.minutes.from_now,
+      price_recording_ids: [graph[:italy_price].recording.id]
+    )
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: candidate.manifest_digests.first)
+    manifest.update_column(:canonical_data, manifest.canonical_data.merge("tampered" => true))
+
+    travel_to(3.minutes.from_now) do
+      error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate:) }
+      assert_match(/manifest/, error.message)
+    end
+  end
+
+  test "provider secrets nested in arrays are rejected" do
+    provider = RecordingStudioBilling::ProviderAccount.new(
+      billing_admin_recording_id: SecureRandom.uuid, key: "nested_secret_provider", adapter_key: "stripe",
+      name: "Provider", environment: "production", configuration: { "nested" => [{ "token" => "nope" }] },
+      capabilities: [], supported_markets: [], supported_currencies: []
+    )
+
+    assert_not provider.valid?
+    assert_includes provider.errors[:configuration], "must not contain credentials or secrets"
+  end
+
   test "scheduled activation is idempotent and stale candidates fail closed" do
     graph = commercial_graph
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
-      root_recording: graph[:root], effective_at: 2.minutes.from_now
+      root_recording: graph[:root], effective_at: 2.minutes.from_now,
+      price_recording_ids: [graph[:italy_price].recording.id]
     )
     assert_not_predicate candidate, :activated?
     error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate) }
@@ -90,7 +150,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     candidate.update_column(:effective_at, 1.minute.ago)
     error = assert_raises(ArgumentError) { RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate) }
-    assert_match(/digest mismatch/, error.message)
+    assert_match(/persisted terms/, error.message)
     assert_equal "draft", graph[:italy_price].recording.reload.recordable.state
   end
 
@@ -98,7 +158,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     graph = commercial_graph
     effective_at = 2.minutes.from_now
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:root],
-                                                                     effective_at: effective_at)
+                                                                     effective_at: effective_at,
+                                                                     price_recording_ids: [graph[:italy_price].recording.id])
 
     travel_to(effective_at + 1.second) do
       RecordingStudioBilling::CommercialPublisher.activate!(candidate: candidate)
@@ -110,16 +171,11 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "market resolution selects distinct Italian and German EUR prices and requotes on finalization" do
     graph = commercial_graph
-    graph[:root].revise(graph[:italy_price].recording) do |revision|
-      revision.state = "published"
-      revision.key = "#{revision.key}_published"
-      revision.version = 2
-    end
-    graph[:root].revise(graph[:germany_price].recording) do |revision|
-      revision.state = "published"
-      revision.key = "#{revision.key}_published"
-      revision.version = 2
-    end
+    graph[:provider] = publish_recordable(graph[:provider])
+    graph[:italy_market] = publish_recordable(graph[:italy_market])
+    graph[:germany_market] = publish_recordable(graph[:germany_market])
+    graph[:italy_price] = publish_recordable(graph[:italy_price])
+    graph[:germany_price] = publish_recordable(graph[:germany_price])
     resolver = RecordingStudioBilling::MarketResolver.new(markets: [graph[:italy_market], graph[:germany_market]])
     italy = resolver.resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
     germany = resolver.resolve(stage: :display, declaration_country: "DE", explicit_currency: "EUR")
@@ -189,6 +245,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     germany_price = price("germany", option, germany_market, 1_200, root)
     {
       root: root, product: product.recordable, option: option.recordable, feature: feature.recordable,
+      provider: provider.recordable,
       italy_market: italy_market.recordable, germany_market: germany_market.recordable,
       italy_price: italy_price.recordable, germany_price: germany_price.recordable
     }
@@ -221,14 +278,23 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     ).recording
   end
 
+  def publish_recordable(recordable)
+    recordable.recording.root_recording.revise(recordable.recording) { |revision| revision.state = "published" }
+    recordable.recording.reload.recordable
+  end
+
   def clear_data!
     RecordingStudioBilling::CommercialPublicationCandidate.delete_all
     RecordingStudioBilling::CommercialManifest.delete_all
     RecordingStudio::Event.unscoped.delete_all
     [
-      RecordingStudioBilling::Price, RecordingStudioBilling::Feature, RecordingStudioBilling::BillingOption,
-      RecordingStudioBilling::Product, RecordingStudioBilling::Market, RecordingStudioBilling::ProviderAccount,
-      RecordingStudioBilling::BillingAdmin
+      RecordingStudioBilling::CostRate, RecordingStudioBilling::CostCard, RecordingStudioBilling::Rate,
+      RecordingStudioBilling::RateCard, RecordingStudioBilling::Meter, RecordingStudioBilling::UsageUnit,
+      RecordingStudioBilling::PlanUpdate, RecordingStudioBilling::ProductRule,
+      RecordingStudioBilling::FeatureOverride, RecordingStudioBilling::OveragePrice, RecordingStudioBilling::Price,
+      RecordingStudioBilling::Feature, RecordingStudioBilling::BillingOption, RecordingStudioBilling::Product,
+      RecordingStudioBilling::Market, RecordingStudioBilling::ProviderAccount, RecordingStudioBilling::BillingAdmin,
+      RecordingStudioBilling::Account
     ].each(&:delete_all)
     RecordingStudio::Recording.unscoped.delete_all
     AdminRoot.delete_all

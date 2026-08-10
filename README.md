@@ -25,8 +25,8 @@ billing-admin-enabled root.
 
 ## V1 commercial catalogue contract
 
-This engine declares a catalogue hierarchy only; it does not publish products,
-create provider objects, or process payments. `ProviderAccount`, `Market`,
+This engine publishes validated, versioned commercial catalogue manifests only;
+it does not create provider objects or process payments. `ProviderAccount`, `Market`,
 `Product`, `ProductRule`, `PlanUpdate`, `UsageUnit`, `Meter`, `RateCard`, and
 `CostCard` are direct `BillingAdmin` recording children. Their semantic links
 (for example, a product's provider account) remain stable
@@ -124,8 +124,8 @@ Sign in with `admin@admin.com` / `Password`.
 
 ## Validation
 
-Run the complete suite from the repository root:
+Run the complete commercial and dummy-app suite from the repository root:
 
 ```bash
-bundle exec rake test
+bundle exec rake test:all
 ```
