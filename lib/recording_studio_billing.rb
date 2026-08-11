@@ -66,6 +66,10 @@ module RecordingStudioBilling
       configuration.provider_registry.register(key, adapter)
     end
 
+    def register_builtin_providers!
+      configuration.register_builtin_providers!
+    end
+
     def provider_adapter(key)
       configuration.provider_registry.fetch(key)
     end

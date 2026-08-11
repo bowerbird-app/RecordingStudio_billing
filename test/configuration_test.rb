@@ -3,18 +3,48 @@
 require "test_helper"
 
 class ConfigurationTest < Minitest::Test
+  class GenericAdapter
+    def capabilities
+      @capabilities ||= RecordingStudioBilling::ProviderCapabilities.new
+    end
+
+    def call(**)
+      RecordingStudioBilling::AdapterResponse.new(status: "unsupported")
+    end
+  end
+
   def setup
     @configuration = RecordingStudioBilling::Configuration.new
   end
 
-  def test_has_no_default_provider
-    assert_nil @configuration.provider
+  def test_defaults_to_the_built_in_stripe_provider
+    assert_equal :stripe, @configuration.provider
+    assert_instance_of RecordingStudioBilling::StripeAdapter, @configuration.provider_registry.fetch(:stripe)
   end
 
   def test_merge_accepts_a_provider_override
     @configuration.merge!("provider" => "test_provider")
 
     assert_equal :test_provider, @configuration.provider
+  end
+
+  def test_host_can_select_a_custom_adapter_without_replacing_stripe
+    adapter = GenericAdapter.new
+
+    @configuration.provider_registry.register(:alternate, adapter)
+    @configuration.provider = :alternate
+
+    assert_equal :alternate, @configuration.provider
+    assert_same adapter, @configuration.provider_registry.fetch(:alternate)
+    assert_instance_of RecordingStudioBilling::StripeAdapter, @configuration.provider_registry.fetch(:stripe)
+  end
+
+  def test_accepts_a_stripe_credential_resolver
+    resolver = -> { nil }
+
+    @configuration.stripe_credential_resolver = resolver
+
+    assert_same resolver, @configuration.stripe_credential_resolver
   end
 
   def test_rejects_a_blank_provider

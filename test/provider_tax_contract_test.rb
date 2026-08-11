@@ -57,7 +57,7 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     refute RecordingStudioBilling.configuration.tax_policy.fetch(:enabled)
 
     RecordingStudioBilling.configuration.reset_registries!
-    assert_empty RecordingStudioBilling.configuration.provider_registry.keys
+    assert_equal ["stripe"], RecordingStudioBilling.configuration.provider_registry.keys
     assert_empty RecordingStudioBilling.configuration.tax_calculator_registry.keys
   end
 

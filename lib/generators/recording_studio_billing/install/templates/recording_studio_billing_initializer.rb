@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 RecordingStudioBilling.configure do |config|
-  # Register an adapter in host configuration, then select its stable key here.
+  # Stripe is built in and selected by default. Resolve credentials from host-managed secrets at execution time.
+  # config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
+  #
+  # Custom adapters use the same registry API:
+  # RecordingStudioBilling.register_provider(:your_provider, YourProviderAdapter.new)
   # config.provider = :your_provider
 end

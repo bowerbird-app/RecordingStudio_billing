@@ -84,6 +84,10 @@ module RecordingStudioBilling
       RecordingStudioBilling.register_capabilities!
     end
 
+    config.to_prepare do
+      RecordingStudioBilling.register_builtin_providers!
+    end
+
     initializer "recording_studio_billing.register_recordable_types", after: "recording_studio.load_config" do
       RecordingStudioBilling::RECORDABLE_TYPES.each do |type|
         RecordingStudio.register_recordable_type(type)

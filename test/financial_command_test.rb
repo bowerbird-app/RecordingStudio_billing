@@ -55,11 +55,13 @@ class FinancialCommandTest < ActiveSupport::TestCase
   setup do
     clear_financial_data!
     RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.configuration.stripe_credential_resolver = nil
   end
 
   teardown do
     clear_financial_data!
     RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.configuration.stripe_credential_resolver = nil
   end
 
   test "creation normalizes descendants and returns existing or conflict by canonical material authority" do
@@ -472,6 +474,23 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_equal "unknown", processing_command.normalized_result["status"]
   end
 
+  test "stripe without host credentials persists a provider-neutral unavailable result" do
+    root, account = account_authority
+    result = RecordingStudioBilling.execute_financial_command(
+      provider_key: :stripe,
+      **provider_command_attributes(root:, account:, request: { approved_amount_minor: 500 }, adapter_key: "stripe")
+    )
+    command = result.command.reload
+    attempt = command.attempts.first
+
+    assert_equal "failed", command.state
+    assert_equal "provider_unavailable", command.normalized_result.fetch("status")
+    assert_equal "configuration_missing", command.normalized_result.fetch("reason")
+    assert_equal "failed", attempt.state
+    assert_predicate attempt, :completed_at?
+    refute_includes [command.normalized_result, command.safe_error_details, attempt.safe_metadata].to_s, "secret"
+  end
+
   test "executor rejects ambient transactions before persistence or adapter calls" do
     root, account = account_authority
     adapter = InspectingAdapter.new(response: { state: "succeeded", normalized_result: {} })
@@ -677,15 +696,16 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_includes command.errors[:canonical_request], "has an invalid canonical envelope"
   end
 
-  test "worker and reconciliation indexes exist and Task 2 has no Stripe coupling" do
+  test "generic domain and command services have no Stripe coupling" do
     indexes = ActiveRecord::Base.connection.indexes(RecordingStudioBilling::FinancialCommand.table_name)
     assert_includes indexes.map(&:name), "idx_rs_billing_commands_pending_work"
     assert_includes indexes.map(&:name), "idx_rs_billing_commands_stale_processing"
     assert_includes indexes.map(&:name), "idx_rs_billing_commands_reconciliation_work"
 
-    task_files = Dir[File.expand_path("../{app,db}/**/*financial_command*", __dir__)]
-    task_source = task_files.map { |path| File.read(path) }.join
-    refute_match(/stripe/i, task_source)
+    generic_service_files = Dir[File.expand_path("../app/services/recording_studio_billing/**/*.rb", __dir__)] -
+                            [File.expand_path("../app/services/recording_studio_billing/stripe_adapter.rb", __dir__)]
+    generic_service_source = generic_service_files.map { |path| File.read(path) }.join
+    refute_match(/Stripe::|stripe_credential_resolver|provider\s*==\s*:stripe/, generic_service_source)
   end
 
   test "fresh-install command schema declares authority columns and constraints" do

@@ -3,21 +3,25 @@
 # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Lint/MissingCopEnableDirective
 
 require_relative "hooks"
+require_relative "../../app/services/recording_studio_billing/commercial_manifest_canonicalizer"
 require_relative "../../app/services/recording_studio_billing/safe_financial_payload"
 require_relative "../../app/services/recording_studio_billing/provider_capabilities"
 require_relative "../../app/services/recording_studio_billing/provider_registry"
+require_relative "../../app/services/recording_studio_billing/adapter_response"
+require_relative "../../app/services/recording_studio_billing/stripe_adapter"
 require_relative "../../app/services/recording_studio_billing/tax_calculator_capabilities"
 require_relative "../../app/services/recording_studio_billing/tax_calculator_registry"
 
 module RecordingStudioBilling
   class Configuration
     attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country, :commercial_authorizer,
-          :provider_registry, :tax_calculator_registry
+          :provider_registry, :tax_calculator_registry, :stripe_credential_resolver
 
     def initialize
-      @provider = nil
+      @provider = :stripe
       @provider_registry = ProviderRegistry.new
       @tax_calculator_registry = TaxCalculatorRegistry.new
+      register_builtin_providers!
       @hooks = Hooks.new
       @tax_policy = {
         enabled: false,
@@ -90,9 +94,25 @@ module RecordingStudioBilling
       @commercial_authorizer = value
     end
 
+    def stripe_credential_resolver=(value)
+      if !value.nil? && !value.respond_to?(:call)
+        raise ArgumentError, "stripe credential resolver must respond to call"
+      end
+
+      @stripe_credential_resolver = value
+    end
+
     def reset_registries!
       provider_registry.reset!
       tax_calculator_registry.reset!
+      register_builtin_providers!
+      self
+    end
+
+    def register_builtin_providers!
+      return self if provider_registry.registered?(:stripe)
+
+      provider_registry.register(:stripe, StripeAdapter.new(credential_resolver: -> { stripe_credential_resolver&.call }))
       self
     end
 

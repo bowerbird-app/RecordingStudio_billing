@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "dummy/config/environment"
 
 class EngineTest < Minitest::Test
   def test_engine_isolates_the_billing_namespace
@@ -30,5 +31,27 @@ class EngineTest < Minitest::Test
   ensure
     Object.send(:remove_const, :RecordingStudio) if Object.const_defined?(:RecordingStudio, false)
     Object.const_set(:RecordingStudio, original_recording_studio) if original_recording_studio
+  end
+
+  def test_builtin_stripe_registration_is_idempotent_when_called_directly
+    configuration = RecordingStudioBilling.configuration
+    configuration.provider_registry.reset!
+
+    2.times { RecordingStudioBilling.register_builtin_providers! }
+
+    assert_equal ["stripe"], configuration.provider_registry.keys
+    assert_instance_of RecordingStudioBilling::StripeAdapter, RecordingStudioBilling.provider_adapter(:stripe)
+  end
+
+  def test_prepare_callbacks_restore_exactly_one_built_in_stripe_adapter
+    configuration = RecordingStudioBilling.configuration
+    configuration.provider_registry.reset!
+
+    2.times { Rails.application.reloader.prepare! }
+
+    assert_equal ["stripe"], configuration.provider_registry.keys
+    assert_instance_of RecordingStudioBilling::StripeAdapter, RecordingStudioBilling.provider_adapter(:stripe)
+  ensure
+    configuration&.reset_registries!
   end
 end

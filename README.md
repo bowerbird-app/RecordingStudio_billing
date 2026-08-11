@@ -110,15 +110,27 @@ status, duplicate responses, and timeout-after-possible-success behavior.
 
 ### Provider and tax contracts
 
-Register adapters under stable keys during host initialization. Registration
-stores only adapter objects in process memory; provider classes and credentials
-are never persisted. Credentials belong in host credentials or a secret manager.
+Stripe ships as the built-in default provider and is registered under `:stripe`
+during engine boot. Registration stores only adapter objects in process memory;
+provider classes and credentials are never persisted. Before any real Stripe
+operation, the host must configure a credential resolver backed by host
+credentials or a secret manager. The engine never receives raw card data.
 
 ```ruby
-provider = MyProviderAdapter.new(credentials: Rails.application.credentials.billing)
-RecordingStudioBilling.register_provider(:primary, provider)
+RecordingStudioBilling.configure do |config|
+  config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
+end
+```
 
-calculator = MyTaxCalculator.new(credentials: Rails.application.credentials.tax)
+Custom adapters use the same registry API and can be selected as the host
+default:
+
+```ruby
+provider = MyProviderAdapter.new
+RecordingStudioBilling.register_provider(:primary, provider)
+RecordingStudioBilling.configure { |config| config.provider = :primary }
+
+calculator = MyTaxCalculator.new
 RecordingStudioBilling.register_tax_calculator(:external_tax, calculator)
 ```
 
@@ -192,12 +204,15 @@ represented by `schema.rb`. Regenerate the dump with:
 bin/rails db:schema:dump
 ```
 
-Select only a provider key that the host has explicitly registered. No provider
-is selected by default. Stripe and Checkout integration are deferred.
+Stripe is the default provider key and its built-in adapter auto-registers at
+boot. Configure host credentials before executing real Stripe work; without
+them, execution returns the normalized provider-neutral `provider_unavailable`
+result. No checkout, subscriptions, invoices, webhooks, payment credential
+handling, or raw card data processing is provided by this foundation.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
-  config.provider = :primary
+  config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
 end
 ```
 
