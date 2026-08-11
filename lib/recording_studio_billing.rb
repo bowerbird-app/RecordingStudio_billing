@@ -50,6 +50,10 @@ module RecordingStudioBilling
       CreateFinancialCommand.call(...)
     end
 
+    def create_checkout_intent(...)
+      CreateCheckoutIntent.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end

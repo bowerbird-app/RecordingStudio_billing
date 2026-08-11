@@ -27,6 +27,7 @@ module RecordingStudioBilling
 
         eligible_state = recovery ? "requires_reconciliation" : "pending"
         return unless command.state == eligible_state
+        return unless checkout_intent_executable?
         return if !recovery && command.attempts.exists?
 
         token = SecureRandom.uuid
@@ -47,6 +48,15 @@ module RecordingStudioBilling
     private
 
     attr_reader :command, :lease_duration, :now, :recovery
+
+    def checkout_intent_executable?
+      return true unless command.command_type == "checkout"
+
+      intent_id = command.canonical_request.dig("request", "checkout_intent_id")
+      return false if intent_id.blank?
+
+      CheckoutIntent.where(id: intent_id, financial_command_id: command.id, state: "pending_provider").exists?
+    end
 
     def live_claim?
       command.state == "processing" && command.lease_expires_at.present? && command.lease_expires_at > now

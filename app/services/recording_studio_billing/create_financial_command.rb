@@ -57,7 +57,7 @@ module RecordingStudioBilling
       account_recording = authoritative_recording(account_recording_input, "RecordingStudioBilling::Account")
       verify_direct_account!(account_recording, root)
       provider_recording = authoritative_provider_recording
-      manifest_digests = authoritative_manifest_digests(root)
+      manifest_digests = authoritative_manifest_digests(root, provider_recording)
       canonical_request = canonical_envelope(root, account_recording, provider_recording, manifest_digests)
       operation_id = SecureRandom.uuid
 
@@ -119,7 +119,7 @@ module RecordingStudioBilling
       recording
     end
 
-    def authoritative_manifest_digests(root)
+    def authoritative_manifest_digests(root, provider_recording)
       return [] if commercial_manifest_digests.empty?
 
       raise ArgumentError, "commercial manifest immutability is not enforced" unless manifest_history_protected?
@@ -128,7 +128,10 @@ module RecordingStudioBilling
       raise ArgumentError, "commercial manifests are missing" unless manifests.size == commercial_manifest_digests.size
 
       manifests.each do |manifest|
-        raise ArgumentError, "commercial manifest belongs to another root" unless manifest.root_recording_id == root.id
+        allowed_roots = [root.id, provider_recording&.root_recording_id].compact
+        unless allowed_roots.include?(manifest.root_recording_id)
+          raise ArgumentError, "commercial manifest belongs to another root"
+        end
         raise ArgumentError, "commercial manifest is not published and used" unless manifest.used_at?
         unless manifest.schema_version == CommercialManifest::SCHEMA_VERSION &&
                manifest.resolver_version == CommercialManifest::RESOLVER_VERSION
