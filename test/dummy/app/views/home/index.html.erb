@@ -1,28 +1,26 @@
-<div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
-  <%= render FlatPack::PageTitle::Component.new(
-    title: "Recording Studio Billing",
-    subtitle: "A provider-agnostic billing foundation with Stripe as the default provider.",
-    variant: :h1
-  ) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: "Recording Studio Billing",
+  subtitle: "A provider-agnostic billing foundation with Stripe as the default provider.",
+  variant: :h1
+) %>
 
-  <div class="grid gap-6 lg:grid-cols-2">
+<%= render FlatPack::Grid::Component.new(cols: 2, gap: :lg) do %>
     <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
       <% card.header do %>
         <%= render FlatPack::PageTitle::Component.new(
           title: "Foundation",
           subtitle: "The Recording Studio billing graph is ready for provider adapters.",
-          variant: :h3,
-          class: "mb-0 pb-0"
+          variant: :h3
         ) %>
       <% end %>
 
       <% card.body do %>
-        <ul class="space-y-3 text-sm leading-6">
+        <%= render FlatPack::List::Component.new do %>
           <li>Workspace roots enable the <code>:billing</code> capability.</li>
           <li>Admin roots enable <code>:billing_admin</code> and expose the <code>:billing</code> admin section.</li>
           <li>Billing accounts and billing administration are Recording Studio child recordables.</li>
           <li>PostgreSQL UUIDs, Devise, FlatPack, and Root Switchable remain wired in the host app.</li>
-        </ul>
+        <% end %>
       <% end %>
     <% end %>
 
@@ -31,18 +29,17 @@
         <%= render FlatPack::PageTitle::Component.new(
           title: "Phase 1 boundary",
           subtitle: "Commercial billing behavior intentionally starts in a later phase.",
-          variant: :h3,
-          class: "mb-0 pb-0"
+          variant: :h3
         ) %>
       <% end %>
 
       <% card.body do %>
-        <ol class="space-y-3 text-sm leading-6 list-decimal pl-5">
+        <%= render FlatPack::List::Component.new(ordered: true) do %>
           <li>Configure a provider adapter when provider-specific work begins.</li>
           <li>Use <code>RecordingStudioBilling.configure { |config| config.provider = :stripe }</code> to choose the default.</li>
           <li>Keep commercial entities, charges, invoices, and webhooks out of this foundation phase.</li>
           <li>Use the dummy app to validate layout, asset scanning, authentication, and Recording Studio wiring.</li>
-        </ol>
+        <% end %>
       <% end %>
     <% end %>
 
@@ -51,28 +48,24 @@
         <%= render FlatPack::PageTitle::Component.new(
           title: "FlatPack usage",
           subtitle: "This page uses FlatPack components for its primary UI structure.",
-          variant: :h3,
-          class: "mb-0 pb-0"
+          variant: :h3
         ) %>
       <% end %>
 
       <% card.body do %>
-        <p class="text-sm leading-6 text-(--surface-content-color)">
+        <p>
           Use FlatPack cards, buttons, badges, inputs, and layout primitives as the default path for addon UI. Keep raw HTML for simple semantic content only.
         </p>
       <% end %>
 
       <% card.footer do %>
-        <a href="https://github.com/bowerbird-app/flatpack"
-           target="_blank"
-           rel="noopener noreferrer"
-           class="inline-flex">
-          <%= render FlatPack::Button::Component.new(
-            text: "View FlatPack documentation",
-            style: :primary,
-            size: :md
-          ) %>
-        </a>
+        <%= render FlatPack::Button::Component.new(
+          text: "View FlatPack documentation",
+          style: :primary,
+          size: :md,
+          url: "https://github.com/bowerbird-app/flatpack",
+          target: "_blank"
+        ) %>
       <% end %>
     <% end %>
 
@@ -81,19 +74,17 @@
         <%= render FlatPack::PageTitle::Component.new(
           title: "Install flow",
           subtitle: "What the host app generator path covers.",
-          variant: :h3,
-          class: "mb-0 pb-0"
+          variant: :h3
         ) %>
       <% end %>
 
       <% card.body do %>
-        <ul class="space-y-3 text-sm leading-6">
+        <%= render FlatPack::List::Component.new do %>
           <li>Add the gem to your host app and run <code>bundle install</code>.</li>
           <li>Run <code>rails generate recording_studio_billing:install</code> to mount the engine and add configuration.</li>
           <li>Run <code>rails generate recording_studio_billing:migrations</code> to copy engine migrations into the host app.</li>
           <li>Rebuild Tailwind if needed with <code>bin/rails tailwindcss:build</code>.</li>
-        </ul>
+        <% end %>
       <% end %>
     <% end %>
-  </div>
-</div>
+<% end %>

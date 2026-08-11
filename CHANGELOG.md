@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supports atomic price replacement, and leaves unrelated drafts untouched.
 - Hardened market/overage resolution, rule/feature validation, and nested
   provider configuration secret detection.
+- Added provider-neutral durable financial commands with database-enforced
+  idempotency, append-only attempt history, reconciliation states, and a
+  commit-before-adapter execution boundary. Atomic leases, stale-worker expiry,
+  same-key recovery, strict manifest authority, and deterministic fake-adapter
+  outcome mappings make interrupted operations safely recoverable.
 
 ## [0.1.2] - 2026-07-21
 

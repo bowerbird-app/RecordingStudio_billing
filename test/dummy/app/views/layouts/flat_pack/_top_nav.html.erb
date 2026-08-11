@@ -9,8 +9,7 @@
       data: {
         "flat-pack--sidebar-layout-target": "mobileToggle",
         action: "click->flat-pack--sidebar-layout#toggleMobile"
-      },
-      class: "md:hidden"
+      }
     ) %>
 
   <% end %>
@@ -21,14 +20,12 @@
 
   <% nav.right do %>
     <% if user_signed_in? %>
-      <div class="flex items-center gap-3">
-        <%= recording_studio_root_switch_dropdown(style: :ghost, size: :md) %>
+      <%= recording_studio_root_switch_dropdown(style: :ghost, size: :md) %>
 
-        <%= render FlatPack::Avatar::Component.new(
-          name: current_user.try(:name).presence || current_user.email,
-          size: :sm
-        ) %>
-      </div>
+      <%= render FlatPack::Avatar::Component.new(
+        name: current_user.try(:name).presence || current_user.email,
+        size: :sm
+      ) %>
     <% end %>
   <% end %>
 <% end %>

@@ -8,7 +8,7 @@
   <% end %>
 
   <% sidebar.items do %>
-    <nav class="py-4 space-y-1" aria-label="Main navigation">
+    <nav aria-label="Main navigation">
       <%= render FlatPack::Sidebar::Item::Component.new(
         label: "Home",
         href: main_app.root_path,
@@ -18,12 +18,11 @@
   <% end %>
 
   <% sidebar.footer do %>
-    <%= render FlatPack::Sidebar::Footer::Component.new(class: "text-sm text-[var(--surface-muted-content-color)]") do %>
+    <%= render FlatPack::Sidebar::Footer::Component.new do %>
       <%= render FlatPack::Sidebar::Item::Component.new(
         label: "Sign out",
         href: main_app.destroy_user_session_path,
         icon: :lock,
-        class: "mx-0",
         data: { turbo_method: :delete }
       ) %>
     <% end %>

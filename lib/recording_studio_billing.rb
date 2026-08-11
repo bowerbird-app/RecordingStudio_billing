@@ -46,6 +46,22 @@ module RecordingStudioBilling
       EnsureBillingAdmin.call(...)
     end
 
+    def create_financial_command(...)
+      CreateFinancialCommand.call(...)
+    end
+
+    def execute_financial_command(...)
+      FinancialCommandExecutor.call(...)
+    end
+
+    def expire_financial_command_claims(...)
+      ExpireFinancialCommandClaims.call(...)
+    end
+
+    def recover_financial_command(...)
+      RecoverFinancialCommand.call(...)
+    end
+
     def commercial_publication_in_progress?
       ActiveRecord::Base.connection.select_value(
         "SELECT current_setting('recording_studio_billing.authorized_publication', true) = 'on'"

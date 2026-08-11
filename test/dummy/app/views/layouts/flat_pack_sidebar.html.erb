@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="rounded" class="h-full overflow-hidden overscroll-none">
+<html data-theme="rounded">
   <head>
     <title><%= content_for(:title) || "Dummy" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -22,7 +22,7 @@
     <%= javascript_importmap_tags %>
   </head>
 
-  <body class="m-0 h-full overflow-hidden overscroll-none bg-[var(--surface-page-background-color)] text-[var(--surface-content-color)]">
+  <body>
     <%= render FlatPack::SidebarLayout::Component.new(side: :left, storage_key: "flat-pack-sidebar-layout") do |layout| %>
       <% layout.sidebar do %>
         <%= render "layouts/flat_pack/sidebar", sidebar_side: :left %>
@@ -33,7 +33,7 @@
       <% end %>
 
       <% layout.main do %>
-        <main class="h-full overflow-auto p-6">
+        <main>
           <%= yield %>
         </main>
       <% end %>

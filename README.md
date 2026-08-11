@@ -71,6 +71,43 @@ It therefore does not use `CommercialPublisher`; state or value revisions use
 authorizer and a persisted actor and records that actor on the Recording Studio
 revision event.
 
+### Durable financial commands
+
+All future external financial mutations must enter through
+`RecordingStudioBilling.execute_financial_command`. The command creator
+normalizes the Recording Studio root, verifies that the billing Account is its
+direct child, canonicalizes all supplied authority and operation terms, and
+uses a database unique index to arbitrate concurrent local idempotency claims.
+Reusing a key returns `existing` for the same fingerprint or `conflict` for
+materially different input.
+
+The executor validates first, commits the command and its initial attempt in one
+transaction, calls the adapter with no database transaction open, and persists
+the normalized response in a new transaction. Adapters receive `command:`,
+`request:`, and the durable `idempotency_key:` and return an object containing a
+provider-neutral `state`, `normalized_result`, optional `provider_reference`,
+`safe_error_details`, and `safe_metadata`. Unknown states become `unknown` in
+the normalized result and require reconciliation. Exceptions after the call
+boundary are recorded as uncertain without persisting exception messages.
+
+Execution requires an atomic, expiring claim. A live lease prevents another
+worker from calling the adapter. `expire_financial_command_claims` closes an
+abandoned processing attempt as uncertain and moves its command to
+`requires_reconciliation`. `recover_financial_command` then appends the next
+attempt while reusing the command's original provider idempotency key; recovery
+never generates a replacement mutation key. Supplied commercial manifests must
+belong to the command root, be used, use the supported schema/resolver versions,
+retain a valid digest, and remain protected by the immutable-history trigger.
+
+The provider-neutral normalized mappings are: success and duplicate to
+`succeeded`; invalid request to pre-persistence rejection; provider rejection
+and provider unavailable to `failed`; timeout after possible success to
+`requires_reconciliation`; provider pending to command `requires_reconciliation`
+with normalized result status `pending`; and
+unknown provider states to `requires_reconciliation` with result status
+`unknown`. `RecordingStudioBilling::FakeFinancialAdapter` provides deterministic
+coverage of this contract without coupling the command layer to a provider SDK.
+
 ### Upgrading from the initial commercial hierarchy
 
 Run the engine migrations after upgrading. The V1 correction removes the old

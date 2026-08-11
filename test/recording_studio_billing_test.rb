@@ -19,7 +19,8 @@ class RecordingStudioBillingTest < Minitest::Test
   def test_dummy_keeps_the_flatpack_rounded_theme
     layout = File.read(File.expand_path("dummy/app/views/layouts/flat_pack_sidebar.html.erb", __dir__))
 
-    assert_includes layout, '<html data-theme="rounded" class="h-full overflow-hidden overscroll-none">'
+    assert_includes layout, '<html data-theme="rounded">'
+    assert_includes layout, "FlatPack::SidebarLayout::Component"
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects
