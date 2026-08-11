@@ -18,6 +18,7 @@ module RecordingStudioBilling
       # the stable, namespace-isolated identity across revisions.
       validates :state, inclusion: { in: STATES }
       validate :commercial_semantic_recordings_are_valid
+      validate :publication_managed_state_is_authorized
     end
 
     class_methods do
@@ -42,6 +43,14 @@ module RecordingStudioBilling
 
     def commercial_semantic_recordings_are_valid
       validate_commercial_semantic_recordings!
+    end
+
+    def publication_managed_state_is_authorized
+      return if is_a?(FeatureOverride)
+      return unless state != "draft"
+      return if RecordingStudioBilling.commercial_publication_in_progress?
+
+      errors.add(:state, "may only change through an authorized commercial publication")
     end
 
     def validate_commercial_reference(name, specification)

@@ -30,6 +30,8 @@ module RecordingStudioBilling
   ].freeze
 
   class << self
+    COMMERCIAL_PUBLICATION_CONTEXT_KEY = :recording_studio_billing_commercial_publication
+
     def configuration
       @configuration ||= Configuration.new
     end
@@ -44,6 +46,21 @@ module RecordingStudioBilling
 
     def ensure_billing_admin(...)
       EnsureBillingAdmin.call(...)
+    end
+
+    # State changes to catalogue records are only valid while an authorized
+    # CommercialPublisher activation is in progress. Isolated execution state
+    # keeps that internal capability local to the request/job performing it.
+    def with_commercial_publication
+      previous = ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY]
+      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = true
+      yield
+    ensure
+      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = previous
+    end
+
+    def commercial_publication_in_progress?
+      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] == true
     end
 
     # rubocop:disable Metrics/MethodLength

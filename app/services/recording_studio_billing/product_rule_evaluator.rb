@@ -33,7 +33,7 @@ module RecordingStudioBilling
     end
 
     def violation_for(rule)
-      return rule.key unless conditions_met?(rule)
+      return unless conditions_met?(rule)
 
       target = rule.target_product_recording_id
       selected = selected_products.map { |item| item.respond_to?(:recording) ? item.recording.id : item.to_s }
@@ -62,7 +62,10 @@ module RecordingStudioBilling
     def transition
       return nil unless current_product
 
-      rule = published_rules.find { |candidate| candidate.target_product_recording_id == current_product.recording.id }
+      rule = published_rules.find do |candidate|
+        candidate.target_product_recording_id == current_product.recording.id &&
+          conditions_met?(candidate)
+      end
       return rule.rule_type if rule && %w[replaces upgrade_from downgrade_from same_family].include?(rule.rule_type)
 
       nil

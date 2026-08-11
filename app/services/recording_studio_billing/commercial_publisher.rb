@@ -67,10 +67,11 @@ module RecordingStudioBilling
     end
 
     def activate!
+      initial_candidate = CommercialPublicationCandidate.find(candidate_or_id)
       CommercialPublicationCandidate.transaction do
-        publication = CommercialPublicationCandidate.lock.find(candidate_or_id)
-        authorize!(:activate, root: RecordingStudio::Recording.unscoped.find(publication.root_recording_id),
-                              publication:)
+        root = RecordingStudio::Recording.unscoped.lock.find(initial_candidate.root_recording_id)
+        publication = CommercialPublicationCandidate.lock.find(initial_candidate.id)
+        authorize!(:activate, root:, publication:)
         return publication if publication.activated?
         raise ArgumentError, "publication candidate is not effective yet" if publication.effective_at > Time.current
 
@@ -482,7 +483,13 @@ module RecordingStudioBilling
         market: market,
         currency_code: price.currency_code,
         overage_prices: overages,
-        publication_candidate: true
+        publication_candidate: true,
+        product_rules: graph.grep(ProductRule).select do |rule|
+          rule.product_recording_id == option.product_recording_id
+        end,
+        plan_updates: graph.grep(PlanUpdate).select do |plan_update|
+          plan_update.billing_option_recording_id == option.recording.id
+        end
       )
       persist_manifest_result(root, resolver.resolve!)
     end
@@ -682,33 +689,35 @@ module RecordingStudioBilling
 
     def activate_candidate!(publication)
       verify_candidate!(publication)
-      envelope = publication.snapshot_envelope
-      records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
-      replacements_for(envelope).each do |prior|
-        prior.recording.root_recording.revise(
-          prior.recording,
-          actor: actor,
-          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
-        ) { |revision| revision.state = "retired" }
-      end
-      records.each do |recording|
-        record = recording.recordable
-        next unless record.respond_to?(:state) && record.state == "draft"
+      RecordingStudioBilling.with_commercial_publication do
+        envelope = publication.snapshot_envelope
+        records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
+        replacements_for(envelope).each do |prior|
+          prior.recording.root_recording.revise(
+            prior.recording,
+            actor: actor,
+            metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+          ) { |revision| revision.state = "retired" }
+        end
+        records.each do |recording|
+          record = recording.recordable
+          next unless record.respond_to?(:state) && record.state == "draft"
 
-        recording.root_recording.revise(
-          recording,
-          actor: actor,
-          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
-        ) { |revision| revision.state = "published" }
-      end
-      CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
-      publication.update!(activated_at: Time.current)
-      records.each do |recording|
-        recording.reload.log_event!(
-          action: "commercial_published",
-          actor: actor,
-          metadata: { "candidate_digest" => publication.candidate_digest }
-        )
+          recording.root_recording.revise(
+            recording,
+            actor: actor,
+            metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+          ) { |revision| revision.state = "published" }
+        end
+        CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
+        publication.update!(activated_at: Time.current)
+        records.each do |recording|
+          recording.reload.log_event!(
+            action: "commercial_published",
+            actor: actor,
+            metadata: { "candidate_digest" => publication.candidate_digest }
+          )
+        end
       end
       publication
     end

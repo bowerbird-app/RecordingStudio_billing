@@ -30,6 +30,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       }
     }
     RecordingStudioBilling.configuration.tax_policy = {}
+    RecordingStudioBilling.configuration.market_default_country = nil
     RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
   end
 
@@ -260,6 +261,19 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_match(/persisted/, error.message)
   end
 
+  test "direct commercial revisions cannot publish without the publisher authorization path" do
+    graph = commercial_graph
+
+    error = assert_raises(ActiveRecord::RecordInvalid) do
+      graph[:italy_price].recording.root_recording.revise(graph[:italy_price].recording) do |revision|
+        revision.state = "published"
+      end
+    end
+
+    assert_includes error.record.errors[:state], "may only change through an authorized commercial publication"
+    assert_equal "draft", graph[:italy_price].reload.state
+  end
+
   test "database history guard preserves recordables and delivery artifacts" do
     graph = commercial_graph
     historical_draft_price_id = graph[:italy_price].id
@@ -469,7 +483,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     ).count
   end
 
-  test "publication accepts exclusion rules and leaves unrelated provider cards as drafts" do
+  test "publication includes applicable product rules and plan updates in each manifest" do
     graph = commercial_graph
     target = record_child(
       RecordingStudioBilling::Product.new(
@@ -480,7 +494,28 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       graph[:root],
       graph[:admin_recording]
     )
-    target = publish_recordable(target.recordable).recording
+    target_option = record_child(
+      RecordingStudioBilling::BillingOption.new(
+        product_recording: target,
+        key: unique_name("target_monthly").tr(" ", "_"),
+        recurrence: "recurring",
+        interval: "month",
+        interval_count: 1,
+        quantity_mode: "fixed",
+        default_quantity: 1,
+        pricing_model: "flat",
+        collection_method: "automatic",
+        payment_terms_days: 0,
+        trial_days: 0,
+        proration_policy: "none",
+        lifecycle_policy: "immediate",
+        checkout_policy: "allowed",
+        tax_policy: "exclusive"
+      ),
+      graph[:root],
+      target
+    )
+    target_price = price("target_italy", target_option, graph[:italy_market].recording, 2_000, graph[:root])
     rule = record_child(
       RecordingStudioBilling::ProductRule.new(
         product_recording: graph[:product].recording,
@@ -492,18 +527,6 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       graph[:root],
       graph[:admin_recording]
     )
-    retired_rule = record_child(
-      RecordingStudioBilling::ProductRule.new(
-        product_recording: graph[:product].recording,
-        target_product_recording: target,
-        key: unique_name("retired_rule").tr(" ", "_"),
-        rule_type: "requires",
-        conditions: {}
-      ),
-      graph[:root],
-      graph[:admin_recording]
-    )
-    retired_rule.root_recording.revise(retired_rule) { |revision| revision.state = "retired" }
     plan_update = record_child(
       RecordingStudioBilling::PlanUpdate.new(
         billing_option_recording: graph[:option].recording,
@@ -531,15 +554,32 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root],
-      price_recording_ids: [graph[:italy_price].recording.id],
+      price_recording_ids: [graph[:italy_price].recording.id, target_price.id],
       actor: publication_actor
     )
 
     assert_equal "published", rule.reload.recordable.state
-    assert_equal "retired", retired_rule.reload.recordable.state
     assert_equal "published", plan_update.reload.recordable.state
     assert_equal "draft", rate_card.reload.recordable.state
     assert_equal "draft", cost_card.reload.recordable.state
+    manifests = RecordingStudioBilling::CommercialManifest.where(
+      manifest_digest: RecordingStudioBilling::CommercialPublicationCandidate.last.manifest_digests
+    )
+    assert_equal 2, manifests.count
+    source_manifest = manifests.find do |manifest|
+      manifest.canonical_data.dig("product", "key") == graph[:product].key
+    end
+    target_manifest = manifests.find do |manifest|
+      manifest.canonical_data.dig("product", "key") == target.recordable.key
+    end
+    assert_includes source_manifest.canonical_data.fetch("product_rules").map { |item| item.fetch("key") },
+                    rule.recordable.key
+    assert_includes source_manifest.canonical_data.fetch("plan_updates").map { |item| item.fetch("key") },
+                    plan_update.recordable.key
+    assert_includes source_manifest.snapshot_references, rule.id
+    assert_includes source_manifest.snapshot_references, plan_update.id
+    assert_empty target_manifest.canonical_data.fetch("product_rules")
+    assert_empty target_manifest.canonical_data.fetch("plan_updates")
   end
 
   test "account feature overrides can reference the central catalogue and preserve false values" do
@@ -621,29 +661,45 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "market resolution selects distinct Italian and German EUR prices and requotes on finalization" do
     graph = commercial_graph
-    graph[:provider] = publish_recordable(graph[:provider])
-    graph[:italy_market] = publish_recordable(graph[:italy_market])
-    graph[:germany_market] = publish_recordable(graph[:germany_market])
-    graph[:italy_price] = publish_recordable(graph[:italy_price])
-    graph[:germany_price] = publish_recordable(graph[:germany_price])
-    resolver = RecordingStudioBilling::MarketResolver.new(markets: [graph[:italy_market], graph[:germany_market]])
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root],
+      price_recording_ids: [graph[:italy_price].recording.id, graph[:germany_price].recording.id],
+      actor: publication_actor
+    )
+    italy_market = RecordingStudioBilling::Market.with_current_recording.find_by!(key: "italy_market")
+    germany_market = RecordingStudioBilling::Market.with_current_recording.find_by!(key: "germany_market")
+    italy_price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: "italy_eur_price")
+    germany_price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: "germany_eur_price")
+    option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: graph[:option].key)
+    resolver = RecordingStudioBilling::MarketResolver.new(markets: [italy_market, germany_market])
     italy = resolver.resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
     germany = resolver.resolve(stage: :display, declaration_country: "DE", explicit_currency: "EUR")
 
-    assert_equal graph[:italy_market], italy.market
-    assert_equal graph[:germany_market], germany.market
-    assert_equal graph[:italy_price].recording.id, RecordingStudioBilling::CommercialPriceSelector.new(
-      billing_option: graph[:option], market: italy.market, currency_code: italy.currency_code
+    assert_equal italy_market, italy.market
+    assert_equal germany_market, germany.market
+    assert_equal italy_price.recording.id, RecordingStudioBilling::CommercialPriceSelector.new(
+      billing_option: option, market: italy.market, currency_code: italy.currency_code
     ).price!.recording.id
-    assert_equal graph[:germany_price].recording.id, RecordingStudioBilling::CommercialPriceSelector.new(
-      billing_option: graph[:option], market: germany.market, currency_code: germany.currency_code
+    assert_equal germany_price.recording.id, RecordingStudioBilling::CommercialPriceSelector.new(
+      billing_option: option, market: germany.market, currency_code: germany.currency_code
     ).price!.recording.id
     assert_equal :requote, resolver.resolve(
       stage: :final_charge, account_country: "DE", previous: italy
     ).outcome
     assert_raises(ArgumentError) do
+      resolver.resolve(stage: :final_charge, declaration_country: "IT", ip_country: "DE", previous: italy)
+    end
+    RecordingStudioBilling.configuration.market_default_country = "IT"
+    assert_raises(ArgumentError) { resolver.resolve(stage: :final_charge, previous: italy) }
+    assert_equal :provider, resolver.resolve(
+      stage: :final_charge, provider_country: "DE", previous: italy
+    ).source
+    assert_equal :host, resolver.resolve(
+      stage: :final_charge, host_country: "IT", previous: italy
+    ).source
+    assert_raises(ArgumentError) do
       resolver = RecordingStudioBilling::MarketResolver.new(
-        markets: [graph[:italy_market], graph[:italy_market]]
+        markets: [italy_market, italy_market]
       )
       resolver.resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
     end
@@ -651,25 +707,53 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "market resolution rejects historical market and provider revisions" do
     graph = commercial_graph
-    provider = publish_recordable(graph[:provider])
-    market = publish_recordable(graph[:italy_market])
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root],
+      price_recording_ids: [graph[:italy_price].recording.id],
+      actor: publication_actor
+    )
     resolver_arguments = { stage: :display, declaration_country: "IT", explicit_currency: "EUR" }
 
-    market_recording = market.recording
-    market_recording.root_recording.revise(market_recording) { |revision| revision.priority += 1 }
     error = assert_raises(ArgumentError) do
-      RecordingStudioBilling::MarketResolver.new(markets: [market]).resolve(**resolver_arguments)
+      RecordingStudioBilling::MarketResolver.new(markets: [graph[:italy_market]]).resolve(**resolver_arguments)
     end
     assert_match(/no eligible market/, error.message)
 
-    current_market = market_recording.reload.recordable
-    provider_recording = provider.recording
-    current_market.provider_account_recording.recordable
-    provider_recording.root_recording.revise(provider_recording) { |revision| revision.name = "Revised provider" }
-    error = assert_raises(ArgumentError) do
-      RecordingStudioBilling::MarketResolver.new(markets: [current_market]).resolve(**resolver_arguments)
-    end
-    assert_match(/no eligible market/, error.message)
+    current_market = RecordingStudioBilling::Market.with_current_recording.find_by!(key: "italy_market")
+    assert_equal current_market, RecordingStudioBilling::MarketResolver.new(
+      markets: [current_market]
+    ).resolve(**resolver_arguments).market
+  end
+
+  test "product rule conditions skip violations and transitions until they match" do
+    source = Struct.new(:recording).new(Struct.new(:id).new("source"))
+    target = Struct.new(:recording).new(Struct.new(:id).new("target"))
+    conditional_requirement = Struct.new(
+      :key, :rule_type, :target_product_recording_id, :conditions
+    ).new("us_requires_target", "requires", "target", { "country_code" => "US" })
+    conditional_transition = Struct.new(
+      :key, :rule_type, :target_product_recording_id, :conditions
+    ).new("us_upgrade", "upgrade_from", "target", { "country_code" => "US" })
+
+    unmatched = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source,
+      selected_products: [],
+      current_product: target,
+      context: { country_code: "CA" },
+      rules: [conditional_requirement, conditional_transition]
+    ).evaluate
+    assert unmatched.eligible
+    assert_empty unmatched.violations
+    assert_nil unmatched.transition
+
+    matched = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source,
+      selected_products: [],
+      current_product: target,
+      context: { country_code: "US" },
+      rules: [conditional_transition]
+    ).evaluate
+    assert_equal "upgrade_from", matched.transition
   end
 
   test "feature definitions fail closed, product rule vocabulary is exact, and tax is off by default" do
@@ -776,11 +860,6 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       action: "created", recordable: recordable, root_recording: root, parent_recording: parent
     )
     RecordingStudio::Recording.unscoped.find(event.recording.id)
-  end
-
-  def publish_recordable(recordable)
-    recordable.recording.root_recording.revise(recordable.recording) { |revision| revision.state = "published" }
-    recordable.recording.reload.recordable
   end
 
   def clear_data!

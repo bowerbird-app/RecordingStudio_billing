@@ -43,13 +43,18 @@ module RecordingStudioBilling
         ip: ip,
         default: configuration.market_default_country
       }
-      values.delete(:verified_account) unless stage == :final_charge || valid_country?(account)
-      source, country = SOURCES.filter_map do |key|
+      source, country = country_sources_for(stage).filter_map do |key|
         [key, normalize_country(values[key])] if valid_country?(values[key])
       end.first
       raise ArgumentError, "no trusted country is available for market resolution" unless country
 
       [country, source]
+    end
+
+    def country_sources_for(stage)
+      return %i[verified_account provider host] if stage == :final_charge
+
+      SOURCES
     end
 
     def select_market(country)

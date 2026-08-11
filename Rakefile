@@ -23,6 +23,10 @@ DUMMY_BUNDLE_CLEARED_ENV = {
   "BUNDLE_LOCKFILE" => nil,
   "BUNDLER_SETUP" => nil,
   "BUNDLER_VERSION" => nil,
+  # DB_NAME and DATABASE_URL can point at a developer's database. The dummy
+  # app's test configuration defaults to its isolated app_test database.
+  "DB_NAME" => nil,
+  "DATABASE_URL" => nil,
   "RUBYLIB" => nil,
   "RUBYOPT" => nil
 }.freeze

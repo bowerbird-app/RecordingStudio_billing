@@ -9,7 +9,7 @@ module RecordingStudioBilling
 
     def initialize(product:, billing_option:, price:, market:, currency_code:, quantity: nil,
                    overage_price: nil, overage_prices: nil, publication_candidate: false,
-                   trusted_context: {}, account_recording: nil)
+                   trusted_context: {}, account_recording: nil, product_rules: nil, plan_updates: nil)
       @product = product
       @billing_option = billing_option
       @price = price
@@ -20,6 +20,8 @@ module RecordingStudioBilling
       @publication_candidate = publication_candidate
       @trusted_context = trusted_context.to_h.stringify_keys
       @account_recording = account_recording
+      @product_rules = product_rules
+      @plan_updates = plan_updates
     end
 
     def resolve!
@@ -184,6 +186,12 @@ module RecordingStudioBilling
                            key amount_minor currency_code currency_exponent pricing_model package_size version scope
                          ]).merge("quantity" => quantity),
         "features" => resolved_features,
+        "product_rules" => resolved_product_rules.map do |rule|
+          terms(rule, %w[key rule_type target_product_recording_id conditions])
+        end,
+        "plan_updates" => resolved_plan_updates.map do |plan_update|
+          terms(plan_update, %w[key billing_option_recording_id])
+        end,
         "overage_prices" => overage_prices.map do |overage_price|
           terms(overage_price, %w[
                   key amount_minor currency_code currency_exponent pricing_model package_size version scope
@@ -203,6 +211,22 @@ module RecordingStudioBilling
         product: product, billing_option: billing_option, price: price, account_recording: account_recording,
         allow_unpublished: publication_candidate
       ).resolve!
+    end
+
+    def resolved_product_rules
+      return Array(@product_rules).sort_by { |rule| rule.recording.id } unless @product_rules.nil?
+
+      scope = ProductRule.with_current_recording.where(product_recording_id: product.recording.id)
+      scope = publication_candidate ? scope.where.not(state: "retired") : scope.where(state: "published")
+      scope.order(:id).to_a
+    end
+
+    def resolved_plan_updates
+      return Array(@plan_updates).sort_by { |plan_update| plan_update.recording.id } unless @plan_updates.nil?
+
+      scope = PlanUpdate.with_current_recording.where(billing_option_recording_id: billing_option.recording.id)
+      scope = publication_candidate ? scope.where.not(state: "retired") : scope.where(state: "published")
+      scope.order(:id).to_a
     end
 
     def tax_policy_snapshot
@@ -271,6 +295,9 @@ module RecordingStudioBilling
         features = Feature.with_current_recording.where(product_recording_id: product.recording.id)
         features = publication_candidate ? features.where.not(state: "retired") : features.where(state: "published")
         usage_units = overage_prices.filter_map { |overage_price| overage_price.usage_unit_recording&.recordable }
+        rule_targets = resolved_product_rules.filter_map do |rule|
+          rule.target_product_recording&.recordable
+        end
         provider = product.provider_account_recording&.recordable
         overrides = if account_recording
                       FeatureOverride.with_current_recording.where(
@@ -282,7 +309,8 @@ module RecordingStudioBilling
                     end
         [
           product, billing_option, price, market, provider, *overage_prices,
-          *usage_units, *features.order(:id).to_a, *overrides
+          *usage_units, *resolved_product_rules, *rule_targets, *resolved_plan_updates,
+          *features.order(:id).to_a, *overrides
         ].compact.uniq
       end
     end
