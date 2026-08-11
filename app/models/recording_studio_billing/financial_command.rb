@@ -28,14 +28,19 @@ module RecordingStudioBilling
     private
 
     def one_execution_authority
-      return if provider_account_recording_id? ^ calculator_key?
+      provider_authority = provider_account_recording_id? && provider_adapter_key?
+      tax_authority = calculator_key? && calculator_mode?
+      return if provider_authority ^ tax_authority
 
-      errors.add(:base, "exactly one provider account or calculator is required")
+      errors.add(:base, "exactly one provider adapter or calculator is required")
     end
 
     def safe_persisted_payloads
       { normalized_result:, safe_error_details: }.each do |attribute, value|
-        SafeFinancialPayload.validate!(value)
+        SafeFinancialPayload.validate!(
+          value,
+          allow_authoritative_totals: attribute == :normalized_result && command_type == "tax_calculation"
+        )
       rescue SafeFinancialPayload::UnsafeValue => e
         errors.add(attribute, e.message)
       end
@@ -51,11 +56,13 @@ module RecordingStudioBilling
               authority["account_recording_id"] == account_recording_id &&
               authority["command_type"] == command_type &&
               authority["provider_account_recording_id"] == provider_account_recording_id &&
+              authority["provider_adapter_key"] == provider_adapter_key &&
               authority["calculator_key"] == calculator_key &&
+              authority["calculator_mode"] == calculator_mode &&
               authority["commercial_manifest_digests"].is_a?(Array) &&
               authority["commercial_manifest_digests"] == authority["commercial_manifest_digests"].uniq.sort
       errors.add(:canonical_request, "has an invalid canonical envelope") unless valid
-      SafeFinancialPayload.validate!(payload) if payload.is_a?(Hash)
+      SafeFinancialPayload.validate!(payload, allow_authoritative_totals: command_type == "tax_calculation") if payload.is_a?(Hash)
       return unless request_fingerprint.present? && envelope.is_a?(Hash)
 
       expected = CommercialManifestCanonicalizer.digest(envelope)

@@ -11,7 +11,7 @@ class RecordingStudioBillingTest < Minitest::Test
     view = File.read(File.expand_path("dummy/app/views/home/index.html.erb", __dir__))
 
     assert_includes view, 'title: "Recording Studio Billing"'
-    assert_includes view, "Stripe as the default provider"
+    assert_includes view, "explicit adapter registration"
     assert_includes view, "Commercial billing behavior intentionally starts in a later phase."
     assert_includes view, "FlatPack::Card::Component"
   end

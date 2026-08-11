@@ -1,9 +1,9 @@
 # RecordingStudioBilling
 
 `recording_studio_billing` is a Rails mountable engine that establishes the
-provider-agnostic billing graph for Recording Studio. Its default provider is
-Stripe, but phase 1 deliberately contains no provider client, charges,
-invoices, subscriptions, webhooks, or other commercial billing behavior.
+provider-neutral billing graph for Recording Studio. No provider is selected by
+default, and this release deliberately contains no provider SDK, checkout,
+charges, invoices, subscriptions, webhooks, or other payment behavior.
 
 ## Phase 1 foundation
 
@@ -99,14 +99,70 @@ never generates a replacement mutation key. Supplied commercial manifests must
 belong to the command root, be used, use the supported schema/resolver versions,
 retain a valid digest, and remain protected by the immutable-history trigger.
 
-The provider-neutral normalized mappings are: success and duplicate to
-`succeeded`; invalid request to pre-persistence rejection; provider rejection
-and provider unavailable to `failed`; timeout after possible success to
-`requires_reconciliation`; provider pending to command `requires_reconciliation`
-with normalized result status `pending`; and
-unknown provider states to `requires_reconciliation` with result status
-`unknown`. `RecordingStudioBilling::FakeFinancialAdapter` provides deterministic
-coverage of this contract without coupling the command layer to a provider SDK.
+Adapters return `AdapterResponse` using one of these normalized statuses:
+`success`, `duplicate`, `invalid`, `unauthorized`, `unsupported`, the specific
+`unsupported_*` statuses, `conflict`, `provider_unavailable`,
+`provider_rejected`, `pending`, `stale`, `rate_missing`, `rate_ambiguous`,
+`requires_review`, `failed`, or `unknown`. Unrecognized provider states remain
+`unknown`; pending and uncertain results require explicit reconciliation.
+`RecordingStudioBilling::FakeFinancialAdapter` deterministically produces every
+status, duplicate responses, and timeout-after-possible-success behavior.
+
+### Provider and tax contracts
+
+Register adapters under stable keys during host initialization. Registration
+stores only adapter objects in process memory; provider classes and credentials
+are never persisted. Credentials belong in host credentials or a secret manager.
+
+```ruby
+provider = MyProviderAdapter.new(credentials: Rails.application.credentials.billing)
+RecordingStudioBilling.register_provider(:primary, provider)
+
+calculator = MyTaxCalculator.new(credentials: Rails.application.credentials.tax)
+RecordingStudioBilling.register_tax_calculator(:external_tax, calculator)
+```
+
+Provider adapters declare `ProviderCapabilities` for operations, currencies,
+Markets, collection methods, checkout modes, tax modes, quantities,
+composition, refunds, adjustments, and safe constraints. Calling
+`adapter.capabilities.evaluate(operation: :charge, currency: :usd, market: :us)`
+returns a supported flag, stable reason, safe explanation, and constraints.
+Pass the same requirements as `capability_requirements:` to the financial
+executor to reject unsupported work before adapter invocation.
+
+Tax calculators declare `TaxCalculatorCapabilities`, including
+`external_calculation` or `provider_calculation` mode, transactions, currencies,
+Markets, inclusive/exclusive/provider-default behavior, data capabilities, and
+safe constraints. Registration never enables tax. Tax is off unless an approved
+host commercial policy explicitly enables the registered calculator:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.tax_policy = {
+    enabled: true,
+    calculator_key: :external_tax,
+    presentation: :exclusive,
+    semantic_categories: %w[standard digital]
+  }
+end
+```
+
+`calculate_tax` accepts only server-authoritative roots, Accounts, used
+Commercial Manifests, approved lines and integer minor-unit amounts, verified
+locations, semantic categories, effective time, and an idempotency key. Unknown,
+disabled, or unsupported tax returns `unsupported_tax_calculation`, never an
+assumed zero. Completed and pending results append immutable `TaxCalculation`
+history; identical retries return the existing calculation and materially
+different reuse returns `conflict`. `recover_tax_calculation` reuses the durable
+provider idempotency key and appends a linked revision rather than changing the
+pending record. Provider-calculated tax is marked authoritative, while pending
+tax is never final.
+
+Requests, responses, command attempts, and tax history pass through safe payload
+validation. Raw provider payloads, credentials, sensitive identifiers, URLs,
+payment credentials, client-authored tax authority, and tax PII are rejected.
+Tax rates, nexus, registrations, exemptions, thresholds, returns, filing,
+remittance, and compliance advice remain outside this engine.
 
 ### Upgrading from the initial commercial hierarchy
 
@@ -136,12 +192,12 @@ represented by `schema.rb`. Regenerate the dump with:
 bin/rails db:schema:dump
 ```
 
-Set the default provider in an initializer. Stripe is only a default symbol in
-this phase; adding a Stripe SDK or any provider adapter is deferred.
+Select only a provider key that the host has explicitly registered. No provider
+is selected by default. Stripe and Checkout integration are deferred.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
-  config.provider = :stripe
+  config.provider = :primary
 end
 ```
 

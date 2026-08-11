@@ -15,14 +15,17 @@ module RecordingStudioBilling
     end
 
     def initialize(root_recording:, account_recording:, command_type:, local_idempotency_key:, request:,
-                   provider_account_recording: nil, calculator_key: nil, commercial_manifest_digests: [])
+                   provider_account_recording: nil, provider_adapter_key: nil, calculator_key: nil,
+                   calculator_mode: nil, commercial_manifest_digests: [])
       @root_recording_input = root_recording
       @account_recording_input = account_recording
       @provider_account_recording_input = provider_account_recording
+      @provider_adapter_key = provider_adapter_key&.to_s
       @command_type = command_type.to_s
       @local_idempotency_key = local_idempotency_key.to_s
       @request = request
       @calculator_key = calculator_key&.to_s
+      @calculator_mode = calculator_mode&.to_s
       @commercial_manifest_digests = Array(commercial_manifest_digests).map(&:to_s).uniq.sort
     end
 
@@ -44,8 +47,9 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :account_recording_input, :calculator_key, :command_type, :commercial_manifest_digests,
-                :local_idempotency_key, :provider_account_recording_input, :request, :root_recording_input
+    attr_reader :account_recording_input, :calculator_key, :calculator_mode, :command_type, :commercial_manifest_digests,
+          :local_idempotency_key, :provider_account_recording_input, :provider_adapter_key, :request,
+          :root_recording_input
 
     def command_attributes
       validate_scalar_inputs!
@@ -63,7 +67,9 @@ module RecordingStudioBilling
         root_recording_id: root.id,
         account_recording_id: account_recording.id,
         provider_account_recording_id: provider_recording&.id,
+        provider_adapter_key:,
         calculator_key:,
+        calculator_mode:,
         canonical_request:,
         request_fingerprint: CommercialManifestCanonicalizer.digest(canonical_request),
         local_idempotency_key:,
@@ -106,6 +112,9 @@ module RecordingStudioBilling
               recording.parent_recording_id == billing_admin_recording.id &&
               recording.root_recording_id == billing_admin_recording.root_recording_id
       raise ArgumentError, "provider account must belong directly to its BillingAdmin" unless valid
+      unless recording.recordable.adapter_key == provider_adapter_key
+        raise ArgumentError, "provider account adapter key does not match the financial command"
+      end
 
       recording
     end
@@ -154,7 +163,7 @@ module RecordingStudioBilling
     end
 
     def canonical_envelope(root, account_recording, provider_recording, manifest_digests)
-      payload = SafeFinancialPayload.normalize(request)
+      payload = SafeFinancialPayload.normalize(request, allow_authoritative_totals: command_type == "tax_calculation")
 
       {
         "schema_version" => "v1",
@@ -163,7 +172,9 @@ module RecordingStudioBilling
           "account_recording_id" => account_recording.id,
           "command_type" => command_type,
           "provider_account_recording_id" => provider_recording&.id,
+          "provider_adapter_key" => provider_adapter_key,
           "calculator_key" => calculator_key,
+          "calculator_mode" => calculator_mode,
           "commercial_manifest_digests" => manifest_digests
         },
         "request" => payload
@@ -173,9 +184,11 @@ module RecordingStudioBilling
     def validate_scalar_inputs!
       raise ArgumentError, "command type is invalid" unless command_type.match?(/\A[a-z][a-z0-9_]*\z/)
       raise ArgumentError, "local idempotency key is required" if local_idempotency_key.empty?
-      return if provider_account_recording_input.present? ^ calculator_key.present?
+      provider_authority = provider_account_recording_input.present? && provider_adapter_key.present?
+      tax_authority = calculator_key.present? && calculator_mode.present?
+      return if provider_authority ^ tax_authority
 
-      raise ArgumentError, "exactly one provider account or calculator is required"
+      raise ArgumentError, "exactly one provider adapter or calculator is required"
     end
   end
 end

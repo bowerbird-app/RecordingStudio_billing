@@ -6,7 +6,8 @@ require "rake/testtask"
 DUMMY_TEST_FILES = [
   File.expand_path("test/recording_studio_v3_test.rb", __dir__),
   File.expand_path("test/commercial_delivery_test.rb", __dir__),
-  File.expand_path("test/financial_command_test.rb", __dir__)
+  File.expand_path("test/financial_command_test.rb", __dir__),
+  File.expand_path("test/provider_tax_contract_test.rb", __dir__)
 ].freeze
 DUMMY_GEMFILE = File.expand_path("test/dummy/Gemfile", __dir__)
 DUMMY_APP_ROOT = File.expand_path("test/dummy", __dir__)
@@ -15,6 +16,7 @@ ROOT_TEST_EXCLUSIONS = %w[
   test/dummy/**/*_test.rb
   test/commercial_delivery_test.rb
   test/financial_command_test.rb
+  test/provider_tax_contract_test.rb
   test/recording_studio_v3_test.rb
   test/rename_verification_test.rb
 ].freeze

@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 RecordingStudioBilling.configure do |config|
-  config.provider = :stripe
+  config.provider = :fake
 end

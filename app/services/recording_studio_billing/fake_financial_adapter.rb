@@ -5,17 +5,25 @@ module RecordingStudioBilling
     class InvalidRequest < ArgumentError; end
     class TimeoutAfterPossibleSuccess < StandardError; end
 
-    OUTCOMES = %i[
-      success duplicate invalid_request provider_rejection provider_unavailable
-      timeout_after_possible_success pending unknown_provider_state
-    ].freeze
+    OUTCOMES = (AdapterResponse::STATUSES.map(&:to_sym) + %i[
+      invalid_request provider_rejection timeout_after_possible_success unknown_provider_state
+    ]).uniq.freeze
 
     attr_reader :calls, :idempotency_keys
 
-    def initialize(outcome:)
+    attr_reader :capabilities
+
+    def initialize(outcome:, capabilities: nil)
       raise ArgumentError, "unsupported fake adapter outcome" unless OUTCOMES.include?(outcome)
 
       @outcome = outcome
+      @capabilities = capabilities || ProviderCapabilities.new(
+        operations: %w[charge checkout subscription refund adjustment tax],
+        currencies: %w[EUR GBP USD], markets: %w[CA GB US],
+        collection_methods: %w[automatic manual], checkout_modes: %w[payment setup subscription],
+        tax_modes: %w[external provider], quantities: %w[fixed adjustable],
+        composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit]
+      )
       @calls = 0
       @idempotency_keys = []
       @mutex = Mutex.new
@@ -44,28 +52,26 @@ module RecordingStudioBilling
     def response_for(value)
       case value
       when :success
-        response("succeeded", "success", provider_reference: "fake-operation")
+        response("success", provider_reference: "fake-operation")
       when :duplicate
-        response("succeeded", "duplicate", provider_reference: "fake-existing-operation")
+        response("duplicate", provider_reference: "fake-existing-operation")
       when :provider_rejection
-        response("failed", "provider_rejection", error: { "category" => "provider_rejection" })
-      when :provider_unavailable
-        response("failed", "provider_unavailable", error: { "category" => "provider_unavailable", "retryable" => true })
-      when :pending
-        response("pending", "pending", provider_reference: "fake-pending-operation")
+        response("provider_rejected", error: { "category" => "provider_rejected" })
       when :unknown_provider_state
-        response("provider_specific_state", "unknown_provider_state", provider_reference: "fake-unknown-operation")
+        response("provider_specific_state", outcome_name: "unknown_provider_state")
+      else
+        response(value.to_s)
       end
     end
 
-    def response(state, outcome_name, provider_reference: nil, error: {})
-      {
-        state:,
+    def response(status, provider_reference: nil, error: {}, outcome_name: status)
+      AdapterResponse.new(
+        status:,
         provider_reference:,
-        normalized_result: { "outcome" => outcome_name },
-        safe_error_details: error,
-        safe_metadata: { "adapter" => "fake" }
-      }
+        result: { "outcome" => outcome_name },
+        error_details: error,
+        metadata: { "adapter" => "fake" }
+      )
     end
   end
 end

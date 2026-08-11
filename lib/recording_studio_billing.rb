@@ -62,6 +62,30 @@ module RecordingStudioBilling
       RecoverFinancialCommand.call(...)
     end
 
+    def register_provider(key, adapter)
+      configuration.provider_registry.register(key, adapter)
+    end
+
+    def provider_adapter(key)
+      configuration.provider_registry.fetch(key)
+    end
+
+    def register_tax_calculator(key, calculator)
+      configuration.tax_calculator_registry.register(key, calculator)
+    end
+
+    def tax_calculator(key)
+      configuration.tax_calculator_registry.fetch(key)
+    end
+
+    def calculate_tax(...)
+      CalculateTax.call(...)
+    end
+
+    def recover_tax_calculation(...)
+      RecoverTaxCalculation.call(...)
+    end
+
     def commercial_publication_in_progress?
       ActiveRecord::Base.connection.select_value(
         "SELECT current_setting('recording_studio_billing.authorized_publication', true) = 'on'"

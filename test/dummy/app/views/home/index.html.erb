@@ -1,6 +1,6 @@
 <%= render FlatPack::PageTitle::Component.new(
   title: "Recording Studio Billing",
-  subtitle: "A provider-agnostic billing foundation with Stripe as the default provider.",
+  subtitle: "A provider-neutral billing foundation with explicit adapter registration.",
   variant: :h1
 ) %>
 
@@ -36,7 +36,7 @@
       <% card.body do %>
         <%= render FlatPack::List::Component.new(ordered: true) do %>
           <li>Configure a provider adapter when provider-specific work begins.</li>
-          <li>Use <code>RecordingStudioBilling.configure { |config| config.provider = :stripe }</code> to choose the default.</li>
+          <li>Register provider and tax adapters under stable keys in host configuration.</li>
           <li>Keep commercial entities, charges, invoices, and webhooks out of this foundation phase.</li>
           <li>Use the dummy app to validate layout, asset scanning, authentication, and Recording Studio wiring.</li>
         <% end %>

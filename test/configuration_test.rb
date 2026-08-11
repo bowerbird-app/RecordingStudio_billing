@@ -7,8 +7,8 @@ class ConfigurationTest < Minitest::Test
     @configuration = RecordingStudioBilling::Configuration.new
   end
 
-  def test_defaults_to_stripe
-    assert_equal :stripe, @configuration.provider
+  def test_has_no_default_provider
+    assert_nil @configuration.provider
   end
 
   def test_merge_accepts_a_provider_override

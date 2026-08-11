@@ -2,7 +2,7 @@ RecordingStudioBilling install complete.
 
 Next steps:
 
-1. Review config/initializers/recording_studio_billing.rb and set the provider (Stripe is the default).
+1. Review config/initializers/recording_studio_billing.rb, register a provider adapter, and select its stable key.
 2. If you use environment-specific settings, create config/recording_studio_billing.yml.
 3. Install the engine migrations with `bin/rails generate recording_studio_billing:migrations`.
 4. Apply the migrations with `bin/rails db:migrate`.

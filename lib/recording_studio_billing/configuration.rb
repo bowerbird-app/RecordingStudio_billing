@@ -3,13 +3,21 @@
 # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Lint/MissingCopEnableDirective
 
 require_relative "hooks"
+require_relative "../../app/services/recording_studio_billing/safe_financial_payload"
+require_relative "../../app/services/recording_studio_billing/provider_capabilities"
+require_relative "../../app/services/recording_studio_billing/provider_registry"
+require_relative "../../app/services/recording_studio_billing/tax_calculator_capabilities"
+require_relative "../../app/services/recording_studio_billing/tax_calculator_registry"
 
 module RecordingStudioBilling
   class Configuration
-    attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country, :commercial_authorizer
+    attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country, :commercial_authorizer,
+          :provider_registry, :tax_calculator_registry
 
     def initialize
-      @provider = :stripe
+      @provider = nil
+      @provider_registry = ProviderRegistry.new
+      @tax_calculator_registry = TaxCalculatorRegistry.new
       @hooks = Hooks.new
       @tax_policy = {
         enabled: false,
@@ -80,6 +88,12 @@ module RecordingStudioBilling
       raise ArgumentError, "commercial_authorizer must respond to call" unless value.respond_to?(:call)
 
       @commercial_authorizer = value
+    end
+
+    def reset_registries!
+      provider_registry.reset!
+      tax_calculator_registry.reset!
+      self
     end
 
     def merge!(hash)

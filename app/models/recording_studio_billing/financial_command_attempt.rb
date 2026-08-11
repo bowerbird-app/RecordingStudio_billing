@@ -18,7 +18,11 @@ module RecordingStudioBilling
         safe_error_details: safe_error_details,
         safe_metadata: safe_metadata
       }.each do |attribute, value|
-        SafeFinancialPayload.validate!(value)
+        SafeFinancialPayload.validate!(
+          value,
+          allow_authoritative_totals: attribute == :normalized_result &&
+            financial_command&.command_type == "tax_calculation"
+        )
       rescue SafeFinancialPayload::UnsafeValue => e
         errors.add(attribute, e.message)
       end
