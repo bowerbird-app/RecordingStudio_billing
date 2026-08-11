@@ -10,13 +10,6 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
-
-
---
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
@@ -55,6 +48,41 @@ BEGIN
   END IF;
   RAISE EXCEPTION 'commercial publication candidates are immutable';
 END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_checkout_attempt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_checkout_attempt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE expected_attempt_number integer;
+BEGIN
+  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'checkout attempts are append-only'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_checkout_intents intent WHERE intent.id = NEW.checkout_intent_id AND intent.financial_command_id = NEW.financial_command_id) THEN
+    RAISE EXCEPTION 'checkout attempt command must belong to its intent';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    SELECT COALESCE(MAX(attempt_number), 0) + 1 INTO expected_attempt_number FROM recording_studio_billing_checkout_attempts WHERE checkout_intent_id = NEW.checkout_intent_id;
+    IF NEW.attempt_number IS DISTINCT FROM expected_attempt_number OR NEW.state <> 'pending' OR NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'checkout attempts must begin sequentially and pending'; END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.id IS DISTINCT FROM NEW.id OR OLD.checkout_intent_id IS DISTINCT FROM NEW.checkout_intent_id OR OLD.financial_command_id IS DISTINCT FROM NEW.financial_command_id OR OLD.attempt_number IS DISTINCT FROM NEW.attempt_number OR OLD.created_at IS DISTINCT FROM NEW.created_at OR OLD.completed_at IS NOT NULL THEN RAISE EXCEPTION 'checkout attempt history is immutable'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_checkout_item(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_checkout_item() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'checkout intent items are immutable'; END;
 $$;
 
 
@@ -231,6 +259,88 @@ CREATE FUNCTION public.rs_billing_safe_financial_json(payload jsonb) RETURNS boo
     '$.** ? (@.type() == "string" && @ like_regex "^[[:space:]]*(https?|ftp)://" flag "i")'
   );
 $_$;
+
+
+--
+-- Name: rs_billing_validate_checkout_attempt_command_correlation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_checkout_attempt_command_correlation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.financial_command_attempt_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM recording_studio_billing_financial_command_attempts command_attempt
+    WHERE command_attempt.id = NEW.financial_command_attempt_id
+      AND command_attempt.financial_command_id = NEW.financial_command_id
+      AND command_attempt.attempt_number = NEW.attempt_number
+  ) THEN
+    RAISE EXCEPTION 'checkout attempt must match its financial command attempt';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_validate_checkout_authority(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_checkout_authority() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM recording_studio_recordings root WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL) THEN
+    RAISE EXCEPTION 'checkout intent root authority is invalid';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM recording_studio_recordings account_recording JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id WHERE account_recording.id = NEW.account_recording_id AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = NEW.root_recording_id AND account_recording.parent_recording_id = NEW.root_recording_id AND account_recording.trashed_at IS NULL AND account.root_recording_id = NEW.root_recording_id) THEN
+    RAISE EXCEPTION 'checkout intent account authority is invalid';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_validate_checkout_command_binding(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_checkout_command_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.financial_command_id IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM recording_studio_billing_checkout_intent_items item
+    JOIN recording_studio_billing_financial_commands command ON command.id = NEW.financial_command_id
+    WHERE item.checkout_intent_id = NEW.id
+      AND NOT (command.canonical_request -> 'authority' -> 'commercial_manifest_digests' ? item.manifest_digest)
+  ) THEN
+    RAISE EXCEPTION 'checkout command must bind every frozen manifest digest';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_validate_checkout_execution_state(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_checkout_execution_state() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.state IN ('requires_requote', 'requires_review', 'cancelled', 'expired') AND EXISTS (
+    SELECT 1 FROM recording_studio_billing_financial_commands command
+    WHERE command.id = NEW.financial_command_id AND command.state IN ('pending', 'processing')
+  ) THEN
+    RAISE EXCEPTION 'non-executable checkout intent cannot retain an executable command';
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
 
 --
@@ -586,25 +696,103 @@ CREATE TABLE public.recording_studio_billing_billing_options (
     checkout_policy character varying DEFAULT 'allowed'::character varying NOT NULL,
     tax_policy character varying DEFAULT 'exclusive'::character varying NOT NULL,
     feature_values jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_billing_options_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_checkout_policy CHECK (((checkout_policy)::text = ANY ((ARRAY['allowed'::character varying, 'required'::character varying, 'disabled'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_collection_method CHECK (((collection_method)::text = ANY ((ARRAY['automatic'::character varying, 'invoice'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_billing_options_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_checkout_policy CHECK (((checkout_policy)::text = ANY (ARRAY[('allowed'::character varying)::text, ('required'::character varying)::text, ('disabled'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_collection_method CHECK (((collection_method)::text = ANY (ARRAY[('automatic'::character varying)::text, ('invoice'::character varying)::text]))),
     CONSTRAINT rs_billing_options_default_maximum CHECK (((maximum_quantity IS NULL) OR (default_quantity <= maximum_quantity))),
     CONSTRAINT rs_billing_options_default_minimum CHECK (((minimum_quantity IS NULL) OR (default_quantity >= minimum_quantity))),
     CONSTRAINT rs_billing_options_default_quantity CHECK ((default_quantity > 0)),
-    CONSTRAINT rs_billing_options_interval CHECK (((("interval")::text = ANY ((ARRAY['day'::character varying, 'week'::character varying, 'month'::character varying, 'year'::character varying])::text[])) OR ("interval" IS NULL))),
+    CONSTRAINT rs_billing_options_interval CHECK (((("interval")::text = ANY (ARRAY[('day'::character varying)::text, ('week'::character varying)::text, ('month'::character varying)::text, ('year'::character varying)::text])) OR ("interval" IS NULL))),
     CONSTRAINT rs_billing_options_interval_count CHECK (((interval_count > 0) OR (interval_count IS NULL))),
-    CONSTRAINT rs_billing_options_lifecycle_policy CHECK (((lifecycle_policy)::text = ANY ((ARRAY['immediate'::character varying, 'scheduled'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_lifecycle_policy CHECK (((lifecycle_policy)::text = ANY (ARRAY[('immediate'::character varying)::text, ('scheduled'::character varying)::text]))),
     CONSTRAINT rs_billing_options_maximum_quantity CHECK (((maximum_quantity > 0) OR (maximum_quantity IS NULL))),
     CONSTRAINT rs_billing_options_minimum_quantity CHECK (((minimum_quantity >= 0) OR (minimum_quantity IS NULL))),
     CONSTRAINT rs_billing_options_payment_terms_days CHECK ((payment_terms_days >= 0)),
-    CONSTRAINT rs_billing_options_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_proration_policy CHECK (((proration_policy)::text = ANY ((ARRAY['none'::character varying, 'prorate'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_proration_policy CHECK (((proration_policy)::text = ANY (ARRAY[('none'::character varying)::text, ('prorate'::character varying)::text]))),
     CONSTRAINT rs_billing_options_quantity_bounds CHECK (((minimum_quantity IS NULL) OR (maximum_quantity IS NULL) OR (minimum_quantity <= maximum_quantity))),
-    CONSTRAINT rs_billing_options_quantity_mode CHECK (((quantity_mode)::text = ANY ((ARRAY['fixed'::character varying, 'adjustable'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_recurrence CHECK (((recurrence)::text = ANY ((ARRAY['one_time'::character varying, 'recurring'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_tax_policy CHECK (((tax_policy)::text = ANY ((ARRAY['exclusive'::character varying, 'inclusive'::character varying, 'automatic'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_quantity_mode CHECK (((quantity_mode)::text = ANY (ARRAY[('fixed'::character varying)::text, ('adjustable'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_recurrence CHECK (((recurrence)::text = ANY (ARRAY[('one_time'::character varying)::text, ('recurring'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_tax_policy CHECK (((tax_policy)::text = ANY (ARRAY[('exclusive'::character varying)::text, ('inclusive'::character varying)::text, ('automatic'::character varying)::text]))),
     CONSTRAINT rs_billing_options_trial_days CHECK ((trial_days >= 0))
+);
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_checkout_attempts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    checkout_intent_id uuid NOT NULL,
+    financial_command_id uuid NOT NULL,
+    attempt_number integer NOT NULL,
+    state character varying NOT NULL,
+    safe_result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    safe_error_details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    completed_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    financial_command_attempt_id uuid,
+    CONSTRAINT rs_billing_checkout_attempts_error_object CHECK ((jsonb_typeof(safe_error_details) = 'object'::text)),
+    CONSTRAINT rs_billing_checkout_attempts_lifecycle CHECK (((((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying])::text[])) AND (completed_at IS NULL)) OR (((state)::text = ANY ((ARRAY['succeeded'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'unknown'::character varying])::text[])) AND (completed_at IS NOT NULL)))),
+    CONSTRAINT rs_billing_checkout_attempts_number CHECK ((attempt_number > 0)),
+    CONSTRAINT rs_billing_checkout_attempts_result_object CHECK ((jsonb_typeof(safe_result) = 'object'::text)),
+    CONSTRAINT rs_billing_checkout_attempts_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'unknown'::character varying])::text[])))
+);
+
+
+--
+-- Name: recording_studio_billing_checkout_intent_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_checkout_intent_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    checkout_intent_id uuid NOT NULL,
+    product_recording_id uuid NOT NULL,
+    billing_option_recording_id uuid NOT NULL,
+    price_recording_id uuid NOT NULL,
+    provider_account_recording_id uuid NOT NULL,
+    market_recording_id uuid NOT NULL,
+    product_recordable_type character varying NOT NULL,
+    product_recordable_id uuid NOT NULL,
+    billing_option_recordable_type character varying NOT NULL,
+    billing_option_recordable_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    currency_code character varying NOT NULL,
+    collection_method character varying NOT NULL,
+    presentation character varying NOT NULL,
+    commercial_manifest jsonb NOT NULL,
+    manifest_digest character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_checkout_items_currency CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT rs_billing_checkout_items_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_checkout_items_manifest_object CHECK ((jsonb_typeof(commercial_manifest) = 'object'::text)),
+    CONSTRAINT rs_billing_checkout_items_presentation CHECK (((presentation)::text = ANY ((ARRAY['embedded'::character varying, 'redirect'::character varying, 'payment_link'::character varying, 'invoice'::character varying, 'no_charge'::character varying])::text[]))),
+    CONSTRAINT rs_billing_checkout_items_quantity CHECK ((quantity > 0))
+);
+
+
+--
+-- Name: recording_studio_billing_checkout_intents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_checkout_intents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    local_idempotency_key character varying NOT NULL,
+    request_fingerprint character varying NOT NULL,
+    state character varying DEFAULT 'draft'::character varying NOT NULL,
+    advisory_country_code character varying,
+    advisory_currency_code character varying,
+    presentation_preference character varying,
+    financial_command_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_checkout_intents_fingerprint CHECK (((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'validated'::character varying, 'awaiting_confirmation'::character varying, 'pending_provider'::character varying, 'requires_requote'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'requires_review'::character varying])::text[])))
 );
 
 
@@ -656,7 +844,7 @@ CREATE TABLE public.recording_studio_billing_cost_cards (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_cost_cards_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_cost_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -678,7 +866,7 @@ CREATE TABLE public.recording_studio_billing_cost_rates (
     CONSTRAINT recording_studio_billing_cost_rates_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_cost_rates_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_cost_rates_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_cost_rates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_cost_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -695,7 +883,7 @@ CREATE TABLE public.recording_studio_billing_feature_overrides (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_feature_overrides_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_feature_overrides_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -712,8 +900,8 @@ CREATE TABLE public.recording_studio_billing_features (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     definition jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_features_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_features_kind CHECK (((kind)::text = ANY ((ARRAY['boolean'::character varying, 'limit'::character varying, 'allowance'::character varying, 'variant'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_features_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_features_kind CHECK (((kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text])))
 );
 
 
@@ -735,12 +923,12 @@ CREATE TABLE public.recording_studio_billing_financial_command_attempts (
     safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT rs_billing_command_attempts_lifecycle CHECK (((((state)::text = 'processing'::text) AND (completed_at IS NULL)) OR (((state)::text = ANY ((ARRAY['succeeded'::character varying, 'failed'::character varying, 'uncertain'::character varying, 'requires_reconciliation'::character varying, 'cancelled'::character varying])::text[])) AND (completed_at IS NOT NULL)))),
+    CONSTRAINT rs_billing_command_attempts_lifecycle CHECK (((((state)::text = 'processing'::text) AND (completed_at IS NULL)) OR (((state)::text = ANY (ARRAY[('succeeded'::character varying)::text, ('failed'::character varying)::text, ('uncertain'::character varying)::text, ('requires_reconciliation'::character varying)::text, ('cancelled'::character varying)::text])) AND (completed_at IS NOT NULL)))),
     CONSTRAINT rs_billing_command_attempts_normalized_result_object CHECK ((jsonb_typeof(normalized_result) = 'object'::text)),
     CONSTRAINT rs_billing_command_attempts_positive_number CHECK ((attempt_number > 0)),
     CONSTRAINT rs_billing_command_attempts_safe_error_details_object CHECK ((jsonb_typeof(safe_error_details) = 'object'::text)),
     CONSTRAINT rs_billing_command_attempts_safe_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
-    CONSTRAINT rs_billing_command_attempts_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying, 'uncertain'::character varying, 'requires_reconciliation'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT rs_billing_command_attempts_state CHECK (((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('succeeded'::character varying)::text, ('failed'::character varying)::text, ('uncertain'::character varying)::text, ('requires_reconciliation'::character varying)::text, ('cancelled'::character varying)::text]))),
     CONSTRAINT rs_billing_command_attempts_times CHECK (((completed_at IS NULL) OR (completed_at >= started_at)))
 );
 
@@ -774,17 +962,17 @@ CREATE TABLE public.recording_studio_billing_financial_commands (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT rs_billing_commands_calculator_key CHECK (((calculator_key IS NULL) OR ((calculator_key)::text ~ '^[a-z][a-z0-9_]*$'::text))),
-    CONSTRAINT rs_billing_commands_calculator_mode CHECK (((calculator_mode IS NULL) OR ((calculator_mode)::text = ANY ((ARRAY['external_calculation'::character varying, 'provider_calculation'::character varying])::text[])))),
+    CONSTRAINT rs_billing_commands_calculator_mode CHECK (((calculator_mode IS NULL) OR ((calculator_mode)::text = ANY (ARRAY[('external_calculation'::character varying)::text, ('provider_calculation'::character varying)::text])))),
     CONSTRAINT rs_billing_commands_complete_claim CHECK ((((claim_token IS NULL) AND (claimed_at IS NULL) AND (lease_expires_at IS NULL)) OR ((claim_token IS NOT NULL) AND (claimed_at IS NOT NULL) AND (lease_expires_at > claimed_at)))),
     CONSTRAINT rs_billing_commands_error_object CHECK ((jsonb_typeof(safe_error_details) = 'object'::text)),
     CONSTRAINT rs_billing_commands_fingerprint CHECK (((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT rs_billing_commands_one_executor CHECK ((((provider_account_recording_id IS NOT NULL) AND (provider_adapter_key IS NOT NULL) AND (calculator_key IS NULL) AND (calculator_mode IS NULL)) OR ((provider_account_recording_id IS NULL) AND (provider_adapter_key IS NULL) AND (calculator_key IS NOT NULL) AND (calculator_mode IS NOT NULL)))),
     CONSTRAINT rs_billing_commands_processing_claimed CHECK ((((state)::text = 'processing'::text) = (claim_token IS NOT NULL))),
     CONSTRAINT rs_billing_commands_provider_adapter_key CHECK (((provider_adapter_key IS NULL) OR ((provider_adapter_key)::text ~ '^[a-z][a-z0-9_]*$'::text))),
-    CONSTRAINT rs_billing_commands_reconciliation_state CHECK (((reconciliation_state)::text = ANY ((ARRAY['not_required'::character varying, 'pending'::character varying, 'processing'::character varying, 'reconciled'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT rs_billing_commands_reconciliation_state CHECK (((reconciliation_state)::text = ANY (ARRAY[('not_required'::character varying)::text, ('pending'::character varying)::text, ('processing'::character varying)::text, ('reconciled'::character varying)::text, ('failed'::character varying)::text]))),
     CONSTRAINT rs_billing_commands_request_object CHECK ((jsonb_typeof(canonical_request) = 'object'::text)),
     CONSTRAINT rs_billing_commands_result_object CHECK ((jsonb_typeof(normalized_result) = 'object'::text)),
-    CONSTRAINT rs_billing_commands_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying, 'uncertain'::character varying, 'requires_reconciliation'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT rs_billing_commands_state CHECK (((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('succeeded'::character varying)::text, ('failed'::character varying)::text, ('uncertain'::character varying)::text, ('requires_reconciliation'::character varying)::text, ('cancelled'::character varying)::text]))),
     CONSTRAINT rs_billing_commands_type_format CHECK (((command_type)::text ~ '^[a-z][a-z0-9_]*$'::text))
 );
 
@@ -811,7 +999,7 @@ CREATE TABLE public.recording_studio_billing_markets (
     verification_policy character varying DEFAULT 'none'::character varying NOT NULL,
     country_groups jsonb DEFAULT '{}'::jsonb NOT NULL,
     default_currency_code character varying,
-    CONSTRAINT recording_studio_billing_markets_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_markets_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_markets_priority CHECK ((priority >= 0)),
     CONSTRAINT rs_billing_markets_specificity CHECK ((specificity >= 0))
 );
@@ -829,8 +1017,8 @@ CREATE TABLE public.recording_studio_billing_meters (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_meters_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_meters_aggregation CHECK (((aggregation)::text = ANY ((ARRAY['sum'::character varying, 'count'::character varying, 'maximum'::character varying, 'latest'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_meters_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_meters_aggregation CHECK (((aggregation)::text = ANY (ARRAY[('sum'::character varying)::text, ('count'::character varying)::text, ('maximum'::character varying)::text, ('latest'::character varying)::text])))
 );
 
 
@@ -857,9 +1045,9 @@ CREATE TABLE public.recording_studio_billing_overage_prices (
     CONSTRAINT recording_studio_billing_overage_prices_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_overage_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying])::text[])) AND (package_size IS NULL)))),
-    CONSTRAINT recording_studio_billing_overage_prices_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT recording_studio_billing_overage_prices_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_overage_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text])) AND (package_size IS NULL)))),
+    CONSTRAINT recording_studio_billing_overage_prices_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT recording_studio_billing_overage_prices_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_overage_prices_version CHECK ((version >= 1))
 );
 
@@ -875,7 +1063,7 @@ CREATE TABLE public.recording_studio_billing_plan_updates (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_plan_updates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_plan_updates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -902,9 +1090,9 @@ CREATE TABLE public.recording_studio_billing_prices (
     CONSTRAINT recording_studio_billing_prices_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_prices_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_prices_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying])::text[])) AND (package_size IS NULL)))),
-    CONSTRAINT recording_studio_billing_prices_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT recording_studio_billing_prices_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text])) AND (package_size IS NULL)))),
+    CONSTRAINT recording_studio_billing_prices_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT recording_studio_billing_prices_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_prices_version CHECK ((version >= 1))
 );
 
@@ -923,7 +1111,7 @@ CREATE TABLE public.recording_studio_billing_product_rules (
     updated_at timestamp(6) without time zone NOT NULL,
     target_product_recording_id uuid,
     conditions jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_product_rules_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_product_rules_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -940,8 +1128,8 @@ CREATE TABLE public.recording_studio_billing_products (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     feature_values jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_products_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_products_kind CHECK (((kind)::text = ANY ((ARRAY['plan'::character varying, 'addon'::character varying, 'credit_pack'::character varying, 'service'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_products_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_products_kind CHECK (((kind)::text = ANY (ARRAY[('plan'::character varying)::text, ('addon'::character varying)::text, ('credit_pack'::character varying)::text, ('service'::character varying)::text])))
 );
 
 
@@ -965,7 +1153,7 @@ CREATE TABLE public.recording_studio_billing_provider_accounts (
     supported_markets jsonb DEFAULT '[]'::jsonb NOT NULL,
     supported_currencies jsonb DEFAULT '[]'::jsonb NOT NULL,
     checkout_default boolean DEFAULT false NOT NULL,
-    CONSTRAINT recording_studio_billing_provider_accounts_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_provider_accounts_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_provider_accounts_provider_format CHECK (((adapter_key)::text ~ '^[a-z][a-z0-9_]*$'::text))
 );
 
@@ -981,7 +1169,7 @@ CREATE TABLE public.recording_studio_billing_rate_cards (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -1001,7 +1189,7 @@ CREATE TABLE public.recording_studio_billing_rates (
     conversion_numerator bigint,
     conversion_denominator bigint,
     conversion_decimal numeric(30,12),
-    CONSTRAINT recording_studio_billing_rates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_rates_conversion CHECK ((((conversion_numerator IS NOT NULL) AND (conversion_numerator > 0) AND (conversion_denominator IS NOT NULL) AND (conversion_denominator > 0) AND (conversion_decimal IS NULL)) OR ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NOT NULL) AND (conversion_decimal > (0)::numeric)))),
     CONSTRAINT rs_billing_rates_conversion_present CHECK ((NOT ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NULL))))
 );
@@ -1039,17 +1227,17 @@ CREATE TABLE public.recording_studio_billing_tax_calculations (
     safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT rs_billing_tax_arithmetic CHECK (((((behavior)::text = 'exclusive'::text) AND (total_minor = ((subtotal_minor - discount_minor) + tax_minor))) OR (((behavior)::text = ANY ((ARRAY['inclusive'::character varying, 'provider_default'::character varying])::text[])) AND (total_minor = (subtotal_minor - discount_minor)) AND (tax_minor <= total_minor)))),
-    CONSTRAINT rs_billing_tax_behavior CHECK (((behavior)::text = ANY ((ARRAY['inclusive'::character varying, 'exclusive'::character varying, 'provider_default'::character varying])::text[]))),
+    CONSTRAINT rs_billing_tax_arithmetic CHECK (((((behavior)::text = 'exclusive'::text) AND (total_minor = ((subtotal_minor - discount_minor) + tax_minor))) OR (((behavior)::text = ANY (ARRAY[('inclusive'::character varying)::text, ('provider_default'::character varying)::text])) AND (total_minor = (subtotal_minor - discount_minor)) AND (tax_minor <= total_minor)))),
+    CONSTRAINT rs_billing_tax_behavior CHECK (((behavior)::text = ANY (ARRAY[('inclusive'::character varying)::text, ('exclusive'::character varying)::text, ('provider_default'::character varying)::text]))),
     CONSTRAINT rs_billing_tax_calculator_key CHECK (((calculator_key)::text ~ '^[a-z][a-z0-9_]*$'::text)),
-    CONSTRAINT rs_billing_tax_calculator_mode CHECK (((calculator_mode)::text = ANY ((ARRAY['external_calculation'::character varying, 'provider_calculation'::character varying])::text[]))),
+    CONSTRAINT rs_billing_tax_calculator_mode CHECK (((calculator_mode)::text = ANY (ARRAY[('external_calculation'::character varying)::text, ('provider_calculation'::character varying)::text]))),
     CONSTRAINT rs_billing_tax_currency CHECK (((currency)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT rs_billing_tax_digests CHECK ((((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text) AND ((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT rs_billing_tax_discount CHECK ((discount_minor <= subtotal_minor)),
     CONSTRAINT rs_billing_tax_nonnegative CHECK (((subtotal_minor >= 0) AND (discount_minor >= 0) AND (tax_minor >= 0) AND (total_minor >= 0))),
     CONSTRAINT rs_billing_tax_revision CHECK (((revision_number > 0) AND ((revision_number = 1) = (supersedes_id IS NULL)))),
     CONSTRAINT rs_billing_tax_safe_json CHECK (((jsonb_typeof(breakdown) = 'array'::text) AND (jsonb_typeof(safe_metadata) = 'object'::text))),
-    CONSTRAINT rs_billing_tax_status CHECK (((status)::text = ANY ((ARRAY['success'::character varying, 'duplicate'::character varying, 'invalid'::character varying, 'unauthorized'::character varying, 'unsupported'::character varying, 'unsupported_tax_calculation'::character varying, 'unsupported_checkout_mode'::character varying, 'unsupported_checkout_composition'::character varying, 'unsupported_subscription_composition'::character varying, 'unsupported_market'::character varying, 'unsupported_currency'::character varying, 'charge_market_verification_unavailable'::character varying, 'conflict'::character varying, 'provider_unavailable'::character varying, 'provider_rejected'::character varying, 'pending'::character varying, 'stale'::character varying, 'rate_missing'::character varying, 'rate_ambiguous'::character varying, 'requires_review'::character varying, 'failed'::character varying, 'unknown'::character varying])::text[])))
+    CONSTRAINT rs_billing_tax_status CHECK (((status)::text = ANY (ARRAY[('success'::character varying)::text, ('duplicate'::character varying)::text, ('invalid'::character varying)::text, ('unauthorized'::character varying)::text, ('unsupported'::character varying)::text, ('unsupported_tax_calculation'::character varying)::text, ('unsupported_checkout_mode'::character varying)::text, ('unsupported_checkout_composition'::character varying)::text, ('unsupported_subscription_composition'::character varying)::text, ('unsupported_market'::character varying)::text, ('unsupported_currency'::character varying)::text, ('charge_market_verification_unavailable'::character varying)::text, ('conflict'::character varying)::text, ('provider_unavailable'::character varying)::text, ('provider_rejected'::character varying)::text, ('pending'::character varying)::text, ('stale'::character varying)::text, ('rate_missing'::character varying)::text, ('rate_ambiguous'::character varying)::text, ('requires_review'::character varying)::text, ('failed'::character varying)::text, ('unknown'::character varying)::text])))
 );
 
 
@@ -1064,7 +1252,7 @@ CREATE TABLE public.recording_studio_billing_usage_units (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_usage_units_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_usage_units_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -1204,6 +1392,30 @@ ALTER TABLE ONLY public.recording_studio_billing_billing_admins
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_options
     ADD CONSTRAINT recording_studio_billing_billing_options_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts recording_studio_billing_checkout_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
+    ADD CONSTRAINT recording_studio_billing_checkout_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_checkout_intent_items recording_studio_billing_checkout_intent_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intent_items
+    ADD CONSTRAINT recording_studio_billing_checkout_intent_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_checkout_intents recording_studio_billing_checkout_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
+    ADD CONSTRAINT recording_studio_billing_checkout_intents_pkey PRIMARY KEY (id);
 
 
 --
@@ -1415,6 +1627,13 @@ ALTER TABLE ONLY public.workspaces
 
 
 --
+-- Name: idx_on_account_recording_id_8e401e15ba; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_8e401e15ba ON public.recording_studio_billing_checkout_intents USING btree (account_recording_id);
+
+
+--
 -- Name: idx_on_account_recording_id_937d9dc223; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1464,6 +1683,20 @@ CREATE INDEX idx_on_billing_option_recording_id_f4dd8ca6e3 ON public.recording_s
 
 
 --
+-- Name: idx_on_checkout_intent_id_3bbe25d7ff; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_checkout_intent_id_3bbe25d7ff ON public.recording_studio_billing_checkout_intent_items USING btree (checkout_intent_id);
+
+
+--
+-- Name: idx_on_checkout_intent_id_3c0ba4cf49; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_checkout_intent_id_3c0ba4cf49 ON public.recording_studio_billing_checkout_attempts USING btree (checkout_intent_id);
+
+
+--
 -- Name: idx_on_commercial_manifest_id_c6e0df96a7; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1489,6 +1722,27 @@ CREATE INDEX idx_on_effective_at_7e599d09df ON public.recording_studio_billing_c
 --
 
 CREATE INDEX idx_on_feature_recording_id_6dcf40615b ON public.recording_studio_billing_feature_overrides USING btree (feature_recording_id);
+
+
+--
+-- Name: idx_on_financial_command_attempt_id_0ab43bb24a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_financial_command_attempt_id_0ab43bb24a ON public.recording_studio_billing_checkout_attempts USING btree (financial_command_attempt_id);
+
+
+--
+-- Name: idx_on_financial_command_id_144b6e8c5b; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_financial_command_id_144b6e8c5b ON public.recording_studio_billing_checkout_intents USING btree (financial_command_id);
+
+
+--
+-- Name: idx_on_financial_command_id_6b7f641e35; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_financial_command_id_6b7f641e35 ON public.recording_studio_billing_checkout_attempts USING btree (financial_command_id);
 
 
 --
@@ -1604,6 +1858,13 @@ CREATE INDEX idx_on_root_recording_id_d63849b28a ON public.recording_studio_bill
 
 
 --
+-- Name: idx_on_root_recording_id_f7b40e9183; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_f7b40e9183 ON public.recording_studio_billing_checkout_intents USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_supersedes_id_d934e98c73; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1657,6 +1918,27 @@ CREATE INDEX idx_rs_billing_account_root_history ON public.recording_studio_bill
 --
 
 CREATE INDEX idx_rs_billing_admin_root_history ON public.recording_studio_billing_billing_admins USING btree (root_recording_id);
+
+
+--
+-- Name: idx_rs_billing_checkout_attempt_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_checkout_attempt_number ON public.recording_studio_billing_checkout_attempts USING btree (checkout_intent_id, attempt_number);
+
+
+--
+-- Name: idx_rs_billing_checkout_intent_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_checkout_intent_idempotency ON public.recording_studio_billing_checkout_intents USING btree (root_recording_id, local_idempotency_key);
+
+
+--
+-- Name: idx_rs_billing_checkout_items_option; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_checkout_items_option ON public.recording_studio_billing_checkout_intent_items USING btree (checkout_intent_id, billing_option_recording_id);
 
 
 --
@@ -2094,6 +2376,48 @@ CREATE TRIGGER rs_billing_candidates_protect_history BEFORE DELETE OR UPDATE ON 
 
 
 --
+-- Name: recording_studio_billing_checkout_attempts rs_billing_checkout_attempt_command_correlation; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_attempt_command_correlation BEFORE INSERT OR UPDATE OF financial_command_attempt_id ON public.recording_studio_billing_checkout_attempts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_attempt_command_correlation();
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts rs_billing_checkout_attempt_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_attempt_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_checkout_attempts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_checkout_attempt();
+
+
+--
+-- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_authority; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_intent_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_authority();
+
+
+--
+-- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_command_binding; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_intent_command_binding BEFORE UPDATE OF financial_command_id ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_command_binding();
+
+
+--
+-- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_execution_state; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_intent_execution_state BEFORE UPDATE OF state ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_execution_state();
+
+
+--
+-- Name: recording_studio_billing_checkout_intent_items rs_billing_checkout_item_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_checkout_item_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_checkout_intent_items FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_checkout_item();
+
+
+--
 -- Name: recording_studio_billing_financial_command_attempts rs_billing_command_attempt_consistency_from_attempt; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2182,6 +2506,14 @@ ALTER TABLE ONLY public.recording_studio_recordings
 
 
 --
+-- Name: recording_studio_billing_checkout_intents fk_rails_2ec9aa65bd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
+    ADD CONSTRAINT fk_rails_2ec9aa65bd FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
+
+
+--
 -- Name: recording_studio_billing_tax_calculations fk_rails_31eed02146; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2195,6 +2527,14 @@ ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_options
     ADD CONSTRAINT fk_rails_33726a97d6 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_checkout_intent_items fk_rails_454ae16426; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intent_items
+    ADD CONSTRAINT fk_rails_454ae16426 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
 
 --
@@ -2326,6 +2666,14 @@ ALTER TABLE ONLY public.recording_studio_billing_overage_prices
 
 
 --
+-- Name: recording_studio_billing_checkout_intents fk_rails_9ad6795b60; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
+    ADD CONSTRAINT fk_rails_9ad6795b60 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_features fk_rails_9eae67f745; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2339,6 +2687,14 @@ ALTER TABLE ONLY public.recording_studio_billing_features
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT fk_rails_9eb3a96d12 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_checkout_intents fk_rails_bab17f442c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
+    ADD CONSTRAINT fk_rails_bab17f442c FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -2395,6 +2751,30 @@ ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT fk_rails_d8f5b1928a FOREIGN KEY (target_product_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts fk_rails_de6ed4bdf2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
+    ADD CONSTRAINT fk_rails_de6ed4bdf2 FOREIGN KEY (financial_command_attempt_id) REFERENCES public.recording_studio_billing_financial_command_attempts(id);
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts fk_rails_e0ac93ff05; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
+    ADD CONSTRAINT fk_rails_e0ac93ff05 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
+
+
+--
+-- Name: recording_studio_billing_checkout_attempts fk_rails_e66059dc8f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
+    ADD CONSTRAINT fk_rails_e66059dc8f FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
 
 --
@@ -2468,6 +2848,9 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260811000004'),
+('20260811000003'),
+('20260811000002'),
 ('20260811000001'),
 ('20260811000000'),
 ('20260810000011'),
@@ -2500,3 +2883,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260217072816'),
 ('20260217072815'),
 ('20250101000000');
+

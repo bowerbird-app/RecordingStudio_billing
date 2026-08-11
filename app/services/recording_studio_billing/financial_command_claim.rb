@@ -11,11 +11,12 @@ module RecordingStudioBilling
       new(...).call
     end
 
-    def initialize(command:, lease_duration: DEFAULT_LEASE, recovery: false, now: Time.current)
+    def initialize(command:, lease_duration: DEFAULT_LEASE, recovery: false, now: Time.current, after_claim: nil)
       @command = command
       @lease_duration = lease_duration
       @recovery = recovery
       @now = now
+      @after_claim = after_claim
     end
 
     def call
@@ -41,13 +42,15 @@ module RecordingStudioBilling
           state: "processing", provider_idempotency_key: command.provider_idempotency_key,
           started_at: now
         )
-        Claim.new(command:, attempt:, token:)
+        claim = Claim.new(command:, attempt:, token:)
+        after_claim&.call(claim)
+        claim
       end
     end
 
     private
 
-    attr_reader :command, :lease_duration, :now, :recovery
+    attr_reader :after_claim, :command, :lease_duration, :now, :recovery
 
     def checkout_intent_executable?
       return true unless command.command_type == "checkout"

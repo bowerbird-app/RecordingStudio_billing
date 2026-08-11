@@ -46,6 +46,174 @@ class CheckoutIntentTest < ActiveSupport::TestCase
             italy.intent.items.first.manifest_digest
   end
 
+  test "executes a pending checkout once outside a transaction and projects the command attempt" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "execute-success").intent
+    adapter = graph[:adapter]
+
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+    attempt = intent.reload.attempts.first
+    assert_equal 1, adapter.calls
+    assert_equal [false], adapter.transaction_open_during_calls
+    assert_equal "awaiting_confirmation", intent.state
+    assert_equal "succeeded", attempt.state
+    assert_predicate attempt, :completed_at?
+    assert_equal intent.financial_command.attempts.first.id, attempt.financial_command_attempt_id
+  end
+
+  test "maps generic provider outcomes without completing uncertain or rejected checkout intents" do
+    expectations = {
+      duplicate: ["awaiting_confirmation", "succeeded"],
+      invalid: ["failed", "failed"],
+      provider_rejection: ["failed", "failed"],
+      unsupported: ["requires_review", "failed"],
+      provider_unavailable: ["requires_review", "failed"],
+      pending: ["pending_provider", "unknown"],
+      unknown_provider_state: ["pending_provider", "unknown"]
+    }
+
+    expectations.each do |outcome, (intent_state, attempt_state)|
+      RecordingStudioBilling.configuration.reset_registries!
+      graph = published_catalogue
+      RecordingStudioBilling.configuration.reset_registries!
+      RecordingStudioBilling.register_provider("fake", RecordingStudioBilling::FakeFinancialAdapter.new(outcome:, capabilities: graph[:adapter].capabilities))
+      intent = create_intent(graph, country: "IT", key: "outcome-#{outcome}").intent
+
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+      assert_equal intent_state, intent.reload.state, outcome
+      assert_equal attempt_state, intent.attempts.first.reload.state, outcome
+      refute_equal "completed", intent.state, outcome
+    end
+  end
+
+  test "timeout remains reconcilable and stores no raw provider data" do
+    graph = published_catalogue
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success)
+    RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.register_provider("fake", adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success, capabilities: graph[:adapter].capabilities))
+    intent = create_intent(graph, country: "IT", key: "timeout").intent
+
+    assert_raises(RecordingStudioBilling::FakeFinancialAdapter::TimeoutAfterPossibleSuccess) do
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    end
+
+    attempt = intent.reload.attempts.first
+    assert_equal "pending_provider", intent.state
+    assert_equal "unknown", attempt.state
+    refute_match(/secret|payload|url|payment/i, [attempt[:safe_result], attempt[:safe_error_details]].to_s)
+  end
+
+  test "recovery retains the provider mutation key and appends a correlated checkout attempt" do
+    graph = published_catalogue
+    pending = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :pending)
+    RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.register_provider("fake", pending = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :pending, capabilities: graph[:adapter].capabilities))
+    intent = create_intent(graph, country: "IT", key: "recover").intent
+    command = intent.financial_command
+
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    recovered = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate)
+    RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.register_provider("fake", recovered = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate, capabilities: graph[:adapter].capabilities))
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root], recovery: true)
+
+    attempts = intent.reload.attempts.order(:attempt_number).to_a
+    assert_equal [1, 2], attempts.map(&:attempt_number)
+    assert_equal command.attempts.order(:attempt_number).pluck(:id), attempts.map(&:financial_command_attempt_id)
+    assert_equal [command.provider_idempotency_key], recovered.idempotency_keys
+    assert_equal "awaiting_confirmation", intent.state
+  end
+
+  test "concurrent checkout workers produce one provider call" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "concurrent").intent
+    ready = Queue.new
+    release = Queue.new
+    workers = 2.times.map do
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ready << true
+          release.pop
+          RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent.id, root_recording: graph[:customer_root])
+        rescue ArgumentError, ActiveRecord::Deadlocked
+          nil
+        end
+      end
+    end
+    2.times { ready.pop }
+    2.times { release << true }
+    workers.each(&:join)
+
+    assert_equal 1, graph[:adapter].calls
+    assert_equal 1, intent.financial_command.reload.attempts.count
+  end
+
+  test "non-executable, cross-root, and browser-return-shaped requests never call a provider" do
+    graph = published_catalogue
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
+    intent = create_intent(graph, country: "IT", key: "ineligible").intent
+
+    assert_raises(ActiveRecord::RecordNotFound) do
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: other_root)
+    end
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root], return_url: "https://invalid.test")
+    end
+    intent.financial_command.update!(state: "cancelled")
+    intent.update!(state: "cancelled")
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    end
+    assert_equal 0, graph[:adapter].calls
+  end
+
+  test "cancelled, expired, requote, and review intents cannot execute or recover" do
+    %w[cancelled expired requires_requote requires_review].each do |state|
+      RecordingStudioBilling.configuration.reset_registries!
+      graph = published_catalogue
+      intent = create_intent(graph, country: "IT", key: "blocked-#{state}").intent
+      intent.financial_command.update!(state: "cancelled")
+      intent.update!(state:)
+
+      [false, true].each do |recovery|
+        assert_raises(ArgumentError) do
+          RecordingStudioBilling.execute_checkout_intent(
+            checkout_intent: intent, root_recording: graph[:customer_root], recovery:
+          )
+        end
+      end
+      assert_equal 0, graph[:adapter].calls
+    end
+  end
+
+  test "checkout attempt payloads reject provider data, credentials, URLs, and payment fields" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "unsafe-attempt").intent
+
+    %w[raw_provider_payload provider_url api_key client_secret card_number payment_nonce].each do |unsafe_key|
+      attempt = intent.attempts.first.dup
+      attempt.safe_result = { unsafe_key => "https://invalid.test" }
+      refute attempt.valid?, unsafe_key
+      assert_includes attempt.errors[:safe_result], "must not contain credentials, signatures, or raw provider data"
+    end
+  end
+
+  test "final market requote prevents checkout execution and generic executor stays Stripe-neutral" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "requote-execution").intent
+    germany = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :verified_account)
+    RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent:, account_country: germany)
+
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    end
+    assert_equal 0, graph[:adapter].calls
+    source = File.read(Rails.root.join("../../app/services/recording_studio_billing/execute_checkout_intent.rb"))
+    refute_match(/Stripe::|stripe_credential|:stripe/, source)
+  end
+
   test "conflicting key, client financial fields, and final market changes require a fresh complete quote" do
     graph = published_catalogue
     created = create_intent(graph, country: "IT", key: "conflict-key")

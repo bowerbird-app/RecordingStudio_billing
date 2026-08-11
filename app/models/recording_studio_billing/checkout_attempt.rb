@@ -6,6 +6,7 @@ module RecordingStudioBilling
 
     belongs_to :checkout_intent, inverse_of: :attempts
     belongs_to :financial_command, inverse_of: false
+    belongs_to :financial_command_attempt, optional: true, inverse_of: false
     validates :attempt_number, numericality: { only_integer: true, greater_than: 0 }
     validates :state, inclusion: { in: STATES }
     validate :safe_result

@@ -9,7 +9,7 @@ module RecordingStudioBilling
       invalid_request provider_rejection timeout_after_possible_success unknown_provider_state
     ]).uniq.freeze
 
-    attr_reader :calls, :idempotency_keys
+    attr_reader :calls, :idempotency_keys, :transaction_open_during_calls
 
     attr_reader :capabilities
 
@@ -26,6 +26,7 @@ module RecordingStudioBilling
       )
       @calls = 0
       @idempotency_keys = []
+      @transaction_open_during_calls = []
       @mutex = Mutex.new
     end
 
@@ -38,6 +39,7 @@ module RecordingStudioBilling
       @mutex.synchronize do
         @calls += 1
         @idempotency_keys << idempotency_key
+        @transaction_open_during_calls << ActiveRecord::Base.connection.transaction_open?
       end
       raise ArgumentError, "adapter received a noncanonical request" unless request == command.canonical_request
       raise TimeoutAfterPossibleSuccess, "provider outcome is uncertain" if outcome == :timeout_after_possible_success
