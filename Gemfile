@@ -17,6 +17,7 @@ gem "sprockets-rails"
 
 group :development, :test do
   gem "debug"
+  gem "pg"
   gem "simplecov", require: false
 end
 

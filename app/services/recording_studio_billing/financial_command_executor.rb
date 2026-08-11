@@ -4,8 +4,26 @@ module RecordingStudioBilling
   class FinancialCommandExecutor
     class WorkerCrash < Exception; end
 
-    def self.call(adapter:, lease_duration: FinancialCommandClaim::DEFAULT_LEASE, after_adapter_call: nil,
-            **command_attributes)
+    def self.call(provider_key:, lease_duration: FinancialCommandClaim::DEFAULT_LEASE, after_adapter_call: nil,
+                  capability_requirements: {}, **command_attributes)
+      adapter_key = provider_key.to_s
+      adapter = RecordingStudioBilling.configuration.provider_registry.fetch(adapter_key)
+      call_with_adapter(
+        adapter:, lease_duration:, after_adapter_call:, capability_requirements:,
+        **command_attributes.merge(provider_adapter_key: adapter_key)
+      )
+    end
+
+    def self.call_tax(calculator_key:, lease_duration: FinancialCommandClaim::DEFAULT_LEASE, **command_attributes)
+      calculator = RecordingStudioBilling.configuration.tax_calculator_registry.fetch(calculator_key)
+      call_with_adapter(
+        adapter: CalculateTax::ValidatingAdapter.new(calculator), lease_duration:,
+        **command_attributes.merge(calculator_key: calculator_key.to_s)
+      )
+    end
+
+    def self.call_with_adapter(adapter:, lease_duration:, after_adapter_call: nil, capability_requirements: {},
+                               **command_attributes)
       reject_ambient_transaction!
       adapter.validate!(request: command_attributes.fetch(:request)) if adapter.respond_to?(:validate!)
       creation = nil
@@ -16,17 +34,34 @@ module RecordingStudioBilling
       end
       return creation unless creation.created?
 
-      new(command: creation.command, adapter:, after_adapter_call:).execute(claim:)
+      new(command: creation.command, adapter:, after_adapter_call:, capability_requirements:).execute(claim:)
       creation
     end
 
-    def self.execute(command:, adapter:, after_adapter_call: nil)
+    def self.execute(command:, provider_key:, after_adapter_call: nil, capability_requirements: {})
+      adapter_key = provider_key.to_s
+      unless command.provider_adapter_key == adapter_key
+        raise ArgumentError, "provider adapter key does not match the financial command"
+      end
+
+      adapter = RecordingStudioBilling.configuration.provider_registry.fetch(adapter_key)
+      execute_with_adapter(command:, adapter:, after_adapter_call:, capability_requirements:)
+    end
+
+    def self.execute_tax(command:)
+      calculator = RecordingStudioBilling.configuration.tax_calculator_registry.fetch(command.calculator_key)
+      execute_with_adapter(command:, adapter: CalculateTax::ValidatingAdapter.new(calculator))
+    end
+
+    def self.execute_with_adapter(command:, adapter:, after_adapter_call: nil, capability_requirements: {})
       reject_ambient_transaction!
       claim = FinancialCommandClaim.call(command:)
       return command unless claim
 
-      new(command:, adapter:, after_adapter_call:).execute(claim:)
+      new(command:, adapter:, after_adapter_call:, capability_requirements:).execute(claim:)
     end
+
+    private_class_method :call_with_adapter, :execute_with_adapter
 
     def self.reject_ambient_transaction!
       return unless ActiveRecord::Base.connection.transaction_open?
@@ -34,10 +69,11 @@ module RecordingStudioBilling
       raise ArgumentError, "financial commands cannot execute inside an open database transaction"
     end
 
-    def initialize(command:, adapter:, after_adapter_call: nil)
+    def initialize(command:, adapter:, after_adapter_call: nil, capability_requirements: {})
       @command = command
       @adapter = adapter
       @after_adapter_call = after_adapter_call
+      @capability_requirements = capability_requirements
     end
 
     def execute(claim:)
@@ -46,11 +82,11 @@ module RecordingStudioBilling
         command.lock!
         verify_claim!(claim)
       end
-      response = adapter.call(
-        command: command,
-        request: command.canonical_request,
-        idempotency_key: command.provider_idempotency_key
-      )
+      response = capability_response || adapter.call(
+          command: command,
+          request: command.canonical_request,
+          idempotency_key: command.provider_idempotency_key
+        )
       after_adapter_call&.call(command, response)
       persist_response!(claim, response)
       command.reload
@@ -61,7 +97,24 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :adapter, :after_adapter_call, :command
+    attr_reader :adapter, :after_adapter_call, :capability_requirements, :command
+
+    def capability_response
+      return if capability_requirements.empty?
+
+      evaluation = adapter.capabilities.evaluate(**capability_requirements)
+      return if evaluation.supported?
+
+      AdapterResponse.new(
+        status: normalized_unsupported_status(evaluation.reason),
+        result: { "reason" => evaluation.reason, "explanation" => evaluation.explanation,
+                  "constraints" => evaluation.constraints }
+      )
+    end
+
+    def normalized_unsupported_status(reason)
+      AdapterResponse::STATUSES.include?(reason) ? reason : "unsupported"
+    end
 
     def persist_response!(claim, response)
       normalized = normalize_response(response)
@@ -89,6 +142,8 @@ module RecordingStudioBilling
     end
 
     def normalize_response(response)
+      return normalize_adapter_response(response) if response.is_a?(AdapterResponse)
+
       raise ArgumentError, "adapter response must be an object" unless response.is_a?(Hash)
 
       response = response.transform_keys(&:to_sym)
@@ -102,9 +157,7 @@ module RecordingStudioBilling
       result = SafeFinancialPayload.normalize(response.fetch(:normalized_result, {}))
       result["status"] = uncertain ? "unknown" : requested_state
       provider_reference = response[:provider_reference]
-      unless provider_reference.nil? || (provider_reference.is_a?(String) && provider_reference.bytesize <= 512)
-        raise ArgumentError, "provider reference must be a bounded string"
-      end
+      provider_reference = SafeFinancialPayload.normalize_reference(provider_reference, label: "provider reference") unless provider_reference.nil?
 
       {
         command_state:,
@@ -115,6 +168,32 @@ module RecordingStudioBilling
         uncertain_outcome: uncertain,
         provider_reference:,
         reconciliation_state: uncertain || pending || requested_state == "requires_reconciliation" ? "pending" : "not_required"
+      }
+    end
+
+    def normalize_adapter_response(response)
+      status = response.status
+      uncertain = response.uncertain_outcome || %w[pending unknown].include?(status)
+      successful = %w[success duplicate].include?(status)
+      requires_reconciliation = uncertain || status == "requires_review"
+      command_state = if requires_reconciliation
+                        "requires_reconciliation"
+                      elsif successful
+                        "succeeded"
+                      else
+                        "failed"
+                      end
+      attempt_state = status == "pending" ? "requires_reconciliation" : (uncertain ? "uncertain" : command_state)
+
+      {
+        command_state:,
+        attempt_state:,
+        result: response.result,
+        error_details: response.error_details,
+        metadata: response.metadata,
+        uncertain_outcome: uncertain,
+        provider_reference: response.provider_reference,
+        reconciliation_state: requires_reconciliation ? "pending" : "not_required"
       }
     end
 

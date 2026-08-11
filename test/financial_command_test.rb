@@ -16,6 +16,10 @@ class FinancialCommandTest < ActiveSupport::TestCase
       @response = response
     end
 
+    def capabilities
+      @capabilities ||= RecordingStudioBilling::ProviderCapabilities.new
+    end
+
     def validate!(request:)
       @validated_request = request
     end
@@ -38,14 +42,25 @@ class FinancialCommandTest < ActiveSupport::TestCase
       @calls = 0
     end
 
+    def capabilities
+      @capabilities ||= RecordingStudioBilling::ProviderCapabilities.new
+    end
+
     def call(**)
       @calls += 1
       raise RecordingStudioBilling::FinancialCommandExecutor::WorkerCrash, "worker disappeared"
     end
   end
 
-  setup { clear_financial_data! }
-  teardown { clear_financial_data! }
+  setup do
+    clear_financial_data!
+    RecordingStudioBilling.configuration.reset_registries!
+  end
+
+  teardown do
+    clear_financial_data!
+    RecordingStudioBilling.configuration.reset_registries!
+  end
 
   test "creation normalizes descendants and returns existing or conflict by canonical material authority" do
     root, account = account_authority
@@ -92,7 +107,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
     result = RecordingStudioBilling.create_financial_command(
       **command_attributes(root: customer_root, account:, request: { amount_minor: 100 })
-        .except(:calculator_key).merge(provider_account_recording: provider_recording)
+        .except(:calculator_key, :calculator_mode).merge(provider_account_recording: provider_recording, provider_adapter_key: "test")
     )
 
     assert result.created?
@@ -204,8 +219,9 @@ class FinancialCommandTest < ActiveSupport::TestCase
       }
     )
 
+    key = register_provider(adapter)
     result = RecordingStudioBilling::FinancialCommandExecutor.call(
-      adapter:, **command_attributes(root:, account:, request: { amount_minor: 750 })
+      provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 750 })
     )
     command = result.command.reload
     attempt = command.attempts.first
@@ -220,12 +236,44 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_predicate attempt, :completed_at?
   end
 
+  test "adapter injection helpers are private implementation details" do
+    refute_respond_to RecordingStudioBilling::FinancialCommandExecutor, :call_with_adapter
+    refute_respond_to RecordingStudioBilling::FinancialCommandExecutor, :execute_with_adapter
+    refute_respond_to RecordingStudioBilling::RecoverFinancialCommand, :recover_with_adapter
+  end
+
+  test "hash responses and database updates reject URL references" do
+    root, account = account_authority
+    adapter = InspectingAdapter.new(
+      response: { state: "succeeded", provider_reference: "https://example.test/reference", normalized_result: {} }
+    )
+    key = register_provider(adapter)
+
+    assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
+      RecordingStudioBilling::FinancialCommandExecutor.call(
+        provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 750 })
+      )
+    end
+
+    command = pending_command
+    reference = "https://example.test/reference"
+    assert_raises(ActiveRecord::StatementInvalid) { command.update_columns(provider_reference: reference) }
+    connection = ActiveRecord::Base.connection
+    assert_raises(ActiveRecord::StatementInvalid) do
+      connection.execute(
+        "UPDATE #{RecordingStudioBilling::FinancialCommand.table_name} " \
+        "SET provider_reference = #{connection.quote(reference)} WHERE id = #{connection.quote(command.id)}"
+      )
+    end
+  end
+
   test "two concurrent executors claim once and call the adapter once" do
     root, account = account_authority
     command = RecordingStudioBilling.create_financial_command(
-      **command_attributes(root:, account:, request: { approved_amount_minor: 750 })
+      **provider_command_attributes(root:, account:, request: { approved_amount_minor: 750 })
     ).command
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    register_provider(adapter)
     ready = Queue.new
     release = Queue.new
 
@@ -235,7 +283,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
           ready << true
           release.pop
           RecordingStudioBilling::FinancialCommandExecutor.execute(
-            command: RecordingStudioBilling::FinancialCommand.find(command.id), adapter:
+            command: RecordingStudioBilling::FinancialCommand.find(command.id), provider_key: "test"
           )
         end
       end
@@ -266,9 +314,10 @@ class FinancialCommandTest < ActiveSupport::TestCase
   test "crash during external call preserves the live lease and open attempt" do
     command = pending_command
     adapter = CrashingAdapter.new
+    register_provider(adapter)
 
     assert_raises(RecordingStudioBilling::FinancialCommandExecutor::WorkerCrash) do
-      RecordingStudioBilling::FinancialCommandExecutor.execute(command:, adapter:)
+      RecordingStudioBilling::FinancialCommandExecutor.execute(command:, provider_key: "test")
     end
 
     assert_equal 1, adapter.calls
@@ -279,10 +328,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
   test "crash after provider success but before persistence remains recoverable" do
     command = pending_command
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    register_provider(adapter)
 
     assert_raises(RecordingStudioBilling::FinancialCommandExecutor::WorkerCrash) do
       RecordingStudioBilling::FinancialCommandExecutor.execute(
-        command:, adapter:,
+        command:, provider_key: "test",
         after_adapter_call: ->(*) { raise RecordingStudioBilling::FinancialCommandExecutor::WorkerCrash }
       )
     end
@@ -296,10 +346,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
   test "a provider result cannot persist after its lease expires" do
     command = pending_command
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    register_provider(adapter)
 
     assert_raises(ArgumentError) do
       RecordingStudioBilling::FinancialCommandExecutor.execute(
-        command:, adapter:,
+        command:, provider_key: "test",
         after_adapter_call: lambda do |claimed_command, _response|
           RecordingStudioBilling.expire_financial_command_claims(now: claimed_command.lease_expires_at + 1.second)
         end
@@ -318,8 +369,9 @@ class FinancialCommandTest < ActiveSupport::TestCase
     first_claim = RecordingStudioBilling::FinancialCommandClaim.call(command:, lease_duration: 1.minute, now:)
     RecordingStudioBilling.expire_financial_command_claims(now: now + 2.minutes)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate)
+    register_provider(adapter)
 
-    RecordingStudioBilling.recover_financial_command(command: command.reload, adapter:)
+    RecordingStudioBilling.recover_financial_command(command: command.reload, provider_key: "test")
 
     attempts = command.attempts.order(:attempt_number).to_a
     assert_equal [1, 2], attempts.map(&:attempt_number)
@@ -334,7 +386,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
     command = execute_new_command(adapter:).command.reload
     original_key = command.provider_idempotency_key
 
-    RecordingStudioBilling::FinancialCommandExecutor.execute(command:, adapter:)
+    RecordingStudioBilling::FinancialCommandExecutor.execute(command:, provider_key: "test")
 
     assert_equal 1, adapter.calls
     assert_equal 1, command.attempts.count
@@ -342,7 +394,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_equal "pending", command.normalized_result["status"]
 
     recovery_adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate)
-    RecordingStudioBilling.recover_financial_command(command:, adapter: recovery_adapter)
+    register_provider(recovery_adapter)
+    RecordingStudioBilling.recover_financial_command(command:, provider_key: "test")
 
     assert_equal [1, 2], command.attempts.order(:attempt_number).pluck(:attempt_number)
     assert_equal [original_key, original_key], command.attempts.order(:attempt_number).pluck(:provider_idempotency_key)
@@ -355,9 +408,10 @@ class FinancialCommandTest < ActiveSupport::TestCase
     RecordingStudioBilling::FinancialCommandClaim.call(command: unrelated, lease_duration: 1.minute, now:)
     target = pending_command
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    register_provider(adapter)
 
     assert_raises(ArgumentError) do
-      RecordingStudioBilling.recover_financial_command(command: target, adapter:)
+      RecordingStudioBilling.recover_financial_command(command: target, provider_key: "test")
     end
 
     assert_equal "processing", unrelated.reload.state
@@ -373,10 +427,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
     RecordingStudioBilling::FinancialCommandClaim.call(command:, lease_duration: 1.minute, now:)
     RecordingStudioBilling.expire_financial_command_claims(now: now + 2.minutes)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate)
+    register_provider(adapter)
 
     RecordingStudioBilling::FinancialCommand.transaction do
       assert_raises(ArgumentError) do
-        RecordingStudioBilling.recover_financial_command(command: command.reload, adapter:)
+        RecordingStudioBilling.recover_financial_command(command: command.reload, provider_key: "test")
       end
     end
 
@@ -386,10 +441,10 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
   test "fake adapter outcomes map deterministically including pending and unknown" do
     expectations = {
-      success: ["succeeded", "succeeded", "success"],
-      duplicate: ["succeeded", "succeeded", "duplicate"],
-      provider_rejection: ["failed", "failed", "provider_rejection"],
-      provider_unavailable: ["failed", "failed", "provider_unavailable"],
+      success: ["succeeded", "success", "success"],
+      duplicate: ["succeeded", "duplicate", "duplicate"],
+      provider_rejection: ["failed", "provider_rejected", "provider_rejected"],
+      provider_unavailable: ["failed", "provider_unavailable", "provider_unavailable"],
       pending: ["requires_reconciliation", "pending", "pending"],
       unknown_provider_state: ["requires_reconciliation", "unknown", "unknown_provider_state"]
     }
@@ -424,8 +479,9 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_no_difference -> { RecordingStudioBilling::FinancialCommand.count } do
       RecordingStudioBilling::FinancialCommand.transaction do
         error = assert_raises(ArgumentError) do
+          key = register_provider(adapter)
           RecordingStudioBilling.execute_financial_command(
-            adapter:, **command_attributes(root:, account:, request: { amount_minor: 700 })
+            provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 700 })
           )
         end
         assert_match(/open database transaction/, error.message)
@@ -438,8 +494,9 @@ class FinancialCommandTest < ActiveSupport::TestCase
     root, account = account_authority
     adapter = InspectingAdapter.new(response: { state: "provider_reviewing", normalized_result: { status: "provider_reviewing" } })
 
+    key = register_provider(adapter)
     result = RecordingStudioBilling::FinancialCommandExecutor.call(
-      adapter:, **command_attributes(root:, account:, request: { amount_minor: 800 })
+      provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 800 })
     )
     command = result.command.reload
 
@@ -454,8 +511,9 @@ class FinancialCommandTest < ActiveSupport::TestCase
     adapter = InspectingAdapter.new(response: RuntimeError.new("secret response body"))
 
     assert_raises(RuntimeError) do
+      key = register_provider(adapter)
       RecordingStudioBilling::FinancialCommandExecutor.call(
-        adapter:, **command_attributes(root:, account:, request: { amount_minor: 900 })
+        provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 900 })
       )
     end
     command = RecordingStudioBilling::FinancialCommand.last
@@ -471,7 +529,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
   test "attempt payloads reject credentials and completed history is database protected" do
     root, account = account_authority
     command = RecordingStudioBilling::CreateFinancialCommand.call(
-      **command_attributes(root:, account:, request: { amount_minor: 1_000 })
+      **provider_command_attributes(root:, account:, request: { amount_minor: 1_000 })
     ).command
     unsafe_attempt = command.attempts.new(
       attempt_number: 1, state: "processing", provider_idempotency_key: command.provider_idempotency_key,
@@ -482,7 +540,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_includes unsafe_attempt.errors[:safe_metadata], "must not contain credentials, signatures, or raw provider data"
 
     adapter = InspectingAdapter.new(response: { state: "succeeded", normalized_result: { status: "succeeded" } })
-    RecordingStudioBilling::FinancialCommandExecutor.execute(command:, adapter:)
+    register_provider(adapter)
+    RecordingStudioBilling::FinancialCommandExecutor.execute(command:, provider_key: "test")
     completed_attempt = command.attempts.first
     assert_raises(ActiveRecord::StatementInvalid) { completed_attempt.update_column(:state, "failed") }
     assert_raises(ActiveRecord::StatementInvalid) do
@@ -629,6 +688,17 @@ class FinancialCommandTest < ActiveSupport::TestCase
     refute_match(/stripe/i, task_source)
   end
 
+  test "fresh-install command schema declares authority columns and constraints" do
+    connection = ActiveRecord::Base.connection
+    columns = connection.columns(RecordingStudioBilling::FinancialCommand.table_name).map(&:name)
+    constraints = connection.check_constraints(RecordingStudioBilling::FinancialCommand.table_name).map(&:name)
+
+    assert_includes columns, "provider_adapter_key"
+    assert_includes columns, "calculator_mode"
+    assert_includes constraints, "rs_billing_commands_provider_adapter_key"
+    assert_includes constraints, "rs_billing_commands_calculator_mode"
+  end
+
   private
 
   def account_authority
@@ -643,17 +713,18 @@ class FinancialCommandTest < ActiveSupport::TestCase
       account_recording: account.recording,
       command_type: "capture_funds",
       calculator_key: "calculator_v1",
+      calculator_mode: "external_calculation",
       local_idempotency_key: "local-#{SecureRandom.uuid}",
       request:
     }
   end
 
-  def provider_authority
+  def provider_authority(adapter_key: "test")
     root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider root #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: root, key: "admin_#{SecureRandom.hex(4)}")
     provider = RecordingStudioBilling::ProviderAccount.new(
       billing_admin_recording: admin.recording, key: "provider_#{SecureRandom.hex(4)}",
-      adapter_key: "test", name: "Test provider", environment: "test", configuration: {},
+      adapter_key:, name: "Test provider", environment: "test", configuration: {},
       capabilities: [], supported_markets: [], supported_currencies: []
     )
     RecordingStudio.record!(
@@ -664,15 +735,28 @@ class FinancialCommandTest < ActiveSupport::TestCase
   def pending_command
     root, account = account_authority
     RecordingStudioBilling.create_financial_command(
-      **command_attributes(root:, account:, request: { approved_amount_minor: 500 })
+      **provider_command_attributes(root:, account:, request: { approved_amount_minor: 500 })
     ).command
   end
 
   def execute_new_command(adapter:)
     root, account = account_authority
+    key = register_provider(adapter)
     RecordingStudioBilling.execute_financial_command(
-      adapter:, **command_attributes(root:, account:, request: { approved_amount_minor: 500 })
+      provider_key: key, **provider_command_attributes(root:, account:, request: { approved_amount_minor: 500 })
     )
+  end
+
+  def provider_command_attributes(root:, account:, request:, adapter_key: "test")
+    command_attributes(root:, account:, request:).except(:calculator_key, :calculator_mode).merge(
+      provider_account_recording: provider_authority(adapter_key:), provider_adapter_key: adapter_key
+    )
+  end
+
+  def register_provider(adapter, key: "test")
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider(key, adapter)
+    key
   end
 
   def create_manifest(root:, used:)

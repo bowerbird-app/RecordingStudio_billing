@@ -14,7 +14,9 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
                                        foreign_key: { to_table: :recording_studio_recordings }
       t.references :provider_account_recording, type: :uuid,
                                                 foreign_key: { to_table: :recording_studio_recordings }
+      t.string :provider_adapter_key
       t.string :calculator_key
+      t.string :calculator_mode
       t.jsonb :canonical_request, null: false
       t.string :request_fingerprint, null: false
       t.string :local_idempotency_key, null: false
@@ -60,8 +62,20 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
     add_check_constraint :recording_studio_billing_financial_commands,
                          "jsonb_typeof(safe_error_details) = 'object'", name: "rs_billing_commands_error_object"
     add_check_constraint :recording_studio_billing_financial_commands,
-                         "(provider_account_recording_id IS NULL) <> (calculator_key IS NULL)",
+                         "((provider_account_recording_id IS NOT NULL AND provider_adapter_key IS NOT NULL " \
+                         "AND calculator_key IS NULL AND calculator_mode IS NULL) OR " \
+                         "(provider_account_recording_id IS NULL AND provider_adapter_key IS NULL " \
+                         "AND calculator_key IS NOT NULL AND calculator_mode IS NOT NULL))",
                          name: "rs_billing_commands_one_executor"
+    add_check_constraint :recording_studio_billing_financial_commands,
+                         "provider_adapter_key IS NULL OR provider_adapter_key ~ '^[a-z][a-z0-9_]*$'",
+                         name: "rs_billing_commands_provider_adapter_key"
+    add_check_constraint :recording_studio_billing_financial_commands,
+                         "calculator_key IS NULL OR calculator_key ~ '^[a-z][a-z0-9_]*$'",
+                         name: "rs_billing_commands_calculator_key"
+    add_check_constraint :recording_studio_billing_financial_commands,
+                         "calculator_mode IS NULL OR calculator_mode IN ('external_calculation', 'provider_calculation')",
+                         name: "rs_billing_commands_calculator_mode"
     add_check_constraint :recording_studio_billing_financial_commands,
                "(claim_token IS NULL AND claimed_at IS NULL AND lease_expires_at IS NULL) OR " \
                "(claim_token IS NOT NULL AND claimed_at IS NOT NULL AND lease_expires_at > claimed_at)",
@@ -111,6 +125,7 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
 
     reversible do |direction|
       direction.up do
+        create_safe_payload_function
         validate_command_authority
         protect_command_history
         protect_attempt_history
@@ -121,16 +136,39 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
         execute "DROP FUNCTION IF EXISTS rs_billing_protect_financial_command() CASCADE"
         execute "DROP FUNCTION IF EXISTS rs_billing_validate_command_authority() CASCADE"
         execute "DROP FUNCTION IF EXISTS rs_billing_validate_command_attempt_consistency() CASCADE"
+        execute "DROP FUNCTION IF EXISTS rs_billing_safe_financial_json(jsonb) CASCADE"
       end
     end
   end
 
   private
 
+  def create_safe_payload_function
+    execute <<~SQL
+      CREATE FUNCTION rs_billing_safe_financial_json(payload jsonb) RETURNS boolean AS $$
+        SELECT NOT EXISTS (
+          SELECT 1
+          FROM jsonb_path_query(payload, '$.** ? (@.type() == "object")') AS object(value)
+          CROSS JOIN LATERAL jsonb_object_keys(object.value) AS key(name)
+          WHERE key.name ~* '(authorization|credential|password|secret|token|api[_-]?key|private[_-]?key|signature|card[_-]?(number|cvc|cvv)|payment[_-]?(nonce|credential)|bank[_-]?account|routing[_-]?number|provider[_-]?(url|uri|id|identifier|account[_-]?id|customer[_-]?id|response|payload|body)|raw[_-]?(provider|response|payload|body)|(^|[_-])(tax|vat)[_-]?(id|identifier|number)|(^|[_-])(email|phone|address|postal[_-]?code|ip[_-]?address)|(^|[_-])(url|uri))$'
+        ) AND NOT jsonb_path_exists(
+          payload,
+          '$.** ? (@.type() == "string" && @ like_regex "^[[:space:]]*(https?|ftp)://" flag "i")'
+        );
+      $$ LANGUAGE sql IMMUTABLE;
+    SQL
+  end
+
   def validate_command_authority
     execute <<~SQL
       CREATE FUNCTION rs_billing_validate_command_authority() RETURNS trigger AS $$
       BEGIN
+        IF NOT rs_billing_safe_financial_json(NEW.canonical_request -> 'request')
+           OR NOT rs_billing_safe_financial_json(NEW.normalized_result)
+           OR NOT rs_billing_safe_financial_json(NEW.safe_error_details)
+           OR NEW.provider_reference ~* '^[[:space:]]*(https?|ftp)://' THEN
+          RAISE EXCEPTION 'financial command contains unsafe persisted data';
+        END IF;
         IF TG_OP = 'UPDATE' AND NOT (NEW.state = 'processing' AND OLD.state IS DISTINCT FROM NEW.state) THEN
           RETURN NEW;
         END IF;
@@ -171,6 +209,7 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
             AND provider_recording.parent_recording_id = admin_recording.id
             AND provider_recording.root_recording_id = admin_recording.root_recording_id
             AND provider_recording.trashed_at IS NULL
+            AND provider.adapter_key = NEW.provider_adapter_key
             AND admin_recording.recordable_type = 'RecordingStudioBilling::BillingAdmin'
             AND admin_recording.trashed_at IS NULL
             AND admin.root_recording_id = admin_recording.root_recording_id
@@ -200,7 +239,9 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
            OR OLD.root_recording_id IS DISTINCT FROM NEW.root_recording_id
            OR OLD.account_recording_id IS DISTINCT FROM NEW.account_recording_id
            OR OLD.provider_account_recording_id IS DISTINCT FROM NEW.provider_account_recording_id
+           OR OLD.provider_adapter_key IS DISTINCT FROM NEW.provider_adapter_key
            OR OLD.calculator_key IS DISTINCT FROM NEW.calculator_key
+           OR OLD.calculator_mode IS DISTINCT FROM NEW.calculator_mode
            OR OLD.canonical_request IS DISTINCT FROM NEW.canonical_request
            OR OLD.request_fingerprint IS DISTINCT FROM NEW.request_fingerprint
            OR OLD.local_idempotency_key IS DISTINCT FROM NEW.local_idempotency_key
@@ -231,6 +272,11 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
         WHERE id = NEW.financial_command_id;
         IF NEW.provider_idempotency_key IS DISTINCT FROM command_idempotency_key THEN
           RAISE EXCEPTION 'attempt idempotency key must match its financial command';
+        END IF;
+        IF NOT rs_billing_safe_financial_json(NEW.normalized_result)
+           OR NOT rs_billing_safe_financial_json(NEW.safe_error_details)
+           OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
+          RAISE EXCEPTION 'financial command attempt contains unsafe persisted data';
         END IF;
         IF TG_OP = 'INSERT' THEN
           IF NEW.state <> 'processing' OR NEW.completed_at IS NOT NULL THEN
