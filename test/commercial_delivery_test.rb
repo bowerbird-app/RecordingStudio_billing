@@ -291,6 +291,97 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_includes direct_publication.errors[:state], "may only change through an authorized commercial publication"
   end
 
+  test "reflection and isolated execution state cannot authorize publication" do
+    graph = commercial_graph
+    assert_raises(NoMethodError) { RecordingStudioBilling.send(:commercial_publication_capability) }
+    assert_raises(NoMethodError) { RecordingStudioBilling.send(:with_commercial_publication, Object.new) { nil } }
+
+    ActiveSupport::IsolatedExecutionState[:recording_studio_billing_commercial_publication] = true
+    assert_raises(ActiveRecord::RecordInvalid) do
+      graph[:italy_price].recording.root_recording.revise(graph[:italy_price].recording) do |revision|
+        revision.state = "published"
+      end
+    end
+
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at: 1.minute.from_now,
+      price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
+    )
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { false }
+    publisher = RecordingStudioBilling::CommercialPublisher.new(candidate:, actor: publication_actor, now: 2.minutes.from_now)
+    error = assert_raises(ArgumentError) { publisher.send(:activate_candidate!, candidate) }
+    assert_match(/authorized/, error.message)
+    assert_not_predicate candidate.reload, :activated?
+  ensure
+    ActiveSupport::IsolatedExecutionState.delete(:recording_studio_billing_commercial_publication)
+  end
+
+  test "postgresql rejects direct non-draft inserts and state transitions" do
+    graph = commercial_graph
+    attributes = graph[:italy_price].attributes.except("id", "created_at", "updated_at")
+    attributes.merge!("id" => SecureRandom.uuid, "key" => "direct_insert", "state" => "published")
+
+    assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::Price.insert_all!([attributes]) }
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Price.transaction do
+        ActiveRecord::Base.connection.execute(
+          "SET LOCAL recording_studio_billing.authorized_publication = 'on'"
+        )
+        RecordingStudioBilling::Price.insert_all!([
+          attributes.merge("id" => SecureRandom.uuid, "key" => "spoofed_direct_insert")
+        ])
+        ActiveRecord::Base.connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+      end
+    end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Price.where(id: graph[:italy_price].id).update_all(state: "published")
+    end
+
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
+    )
+    published = RecordingStudioBilling::Price.find_by!(state: "published")
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Price.where(id: published.id).update_all(state: "retired")
+    end
+  end
+
+  test "failure after manifest and candidate persistence rolls back both" do
+    graph = commercial_graph
+
+    with_publication_failure(:candidate) do
+      assert_raises(ActiveRecord::StatementInvalid) do
+        RecordingStudioBilling::CommercialPublisher.publish!(
+          root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
+        )
+      end
+    end
+
+    assert_empty RecordingStudioBilling::CommercialManifest.all
+    assert_empty RecordingStudioBilling::CommercialPublicationCandidate.all
+    assert_empty RecordingStudioBilling::Price.where(state: "published")
+  end
+
+  test "revision activation and event failures roll back every publication artifact" do
+    %i[revision activation event].each do |stage|
+      graph = commercial_graph
+      before = publication_artifact_counts
+
+      with_publication_failure(stage) do
+        assert_raises(ActiveRecord::StatementInvalid) do
+          RecordingStudioBilling::CommercialPublisher.publish!(
+            root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id],
+            actor: publication_actor
+          )
+        end
+      end
+
+      assert_equal before, publication_artifact_counts, "#{stage} failure left publication artifacts"
+      assert_equal "draft", graph[:italy_price].recording.reload.recordable.state
+      reset_publication_test_data!
+    end
+  end
+
   test "publishes a new draft using unchanged published dependencies" do
     graph = commercial_graph
     RecordingStudioBilling::CommercialPublisher.publish!(
@@ -315,6 +406,54 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     assert_predicate candidate, :activated?
     assert_equal "published", additional_price.reload.recordable.state
+  end
+
+  test "publication restores its deferred authorization proof inside an ambient transaction" do
+    graph = commercial_graph
+
+    candidate = RecordingStudioBilling::CommercialPublicationCandidate.transaction do
+      ActiveRecord::Base.connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+      RecordingStudioBilling::CommercialPublisher.publish!(
+        root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id],
+        actor: publication_actor
+      )
+    end
+
+    assert_predicate candidate, :activated?
+    assert_equal "published", graph[:italy_price].recording.reload.recordable.state
+  end
+
+  test "publication does not defer an unrelated host constraint" do
+    graph = commercial_graph
+    connection = ActiveRecord::Base.connection
+    suffix = SecureRandom.hex(4)
+    parent_table = "host_constraint_parents_#{suffix}"
+    child_table = "host_constraint_children_#{suffix}"
+    constraint = "host_constraint_#{suffix}"
+    connection.execute("CREATE TEMP TABLE #{parent_table} (id uuid PRIMARY KEY)")
+    connection.execute("CREATE TEMP TABLE #{child_table} (parent_id uuid)")
+    connection.execute(<<~SQL)
+      ALTER TABLE #{child_table}
+      ADD CONSTRAINT #{constraint}
+      FOREIGN KEY (parent_id) REFERENCES #{parent_table}(id)
+      DEFERRABLE INITIALLY IMMEDIATE
+    SQL
+    reached_after_insert = false
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::CommercialPublicationCandidate.transaction do
+        RecordingStudioBilling::CommercialPublisher.publish!(
+          root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id],
+          actor: publication_actor
+        )
+        connection.execute("INSERT INTO #{child_table} (parent_id) VALUES ('#{SecureRandom.uuid}')")
+        reached_after_insert = true
+      end
+    end
+    refute reached_after_insert
+  ensure
+    connection&.execute("DROP TABLE IF EXISTS #{child_table}") if child_table
+    connection&.execute("DROP TABLE IF EXISTS #{parent_table}") if parent_table
   end
 
   test "database history guard preserves recordables and delivery artifacts" do
@@ -630,7 +769,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_empty target_manifest.canonical_data.fetch("plan_updates")
   end
 
-  test "account feature overrides can reference the central catalogue and preserve false values" do
+  test "account feature overrides require an authorized actor-attributed revision" do
     graph = commercial_graph
     product_recording = graph[:product].recording
     option_recording = graph[:option].recording
@@ -655,7 +794,49 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       account.recording
     )
     assert_predicate override_recording.recordable, :valid?
-    override_recording.root_recording.revise(override_recording) { |revision| revision.state = "published" }
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::FeatureOverride.transaction do
+        override_recording.root_recording.revise(override_recording) { |revision| revision.value = true }
+        constraint = ActiveRecord::Base.connection.quote_column_name(
+          "#{RecordingStudioBilling::FeatureOverride.table_name}_validate_publication"
+        )
+        ActiveRecord::Base.connection.execute("SET CONSTRAINTS #{constraint} IMMEDIATE")
+      end
+    end
+    assert_equal false, override_recording.reload.recordable.value
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::FeatureOverride.transaction do
+        override_recording.root_recording.revise(override_recording, actor: publication_actor) do |revision|
+          revision.value = true
+        end
+        constraint = ActiveRecord::Base.connection.quote_column_name(
+          "#{RecordingStudioBilling::FeatureOverride.table_name}_validate_publication"
+        )
+        ActiveRecord::Base.connection.execute("SET CONSTRAINTS #{constraint} IMMEDIATE")
+      end
+    end
+    assert_equal false, override_recording.reload.recordable.value
+    assert_raises(ActiveRecord::RecordInvalid) do
+      override_recording.root_recording.revise(override_recording) { |revision| revision.state = "published" }
+    end
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::FeatureOverrideReviser.call(
+        recording: override_recording, actor: nil, attributes: { state: "published" }
+      )
+    end
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { false }
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::FeatureOverrideReviser.call(
+        recording: override_recording, actor: publication_actor, attributes: { state: "published" }
+      )
+    end
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
+    RecordingStudioBilling::FeatureOverrideReviser.call(
+      recording: override_recording, actor: publication_actor, attributes: { state: "published" }
+    )
+    revision_event = override_recording.reload.latest_event
+    assert_equal "updated", revision_event.action
+    assert_equal publication_actor, revision_event.actor
 
     result = RecordingStudioBilling::CommercialManifestResolver.new(
       product: product_recording.reload.recordable,
@@ -734,6 +915,69 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_equal [valid.id], activated.map(&:id)
     assert_not_predicate stale.reload, :activated?
     assert_equal activation_time, valid.reload.activated_at
+  end
+
+  test "due publication activator propagates authorization and configuration failures" do
+    graph = commercial_graph
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at: 1.minute.from_now,
+      price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
+    )
+    now = 2.minutes.from_now
+
+    RecordingStudioBilling.configuration.instance_variable_set(:@commercial_authorizer, nil)
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::DueCommercialPublicationActivator.call(actor: publication_actor, now:)
+    end
+    assert_match(/authorizer/, error.message)
+
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { false }
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::DueCommercialPublicationActivator.call(actor: publication_actor, now:)
+    end
+    assert_match(/authorized/, error.message)
+    assert_not_predicate candidate.reload, :activated?
+  end
+
+  test "concurrent due publication workers claim and report a candidate once" do
+    graph = commercial_graph
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root], effective_at: 1.minute.from_now,
+      price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
+    )
+    start = Queue.new
+    results = Queue.new
+    threads = 2.times.map do
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          start.pop
+          results << RecordingStudioBilling::DueCommercialPublicationActivator.call(
+            actor: publication_actor, now: 2.minutes.from_now
+          ).map(&:id)
+        end
+      rescue StandardError => error
+        results << error
+      end
+    end
+    2.times { start << true }
+    threads.each(&:join)
+
+    worker_results = 2.times.map { results.pop }
+    assert_empty worker_results.grep(Exception)
+    assert_equal [candidate.id], worker_results.flatten
+    assert_predicate candidate.reload, :activated?
+    assert_empty RecordingStudioBilling::DueCommercialPublicationActivator.call(
+      actor: publication_actor, now: 2.minutes.from_now
+    )
+  end
+
+  test "dummy database has every canonical engine migration applied" do
+    engine_versions = Dir.glob(File.expand_path("../db/migrate/*.rb", __dir__)).map do |path|
+      File.basename(path).split("_", 2).first
+    end
+    applied_versions = ActiveRecord::Base.connection.select_values("SELECT version FROM schema_migrations")
+
+    assert_empty engine_versions - applied_versions
   end
 
   test "market resolution selects distinct Italian and German EUR prices and requotes on finalization" do
@@ -1024,6 +1268,55 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     Workspace.delete_all
     AdminRoot.delete_all
     User.delete_all
+  end
+
+  def reset_publication_test_data!
+    clear_data!
+    @publication_actor = User.create!(
+      email: "billing-publisher-#{SecureRandom.hex(4)}@example.com",
+      password: "Password1!", password_confirmation: "Password1!"
+    )
+  end
+
+  def publication_artifact_counts
+    {
+      manifests: RecordingStudioBilling::CommercialManifest.count,
+      candidates: RecordingStudioBilling::CommercialPublicationCandidate.count,
+      events: RecordingStudio::Event.unscoped.count,
+      recordings: RecordingStudio::Recording.unscoped.count,
+      recordables: RecordingStudioBilling::RECORDABLE_TYPES.to_h { |type| [type, type.constantize.count] }
+    }
+  end
+
+  def with_publication_failure(stage)
+    function = "rs_billing_test_fail_#{stage}"
+    table, timing, event, condition = case stage
+                              when :candidate
+                                [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "AFTER", "INSERT", "TRUE"]
+                              when :revision
+                                [RecordingStudioBilling::Price.table_name, "BEFORE", "INSERT", "NEW.state = 'published'"]
+                              when :activation
+                                [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "BEFORE", "UPDATE",
+                                 "NEW.activated_at IS NOT NULL"]
+                              when :event
+                                [RecordingStudio::Event.table_name, "BEFORE", "INSERT",
+                                 "NEW.action = 'commercial_published'"]
+                              end
+    connection = ActiveRecord::Base.connection
+    connection.execute(<<~SQL)
+      CREATE FUNCTION #{function}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected #{stage} failure';
+      END;
+      $$ LANGUAGE plpgsql;
+      CREATE TRIGGER #{function}
+      #{timing} #{event} ON #{connection.quote_table_name(table)}
+      FOR EACH ROW WHEN (#{condition}) EXECUTE FUNCTION #{function}();
+    SQL
+    yield
+  ensure
+    connection&.execute("DROP TRIGGER IF EXISTS #{function} ON #{connection.quote_table_name(table)}") if table
+    connection&.execute("DROP FUNCTION IF EXISTS #{function}()")
   end
 
   def unique_name(prefix)

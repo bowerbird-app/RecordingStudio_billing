@@ -13,12 +13,38 @@ module RecordingStudioBilling
     end
 
     def call
-      CommercialPublicationCandidate.where(activated_at: nil).where(effective_at: ..@now).order(:effective_at, :id)
-                                    .filter_map do |candidate|
-        CommercialPublisher.activate!(candidate:, actor: @actor, now: @now)
-      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ArgumentError
-        nil
+      activated = []
+      attempted_ids = []
+
+      loop do
+        publication = claim_and_activate(attempted_ids)
+        break unless publication
+
+        attempted_ids << publication.id
+        activated << publication if publication.activated?
       end
+
+      activated
+    end
+
+    private
+
+    def claim_and_activate(attempted_ids)
+      CommercialPublicationCandidate.transaction(requires_new: true) do
+        candidate = due_candidates.where.not(id: attempted_ids).lock("FOR UPDATE SKIP LOCKED").first
+        return unless candidate
+
+        attempted_ids << candidate.id
+        CommercialPublisher.activate!(candidate:, actor: @actor, now: @now)
+      rescue CommercialPublisher::InvalidCandidateError
+        candidate
+      end
+    end
+
+    def due_candidates
+      CommercialPublicationCandidate.where(activated_at: nil)
+                                    .where(effective_at: ..@now)
+                                    .order(:effective_at, :id)
     end
   end
 end

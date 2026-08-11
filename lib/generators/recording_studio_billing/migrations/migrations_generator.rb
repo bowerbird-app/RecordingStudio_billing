@@ -31,7 +31,7 @@ module RecordingStudioBilling
           return
         end
 
-        migration_files = Dir.glob(File.join(migrations_dir, "*.rb"))
+        migration_files = Dir.glob(File.join(migrations_dir, "*.rb")).sort
 
         if migration_files.empty?
           say "No migrations found in RecordingStudioBilling engine.", :yellow
@@ -50,16 +50,16 @@ module RecordingStudioBilling
             next
           end
 
-          # Generate new timestamp for the host app
-          timestamp = next_migration_number
-          destination_filename = "#{timestamp}_#{migration_name}"
-          destination_path = File.join("db/migrate", destination_filename)
+          version = filename.split("_", 2).first
+          if migration_version_exists?(version)
+            raise Thor::Error,
+                  "Migration version #{version} is already used; canonical RecordingStudioBilling versions cannot be remapped."
+          end
+
+          destination_path = File.join("db/migrate", filename)
 
           copy_file source_path, destination_path
           say "  create  #{destination_path}", :green
-
-          # Small delay to ensure unique timestamps
-          sleep 0.1
         end
 
         say "\nRun 'bin/rails db:migrate' to apply the migrations.", :green
@@ -72,11 +72,10 @@ module RecordingStudioBilling
         Dir.glob(File.join(destination_root, "db/migrate", "*_#{migration_name}")).any?
       end
 
-      def next_migration_number
-        ActiveRecord::Migration.next_migration_number(
-          Time.now.utc.strftime("%Y%m%d%H%M%S")
-        )
+      def migration_version_exists?(version)
+        Dir.glob(File.join(destination_root, "db/migrate", "#{version}_*.rb")).any?
       end
+
     end
   end
 end

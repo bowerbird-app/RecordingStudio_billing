@@ -30,10 +30,6 @@ module RecordingStudioBilling
   ].freeze
 
   class << self
-    COMMERCIAL_PUBLICATION_CONTEXT_KEY = :recording_studio_billing_commercial_publication
-    COMMERCIAL_PUBLICATION_CAPABILITY = Object.new.freeze
-    private_constant :COMMERCIAL_PUBLICATION_CAPABILITY
-
     def configuration
       @configuration ||= Configuration.new
     end
@@ -50,30 +46,17 @@ module RecordingStudioBilling
       EnsureBillingAdmin.call(...)
     end
 
-    # State changes to catalogue records are only valid while an authorized
-    # CommercialPublisher activation is in progress. Isolated execution state
-    # keeps that internal capability local to the request/job performing it.
     def commercial_publication_in_progress?
-      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] == true
+      ActiveRecord::Base.connection.select_value(
+        "SELECT current_setting('recording_studio_billing.authorized_publication', true) = 'on'"
+      ) == true
     end
 
-    private
-
-    def with_commercial_publication(capability)
-      raise ArgumentError, "invalid commercial publication capability" unless capability.equal?(COMMERCIAL_PUBLICATION_CAPABILITY)
-
-      previous = ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY]
-      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = true
-      yield
-    ensure
-      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = previous
+    def feature_override_revision_in_progress?
+      ActiveRecord::Base.connection.select_value(
+        "SELECT current_setting('recording_studio_billing.authorized_feature_override', true) = 'on'"
+      ) == true
     end
-
-    def commercial_publication_capability
-      COMMERCIAL_PUBLICATION_CAPABILITY
-    end
-
-    public
 
     # rubocop:disable Metrics/MethodLength
     def register_capabilities!

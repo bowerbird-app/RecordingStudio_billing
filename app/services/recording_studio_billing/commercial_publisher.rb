@@ -8,6 +8,8 @@ module RecordingStudioBilling
   # Produces a deliberately small publication.  A publication is selected by its
   # Price recording identities; it never means "publish every draft below root".
   class CommercialPublisher
+    class InvalidCandidateError < ArgumentError; end
+
     SUPPORTED_MANIFEST_SCHEMA = CommercialManifest::SCHEMA_VERSION
     SUPPORTED_RESOLVER_VERSION = CommercialManifest::RESOLVER_VERSION
 
@@ -607,45 +609,45 @@ module RecordingStudioBilling
 
     def verify_candidate!(publication)
       envelope = publication.snapshot_envelope
-      raise ArgumentError, "publication candidate envelope is invalid" unless envelope.is_a?(Hash)
+      raise InvalidCandidateError, "publication candidate envelope is invalid" unless envelope.is_a?(Hash)
 
       unless envelope["schema_version"] == SUPPORTED_MANIFEST_SCHEMA &&
              envelope["resolver_version"] == SUPPORTED_RESOLVER_VERSION
-        raise ArgumentError,
+          raise InvalidCandidateError,
               "unsupported publication candidate version"
       end
       unless envelope["root_recording_id"] == publication.root_recording_id &&
              envelope["effective_at"] == publication.effective_at.utc.iso8601(6)
-        raise ArgumentError, "publication candidate envelope does not match its persisted terms"
+        raise InvalidCandidateError, "publication candidate envelope does not match its persisted terms"
       end
 
       unless CommercialManifestCanonicalizer.digest(envelope) == publication.candidate_digest
-        raise ArgumentError,
+          raise InvalidCandidateError,
               "publication candidate digest mismatch"
       end
       unless publication.recording_snapshots == envelope["recordings"]
-        raise ArgumentError,
+          raise InvalidCandidateError,
               "publication candidate snapshots differ from envelope"
       end
 
       manifests = CommercialManifest.where(manifest_digest: publication.manifest_digests)
                                     .order(:manifest_digest).lock.to_a
       unless manifests.size == publication.manifest_digests.size
-        raise ArgumentError,
+        raise InvalidCandidateError,
               "publication candidate manifests are missing"
       end
-      raise ArgumentError, "publication candidate manifests cross roots" unless manifests.all? do |manifest|
+      raise InvalidCandidateError, "publication candidate manifests cross roots" unless manifests.all? do |manifest|
         manifest.root_recording_id == publication.root_recording_id
       end
 
       expected_manifests = envelope.fetch("manifests").index_by { |item| item.fetch("manifest_digest") }
       manifests.each do |manifest|
         expected = expected_manifests[manifest.manifest_digest]
-        raise ArgumentError, "publication candidate manifest is missing from envelope" unless expected
+        raise InvalidCandidateError, "publication candidate manifest is missing from envelope" unless expected
 
         unless manifest.schema_version == SUPPORTED_MANIFEST_SCHEMA &&
                manifest.resolver_version == SUPPORTED_RESOLVER_VERSION
-          raise ArgumentError,
+              raise InvalidCandidateError,
                 "unsupported commercial manifest version"
         end
 
@@ -660,13 +662,13 @@ module RecordingStudioBilling
         next if CommercialManifestCanonicalizer.digest(actual) == manifest.manifest_digest &&
                 expected.except("manifest_digest") == actual.except("root_recording_id")
 
-        raise ArgumentError,
+          raise InvalidCandidateError,
               "commercial manifest envelope mismatch"
       end
 
       snapshots = envelope.fetch("recordings")
       unless snapshots.values.all? { |snapshot| snapshot["root_recording_id"] == publication.root_recording_id }
-        raise ArgumentError, "publication candidate snapshots cross roots"
+        raise InvalidCandidateError, "publication candidate snapshots cross roots"
       end
 
       recordings = RecordingStudio::Recording.unscoped.where(id: snapshots.keys).order(:id).lock.to_a
@@ -678,52 +680,63 @@ module RecordingStudioBilling
       end
       return if snapshots.keys.sort == RecordingStudio::Recording.unscoped.where(id: snapshots.keys).pluck(:id).sort
 
-      raise ArgumentError,
+      raise InvalidCandidateError,
             "publication candidate recording is missing"
     end
 
     def verify_snapshot!(recording, expected)
       record = recording.recordable
       actual = snapshot(record).last
-      raise ArgumentError, "publication candidate is stale or tampered" unless actual == expected
+      raise InvalidCandidateError, "publication candidate is stale or tampered" unless actual == expected
     end
 
     def activate_candidate!(publication)
       verify_candidate!(publication)
-      RecordingStudioBilling.send(
-        :with_commercial_publication,
-        RecordingStudioBilling.send(:commercial_publication_capability)
-      ) do
-        envelope = publication.snapshot_envelope
-        records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
-        replacements_for(envelope).each do |prior|
-          prior.recording.root_recording.revise(
-            prior.recording,
-            actor: actor,
-            metadata: { "commercial_candidate_digest" => publication.candidate_digest }
-          ) { |revision| revision.state = "retired" }
-        end
-        records.each do |recording|
-          record = recording.recordable
-          next unless record.respond_to?(:state) && record.state == "draft"
+      root = RecordingStudio::Recording.unscoped.find(publication.root_recording_id)
+      authorize!(:activate, root:, publication:)
+      ActiveRecord::Base.connection.execute(
+        "SET LOCAL recording_studio_billing.authorized_publication = 'on'"
+      )
 
-          recording.root_recording.revise(
-            recording,
-            actor: actor,
-            metadata: { "commercial_candidate_digest" => publication.candidate_digest }
-          ) { |revision| revision.state = "published" }
-        end
-        CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
-        publication.update!(activated_at: now)
-        records.each do |recording|
-          recording.reload.log_event!(
-            action: "commercial_published",
-            actor: actor,
-            metadata: { "candidate_digest" => publication.candidate_digest }
-          )
-        end
+      envelope = publication.snapshot_envelope
+      records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
+      replacement_records = replacements_for(envelope)
+      defer_publication_constraints!((records.map(&:recordable) + replacement_records).map(&:class))
+      replacement_records.each do |prior|
+        prior.recording.root_recording.revise(
+          prior.recording,
+          actor: actor,
+          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+        ) { |revision| revision.state = "retired" }
+      end
+      records.each do |recording|
+        record = recording.recordable
+        next unless record.respond_to?(:state) && record.state == "draft"
+
+        recording.root_recording.revise(
+          recording,
+          actor: actor,
+          metadata: { "commercial_candidate_digest" => publication.candidate_digest }
+        ) { |revision| revision.state = "published" }
+      end
+      CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
+      publication.update!(activated_at: now)
+      records.each do |recording|
+        recording.reload.log_event!(
+          action: "commercial_published",
+          actor: actor,
+          metadata: { "candidate_digest" => publication.candidate_digest }
+        )
       end
       publication
+    end
+
+    def defer_publication_constraints!(recordable_classes)
+      connection = ActiveRecord::Base.connection
+      constraints = recordable_classes.uniq.map do |recordable_class|
+        connection.quote_column_name("#{recordable_class.table_name}_validate_publication")
+      end
+      connection.execute("SET CONSTRAINTS #{constraints.join(', ')} DEFERRED") if constraints.any?
     end
 
     def replacements_for(envelope)
@@ -731,7 +744,7 @@ module RecordingStudioBilling
         recording = RecordingStudio::Recording.unscoped.lock.find(recording_id)
         record = recording.recordable
         unless record.is_a?(Price) || record.is_a?(OveragePrice)
-          raise ArgumentError,
+          raise InvalidCandidateError,
                 "replacement reference must be a Price or OveragePrice"
         end
 

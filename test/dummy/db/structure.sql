@@ -52,6 +52,19 @@ CREATE FUNCTION public.rs_billing_protect_commercial_history() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+  IF TG_ARGV[0] = 'RecordingStudioBilling::FeatureOverride' THEN
+    IF NEW.state <> 'draft' AND
+       current_setting('recording_studio_billing.authorized_feature_override', true) IS DISTINCT FROM 'on' THEN
+      RAISE EXCEPTION 'feature override revision requires an authorized transaction';
+    END IF;
+  ELSIF NEW.state <> 'draft' AND
+        current_setting('recording_studio_billing.authorized_publication', true) IS DISTINCT FROM 'on' THEN
+    RAISE EXCEPTION 'commercial publication requires an authorized transaction';
+  END IF;
+  RETURN NEW;
+END IF;
+
   IF OLD.state IN ('published', 'retired') OR NOT EXISTS (
     SELECT 1
     FROM recording_studio_recordings
@@ -61,7 +74,7 @@ BEGIN
     RAISE EXCEPTION 'published, retired, and historical commercial records are immutable';
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.state = 'draft' AND NEW.state <> 'draft' THEN
-    RAISE EXCEPTION 'commercial publication must create an authorized revision';
+    RAISE EXCEPTION 'commercial state changes must create an authorized revision';
   END IF;
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
@@ -88,6 +101,77 @@ BEGIN
     RETURN NEW;
   END IF;
   RAISE EXCEPTION 'commercial manifests are immutable';
+END;
+$$;
+
+
+--
+-- Name: rs_billing_validate_commercial_publication(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_commercial_publication() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_ARGV[0] = 'RecordingStudioBilling::FeatureOverride' THEN
+    IF EXISTS (
+      SELECT 1
+      FROM recording_studio_recordings AS recording
+      INNER JOIN recording_studio_events AS creation
+        ON creation.recording_id = recording.id
+       AND creation.action = 'created'
+       AND creation.recordable_type = TG_ARGV[0]
+       AND creation.recordable_id = NEW.id
+      WHERE recording.recordable_type = TG_ARGV[0]
+        AND recording.recordable_id = NEW.id
+    ) OR (
+      current_setting('recording_studio_billing.authorized_feature_override', true) = 'on' AND EXISTS (
+      SELECT 1
+      FROM recording_studio_recordings AS recording
+      INNER JOIN recording_studio_events AS revision
+        ON revision.recording_id = recording.id
+       AND revision.action = 'updated'
+       AND revision.recordable_type = TG_ARGV[0]
+       AND revision.recordable_id = NEW.id
+       AND revision.actor_type IS NOT NULL
+       AND revision.actor_id IS NOT NULL
+      WHERE recording.recordable_type = TG_ARGV[0]
+        AND recording.recordable_id = NEW.id
+      )
+    ) THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'feature override revision is missing its actor-attributed event';
+  END IF;
+  IF NEW.state = 'draft' THEN
+    RETURN NEW;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM recording_studio_recordings AS recording
+    INNER JOIN recording_studio_events AS revision
+      ON revision.recording_id = recording.id
+     AND revision.action = 'updated'
+     AND revision.recordable_type = TG_ARGV[0]
+     AND revision.recordable_id = NEW.id
+     AND revision.actor_type IS NOT NULL
+     AND revision.actor_id IS NOT NULL
+    INNER JOIN recording_studio_billing_commercial_publication_candidates AS candidate
+      ON candidate.candidate_digest = revision.metadata ->> 'commercial_candidate_digest'
+     AND candidate.root_recording_id = recording.root_recording_id
+     AND candidate.activated_at IS NOT NULL
+    INNER JOIN recording_studio_events AS publication_event
+      ON publication_event.recording_id = recording.id
+     AND publication_event.action = 'commercial_published'
+     AND publication_event.metadata ->> 'candidate_digest' = candidate.candidate_digest
+     AND publication_event.actor_type = revision.actor_type
+     AND publication_event.actor_id = revision.actor_id
+    WHERE recording.recordable_type = TG_ARGV[0]
+      AND recording.recordable_id = NEW.id
+  ) THEN
+    RAISE EXCEPTION 'commercial publication is missing its authorized transaction artifacts';
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -173,24 +257,24 @@ CREATE TABLE public.recording_studio_billing_billing_options (
     checkout_policy character varying DEFAULT 'allowed'::character varying NOT NULL,
     tax_policy character varying DEFAULT 'exclusive'::character varying NOT NULL,
     feature_values jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_billing_options_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_checkout_policy CHECK (((checkout_policy)::text = ANY ((ARRAY['allowed'::character varying, 'required'::character varying, 'disabled'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_collection_method CHECK (((collection_method)::text = ANY ((ARRAY['automatic'::character varying, 'invoice'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_billing_options_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_checkout_policy CHECK (((checkout_policy)::text = ANY (ARRAY[('allowed'::character varying)::text, ('required'::character varying)::text, ('disabled'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_collection_method CHECK (((collection_method)::text = ANY (ARRAY[('automatic'::character varying)::text, ('invoice'::character varying)::text]))),
     CONSTRAINT rs_billing_options_default_maximum CHECK (((maximum_quantity IS NULL) OR (default_quantity <= maximum_quantity))),
     CONSTRAINT rs_billing_options_default_minimum CHECK (((minimum_quantity IS NULL) OR (default_quantity >= minimum_quantity))),
     CONSTRAINT rs_billing_options_default_quantity CHECK ((default_quantity > 0)),
-    CONSTRAINT rs_billing_options_interval CHECK (((("interval")::text = ANY ((ARRAY['day'::character varying, 'week'::character varying, 'month'::character varying, 'year'::character varying])::text[])) OR ("interval" IS NULL))),
+    CONSTRAINT rs_billing_options_interval CHECK (((("interval")::text = ANY (ARRAY[('day'::character varying)::text, ('week'::character varying)::text, ('month'::character varying)::text, ('year'::character varying)::text])) OR ("interval" IS NULL))),
     CONSTRAINT rs_billing_options_interval_count CHECK (((interval_count > 0) OR (interval_count IS NULL))),
-    CONSTRAINT rs_billing_options_lifecycle_policy CHECK (((lifecycle_policy)::text = ANY ((ARRAY['immediate'::character varying, 'scheduled'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_lifecycle_policy CHECK (((lifecycle_policy)::text = ANY (ARRAY[('immediate'::character varying)::text, ('scheduled'::character varying)::text]))),
     CONSTRAINT rs_billing_options_maximum_quantity CHECK (((maximum_quantity > 0) OR (maximum_quantity IS NULL))),
     CONSTRAINT rs_billing_options_minimum_quantity CHECK (((minimum_quantity >= 0) OR (minimum_quantity IS NULL))),
     CONSTRAINT rs_billing_options_payment_terms_days CHECK ((payment_terms_days >= 0)),
-    CONSTRAINT rs_billing_options_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_proration_policy CHECK (((proration_policy)::text = ANY ((ARRAY['none'::character varying, 'prorate'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_proration_policy CHECK (((proration_policy)::text = ANY (ARRAY[('none'::character varying)::text, ('prorate'::character varying)::text]))),
     CONSTRAINT rs_billing_options_quantity_bounds CHECK (((minimum_quantity IS NULL) OR (maximum_quantity IS NULL) OR (minimum_quantity <= maximum_quantity))),
-    CONSTRAINT rs_billing_options_quantity_mode CHECK (((quantity_mode)::text = ANY ((ARRAY['fixed'::character varying, 'adjustable'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_recurrence CHECK (((recurrence)::text = ANY ((ARRAY['one_time'::character varying, 'recurring'::character varying])::text[]))),
-    CONSTRAINT rs_billing_options_tax_policy CHECK (((tax_policy)::text = ANY ((ARRAY['exclusive'::character varying, 'inclusive'::character varying, 'automatic'::character varying])::text[]))),
+    CONSTRAINT rs_billing_options_quantity_mode CHECK (((quantity_mode)::text = ANY (ARRAY[('fixed'::character varying)::text, ('adjustable'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_recurrence CHECK (((recurrence)::text = ANY (ARRAY[('one_time'::character varying)::text, ('recurring'::character varying)::text]))),
+    CONSTRAINT rs_billing_options_tax_policy CHECK (((tax_policy)::text = ANY (ARRAY[('exclusive'::character varying)::text, ('inclusive'::character varying)::text, ('automatic'::character varying)::text]))),
     CONSTRAINT rs_billing_options_trial_days CHECK ((trial_days >= 0))
 );
 
@@ -243,7 +327,7 @@ CREATE TABLE public.recording_studio_billing_cost_cards (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_cost_cards_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_cost_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -265,7 +349,7 @@ CREATE TABLE public.recording_studio_billing_cost_rates (
     CONSTRAINT recording_studio_billing_cost_rates_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_cost_rates_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_cost_rates_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_cost_rates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_cost_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -282,7 +366,7 @@ CREATE TABLE public.recording_studio_billing_feature_overrides (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_feature_overrides_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_feature_overrides_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -299,8 +383,8 @@ CREATE TABLE public.recording_studio_billing_features (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     definition jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_features_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_features_kind CHECK (((kind)::text = ANY ((ARRAY['boolean'::character varying, 'limit'::character varying, 'allowance'::character varying, 'variant'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_features_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_features_kind CHECK (((kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text])))
 );
 
 
@@ -326,7 +410,7 @@ CREATE TABLE public.recording_studio_billing_markets (
     verification_policy character varying DEFAULT 'none'::character varying NOT NULL,
     country_groups jsonb DEFAULT '{}'::jsonb NOT NULL,
     default_currency_code character varying,
-    CONSTRAINT recording_studio_billing_markets_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_markets_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_markets_priority CHECK ((priority >= 0)),
     CONSTRAINT rs_billing_markets_specificity CHECK ((specificity >= 0))
 );
@@ -344,8 +428,8 @@ CREATE TABLE public.recording_studio_billing_meters (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_meters_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_meters_aggregation CHECK (((aggregation)::text = ANY ((ARRAY['sum'::character varying, 'count'::character varying, 'maximum'::character varying, 'latest'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_meters_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_meters_aggregation CHECK (((aggregation)::text = ANY (ARRAY[('sum'::character varying)::text, ('count'::character varying)::text, ('maximum'::character varying)::text, ('latest'::character varying)::text])))
 );
 
 
@@ -372,9 +456,9 @@ CREATE TABLE public.recording_studio_billing_overage_prices (
     CONSTRAINT recording_studio_billing_overage_prices_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_overage_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying])::text[])) AND (package_size IS NULL)))),
-    CONSTRAINT recording_studio_billing_overage_prices_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT recording_studio_billing_overage_prices_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_overage_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text])) AND (package_size IS NULL)))),
+    CONSTRAINT recording_studio_billing_overage_prices_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT recording_studio_billing_overage_prices_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_overage_prices_version CHECK ((version >= 1))
 );
 
@@ -390,7 +474,7 @@ CREATE TABLE public.recording_studio_billing_plan_updates (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_plan_updates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_plan_updates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -417,9 +501,9 @@ CREATE TABLE public.recording_studio_billing_prices (
     CONSTRAINT recording_studio_billing_prices_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_prices_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_prices_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
-    CONSTRAINT recording_studio_billing_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying])::text[])) AND (package_size IS NULL)))),
-    CONSTRAINT recording_studio_billing_prices_pricing_model CHECK (((pricing_model)::text = ANY ((ARRAY['flat'::character varying, 'per_unit'::character varying, 'package'::character varying])::text[]))),
-    CONSTRAINT recording_studio_billing_prices_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_prices_package_size CHECK (((((pricing_model)::text = 'package'::text) AND (package_size IS NOT NULL) AND (package_size > 0)) OR (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text])) AND (package_size IS NULL)))),
+    CONSTRAINT recording_studio_billing_prices_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
+    CONSTRAINT recording_studio_billing_prices_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_prices_version CHECK ((version >= 1))
 );
 
@@ -438,7 +522,7 @@ CREATE TABLE public.recording_studio_billing_product_rules (
     updated_at timestamp(6) without time zone NOT NULL,
     target_product_recording_id uuid,
     conditions jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_product_rules_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_product_rules_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -455,8 +539,8 @@ CREATE TABLE public.recording_studio_billing_products (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     feature_values jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT recording_studio_billing_products_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
-    CONSTRAINT rs_billing_products_kind CHECK (((kind)::text = ANY ((ARRAY['plan'::character varying, 'addon'::character varying, 'credit_pack'::character varying, 'service'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_products_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
+    CONSTRAINT rs_billing_products_kind CHECK (((kind)::text = ANY (ARRAY[('plan'::character varying)::text, ('addon'::character varying)::text, ('credit_pack'::character varying)::text, ('service'::character varying)::text])))
 );
 
 
@@ -480,7 +564,7 @@ CREATE TABLE public.recording_studio_billing_provider_accounts (
     supported_markets jsonb DEFAULT '[]'::jsonb NOT NULL,
     supported_currencies jsonb DEFAULT '[]'::jsonb NOT NULL,
     checkout_default boolean DEFAULT false NOT NULL,
-    CONSTRAINT recording_studio_billing_provider_accounts_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_provider_accounts_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_provider_accounts_provider_format CHECK (((adapter_key)::text ~ '^[a-z][a-z0-9_]*$'::text))
 );
 
@@ -496,7 +580,7 @@ CREATE TABLE public.recording_studio_billing_rate_cards (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -516,7 +600,7 @@ CREATE TABLE public.recording_studio_billing_rates (
     conversion_numerator bigint,
     conversion_denominator bigint,
     conversion_decimal numeric(30,12),
-    CONSTRAINT recording_studio_billing_rates_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[]))),
+    CONSTRAINT recording_studio_billing_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_rates_conversion CHECK ((((conversion_numerator IS NOT NULL) AND (conversion_numerator > 0) AND (conversion_denominator IS NOT NULL) AND (conversion_denominator > 0) AND (conversion_decimal IS NULL)) OR ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NOT NULL) AND (conversion_decimal > (0)::numeric)))),
     CONSTRAINT rs_billing_rates_conversion_present CHECK ((NOT ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NULL))))
 );
@@ -533,7 +617,7 @@ CREATE TABLE public.recording_studio_billing_usage_units (
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT recording_studio_billing_usage_units_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT recording_studio_billing_usage_units_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -1171,112 +1255,224 @@ CREATE UNIQUE INDEX rs_billing_publication_candidates_digest ON public.recording
 -- Name: recording_studio_billing_billing_options recording_studio_billing_billing_options_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_billing_options_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_billing_options FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::BillingOption');
+CREATE TRIGGER recording_studio_billing_billing_options_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_billing_options FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::BillingOption');
+
+
+--
+-- Name: recording_studio_billing_billing_options recording_studio_billing_billing_options_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_billing_options_validate_publication AFTER INSERT ON public.recording_studio_billing_billing_options DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::BillingOption');
 
 
 --
 -- Name: recording_studio_billing_cost_cards recording_studio_billing_cost_cards_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_cost_cards_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_cost_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostCard');
+CREATE TRIGGER recording_studio_billing_cost_cards_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_cost_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostCard');
+
+
+--
+-- Name: recording_studio_billing_cost_cards recording_studio_billing_cost_cards_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_cost_cards_validate_publication AFTER INSERT ON public.recording_studio_billing_cost_cards DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::CostCard');
 
 
 --
 -- Name: recording_studio_billing_cost_rates recording_studio_billing_cost_rates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_cost_rates_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_cost_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostRate');
+CREATE TRIGGER recording_studio_billing_cost_rates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_cost_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostRate');
+
+
+--
+-- Name: recording_studio_billing_cost_rates recording_studio_billing_cost_rates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_cost_rates_validate_publication AFTER INSERT ON public.recording_studio_billing_cost_rates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::CostRate');
 
 
 --
 -- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_feature_overrides_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_feature_overrides FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::FeatureOverride');
+CREATE TRIGGER recording_studio_billing_feature_overrides_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_feature_overrides FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::FeatureOverride');
+
+
+--
+-- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_feature_overrides_validate_publication AFTER INSERT ON public.recording_studio_billing_feature_overrides DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::FeatureOverride');
 
 
 --
 -- Name: recording_studio_billing_features recording_studio_billing_features_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_features_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_features FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Feature');
+CREATE TRIGGER recording_studio_billing_features_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_features FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Feature');
+
+
+--
+-- Name: recording_studio_billing_features recording_studio_billing_features_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_features_validate_publication AFTER INSERT ON public.recording_studio_billing_features DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Feature');
 
 
 --
 -- Name: recording_studio_billing_markets recording_studio_billing_markets_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_markets_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_markets FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Market');
+CREATE TRIGGER recording_studio_billing_markets_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_markets FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Market');
+
+
+--
+-- Name: recording_studio_billing_markets recording_studio_billing_markets_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_markets_validate_publication AFTER INSERT ON public.recording_studio_billing_markets DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Market');
 
 
 --
 -- Name: recording_studio_billing_meters recording_studio_billing_meters_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_meters_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_meters FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Meter');
+CREATE TRIGGER recording_studio_billing_meters_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_meters FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Meter');
+
+
+--
+-- Name: recording_studio_billing_meters recording_studio_billing_meters_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_meters_validate_publication AFTER INSERT ON public.recording_studio_billing_meters DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Meter');
 
 
 --
 -- Name: recording_studio_billing_overage_prices recording_studio_billing_overage_prices_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_overage_prices_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_overage_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::OveragePrice');
+CREATE TRIGGER recording_studio_billing_overage_prices_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_overage_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::OveragePrice');
+
+
+--
+-- Name: recording_studio_billing_overage_prices recording_studio_billing_overage_prices_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_overage_prices_validate_publication AFTER INSERT ON public.recording_studio_billing_overage_prices DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::OveragePrice');
 
 
 --
 -- Name: recording_studio_billing_plan_updates recording_studio_billing_plan_updates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_plan_updates_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_plan_updates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::PlanUpdate');
+CREATE TRIGGER recording_studio_billing_plan_updates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_plan_updates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::PlanUpdate');
+
+
+--
+-- Name: recording_studio_billing_plan_updates recording_studio_billing_plan_updates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_plan_updates_validate_publication AFTER INSERT ON public.recording_studio_billing_plan_updates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::PlanUpdate');
 
 
 --
 -- Name: recording_studio_billing_prices recording_studio_billing_prices_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_prices_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Price');
+CREATE TRIGGER recording_studio_billing_prices_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Price');
+
+
+--
+-- Name: recording_studio_billing_prices recording_studio_billing_prices_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_prices_validate_publication AFTER INSERT ON public.recording_studio_billing_prices DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Price');
 
 
 --
 -- Name: recording_studio_billing_product_rules recording_studio_billing_product_rules_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_product_rules_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_product_rules FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProductRule');
+CREATE TRIGGER recording_studio_billing_product_rules_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_product_rules FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProductRule');
+
+
+--
+-- Name: recording_studio_billing_product_rules recording_studio_billing_product_rules_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_product_rules_validate_publication AFTER INSERT ON public.recording_studio_billing_product_rules DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::ProductRule');
 
 
 --
 -- Name: recording_studio_billing_products recording_studio_billing_products_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_products_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_products FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Product');
+CREATE TRIGGER recording_studio_billing_products_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_products FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Product');
+
+
+--
+-- Name: recording_studio_billing_products recording_studio_billing_products_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_products_validate_publication AFTER INSERT ON public.recording_studio_billing_products DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Product');
 
 
 --
 -- Name: recording_studio_billing_provider_accounts recording_studio_billing_provider_accounts_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_provider_accounts_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_provider_accounts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProviderAccount');
+CREATE TRIGGER recording_studio_billing_provider_accounts_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_provider_accounts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProviderAccount');
+
+
+--
+-- Name: recording_studio_billing_provider_accounts recording_studio_billing_provider_accounts_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_provider_accounts_validate_publication AFTER INSERT ON public.recording_studio_billing_provider_accounts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::ProviderAccount');
 
 
 --
 -- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_rate_cards_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_rate_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::RateCard');
+CREATE TRIGGER recording_studio_billing_rate_cards_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rate_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::RateCard');
+
+
+--
+-- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_rate_cards_validate_publication AFTER INSERT ON public.recording_studio_billing_rate_cards DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::RateCard');
 
 
 --
 -- Name: recording_studio_billing_rates recording_studio_billing_rates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_rates_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Rate');
+CREATE TRIGGER recording_studio_billing_rates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Rate');
+
+
+--
+-- Name: recording_studio_billing_rates recording_studio_billing_rates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_rates_validate_publication AFTER INSERT ON public.recording_studio_billing_rates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Rate');
 
 
 --
 -- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER recording_studio_billing_usage_units_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_usage_units FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::UsageUnit');
+CREATE TRIGGER recording_studio_billing_usage_units_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_units FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::UsageUnit');
+
+
+--
+-- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_validate_publication; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER recording_studio_billing_usage_units_validate_publication AFTER INSERT ON public.recording_studio_billing_usage_units DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::UsageUnit');
 
 
 --
@@ -1540,6 +1736,7 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260810000011'),
 ('20260810000010'),
 ('20260810000009'),
 ('20260810000008'),
@@ -1549,7 +1746,8 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260810000004'),
 ('20260810000003'),
 ('20260810000002'),
-('20260810000001'),
+('20260810000000'),
+('20260809999999'),
 ('20260612000000'),
 ('20260421000000'),
 ('20260217233016'),

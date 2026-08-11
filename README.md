@@ -49,6 +49,28 @@ it does not create provider objects or process payments. `ProviderAccount`, `Mar
   numerator/denominator or a positive decimal. They are not customer money;
   `CostRate` retains monetary fields.
 
+### Publication trust boundary
+
+`RecordingStudioBilling::CommercialPublisher` is the only supported application
+path from `draft` to `published`, or from `published` to `retired`, for the
+central BillingAdmin catalogue. Every publication requires a persisted actor and
+the configured `commercial_authorizer`. PostgreSQL triggers reject ordinary
+direct non-draft inserts, in-place state transitions, incomplete revisions, and
+mutations of published, retired, or historical snapshots.
+
+The host application's database role, database owners, and migrations are part
+of the trusted computing base. This engine does not provision a separate runtime
+PostgreSQL principal, so its transaction settings and proof tables are not an
+authorization boundary against arbitrary SQL executed by that trusted role.
+Hosts that include arbitrary runtime-role SQL in their threat model must add
+role separation and narrowly granted database operations at deployment time.
+
+`FeatureOverride` is account-scoped rather than part of the central catalogue.
+It therefore does not use `CommercialPublisher`; state or value revisions use
+`RecordingStudioBilling::FeatureOverrideReviser`, which requires the configured
+authorizer and a persisted actor and records that actor on the Recording Studio
+revision event.
+
 ### Upgrading from the initial commercial hierarchy
 
 Run the engine migrations after upgrading. The V1 correction removes the old
