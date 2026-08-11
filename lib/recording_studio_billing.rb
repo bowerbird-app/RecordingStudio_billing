@@ -31,6 +31,8 @@ module RecordingStudioBilling
 
   class << self
     COMMERCIAL_PUBLICATION_CONTEXT_KEY = :recording_studio_billing_commercial_publication
+    COMMERCIAL_PUBLICATION_CAPABILITY = Object.new.freeze
+    private_constant :COMMERCIAL_PUBLICATION_CAPABILITY
 
     def configuration
       @configuration ||= Configuration.new
@@ -51,7 +53,15 @@ module RecordingStudioBilling
     # State changes to catalogue records are only valid while an authorized
     # CommercialPublisher activation is in progress. Isolated execution state
     # keeps that internal capability local to the request/job performing it.
-    def with_commercial_publication
+    def commercial_publication_in_progress?
+      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] == true
+    end
+
+    private
+
+    def with_commercial_publication(capability)
+      raise ArgumentError, "invalid commercial publication capability" unless capability.equal?(COMMERCIAL_PUBLICATION_CAPABILITY)
+
       previous = ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY]
       ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = true
       yield
@@ -59,9 +69,11 @@ module RecordingStudioBilling
       ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] = previous
     end
 
-    def commercial_publication_in_progress?
-      ActiveSupport::IsolatedExecutionState[COMMERCIAL_PUBLICATION_CONTEXT_KEY] == true
+    def commercial_publication_capability
+      COMMERCIAL_PUBLICATION_CAPABILITY
     end
+
+    public
 
     # rubocop:disable Metrics/MethodLength
     def register_capabilities!

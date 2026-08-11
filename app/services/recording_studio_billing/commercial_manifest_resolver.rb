@@ -214,7 +214,11 @@ module RecordingStudioBilling
     end
 
     def resolved_product_rules
-      return Array(@product_rules).sort_by { |rule| rule.recording.id } unless @product_rules.nil?
+      unless @product_rules.nil?
+        rules = Array(@product_rules)
+        validate_injected_product_rules!(rules)
+        return rules.sort_by { |rule| rule.recording.id }
+      end
 
       scope = ProductRule.with_current_recording.where(product_recording_id: product.recording.id)
       scope = publication_candidate ? scope.where.not(state: "retired") : scope.where(state: "published")
@@ -222,11 +226,32 @@ module RecordingStudioBilling
     end
 
     def resolved_plan_updates
-      return Array(@plan_updates).sort_by { |plan_update| plan_update.recording.id } unless @plan_updates.nil?
+      unless @plan_updates.nil?
+        plan_updates = Array(@plan_updates)
+        validate_injected_plan_updates!(plan_updates)
+        return plan_updates.sort_by { |plan_update| plan_update.recording.id }
+      end
 
       scope = PlanUpdate.with_current_recording.where(billing_option_recording_id: billing_option.recording.id)
       scope = publication_candidate ? scope.where.not(state: "retired") : scope.where(state: "published")
       scope.order(:id).to_a
+    end
+
+    def validate_injected_product_rules!(rules)
+      return if rules.all? do |rule|
+        rule.is_a?(ProductRule) && rule.product_recording_id == product.recording.id
+      end
+
+      raise ArgumentError, "injected product rules must belong to the selected product"
+    end
+
+    def validate_injected_plan_updates!(plan_updates)
+      return if plan_updates.all? do |plan_update|
+        plan_update.is_a?(PlanUpdate) &&
+          plan_update.billing_option_recording_id == billing_option.recording.id
+      end
+
+      raise ArgumentError, "injected plan updates must belong to the selected billing option"
     end
 
     def tax_policy_snapshot

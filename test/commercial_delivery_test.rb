@@ -263,6 +263,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
   test "direct commercial revisions cannot publish without the publisher authorization path" do
     graph = commercial_graph
+    refute RecordingStudioBilling.respond_to?(:with_commercial_publication)
+    assert_raises(NoMethodError) { RecordingStudioBilling.with_commercial_publication { nil } }
 
     error = assert_raises(ActiveRecord::RecordInvalid) do
       graph[:italy_price].recording.root_recording.revise(graph[:italy_price].recording) do |revision|
@@ -279,6 +281,9 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     historical_draft_price_id = graph[:italy_price].id
     RecordingStudioBilling::ProviderAccount.where(id: graph[:provider].id).update_all(name: "Updated provider")
     assert_equal "Updated provider", graph[:provider].reload.name
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Price.where(id: historical_draft_price_id).update_all(state: "published")
+    end
 
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root], price_recording_ids: [graph[:italy_price].recording.id],
@@ -659,6 +664,35 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     end
   end
 
+  test "due publication activator skips stale candidates and uses its supplied time" do
+    base = Time.current.change(usec: 0)
+    stale_graph = commercial_graph
+    valid_graph = commercial_graph
+    stale = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: stale_graph[:root],
+      effective_at: base + 1.minute,
+      price_recording_ids: [stale_graph[:italy_price].recording.id],
+      actor: publication_actor
+    )
+    valid = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: valid_graph[:root],
+      effective_at: base + 2.minutes,
+      price_recording_ids: [valid_graph[:italy_price].recording.id],
+      actor: publication_actor
+    )
+    RecordingStudioBilling::Price.where(id: stale_graph[:italy_price].id).update_all(amount_minor: 1_001)
+    activation_time = base + 3.minutes
+
+    activated = RecordingStudioBilling::DueCommercialPublicationActivator.call(
+      now: activation_time,
+      actor: publication_actor
+    )
+
+    assert_equal [valid.id], activated.map(&:id)
+    assert_not_predicate stale.reload, :activated?
+    assert_equal activation_time, valid.reload.activated_at
+  end
+
   test "market resolution selects distinct Italian and German EUR prices and requotes on finalization" do
     graph = commercial_graph
     RecordingStudioBilling::CommercialPublisher.publish!(
@@ -684,18 +718,27 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       billing_option: option, market: germany.market, currency_code: germany.currency_code
     ).price!.recording.id
     assert_equal :requote, resolver.resolve(
-      stage: :final_charge, account_country: "DE", previous: italy
+      stage: :final_charge,
+      account_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :verified_account),
+      previous: italy
     ).outcome
+    assert_raises(ArgumentError) do
+      resolver.resolve(stage: :final_charge, account_country: "DE", previous: italy)
+    end
     assert_raises(ArgumentError) do
       resolver.resolve(stage: :final_charge, declaration_country: "IT", ip_country: "DE", previous: italy)
     end
     RecordingStudioBilling.configuration.market_default_country = "IT"
     assert_raises(ArgumentError) { resolver.resolve(stage: :final_charge, previous: italy) }
     assert_equal :provider, resolver.resolve(
-      stage: :final_charge, provider_country: "DE", previous: italy
+      stage: :final_charge,
+      provider_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :provider),
+      previous: italy
     ).source
     assert_equal :host, resolver.resolve(
-      stage: :final_charge, host_country: "IT", previous: italy
+      stage: :final_charge,
+      host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :host),
+      previous: italy
     ).source
     assert_raises(ArgumentError) do
       resolver = RecordingStudioBilling::MarketResolver.new(
@@ -754,6 +797,68 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       rules: [conditional_transition]
     ).evaluate
     assert_equal "upgrade_from", matched.transition
+  end
+
+  test "product rule scalar selections use membership and transitions ignore non-transition rules" do
+    source = Struct.new(:recording).new(Struct.new(:id).new("source"))
+    target = Struct.new(:recording).new(Struct.new(:id).new("target"))
+    scalar_requirement = Struct.new(
+      :key, :rule_type, :target_product_recording_id, :conditions
+    ).new("requires_target", "requires", "target", { "selected_product_recording_ids" => "target" })
+    non_transition = Struct.new(
+      :key, :rule_type, :target_product_recording_id, :conditions
+    ).new("requires_current", "requires", "target", {})
+    transition = Struct.new(
+      :key, :rule_type, :target_product_recording_id, :conditions
+    ).new("upgrade_current", "upgrade_from", "target", {})
+
+    result = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source,
+      selected_products: [target],
+      current_product: target,
+      rules: [scalar_requirement, non_transition, transition]
+    ).evaluate
+
+    assert result.eligible
+    assert_equal "upgrade_from", result.transition
+  end
+
+  test "commercial manifest resolver rejects injected rules and plan updates from another owner" do
+    graph = commercial_graph
+    resolver_arguments = {
+      product: graph[:product],
+      billing_option: graph[:option],
+      price: graph[:italy_price],
+      market: graph[:italy_market],
+      currency_code: "EUR",
+      publication_candidate: true
+    }
+
+    foreign_rule = RecordingStudioBilling::ProductRule.new(
+      product_recording_id: SecureRandom.uuid,
+      key: "foreign_rule",
+      rule_type: "requires",
+      conditions: {}
+    )
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialManifestResolver.new(
+        **resolver_arguments,
+        product_rules: [foreign_rule]
+      ).resolve!
+    end
+    assert_match(/belong to the selected product/, error.message)
+
+    foreign_plan_update = RecordingStudioBilling::PlanUpdate.new(
+      billing_option_recording_id: SecureRandom.uuid,
+      key: "foreign_plan_update"
+    )
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CommercialManifestResolver.new(
+        **resolver_arguments,
+        plan_updates: [foreign_plan_update]
+      ).resolve!
+    end
+    assert_match(/belong to the selected billing option/, error.message)
   end
 
   test "feature definitions fail closed, product rule vocabulary is exact, and tax is off by default" do

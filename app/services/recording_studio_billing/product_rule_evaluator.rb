@@ -49,7 +49,11 @@ module RecordingStudioBilling
       return false unless (conditions.keys.map(&:to_s) - ProductRule::CONDITION_KEYS).empty?
 
       conditions.all? do |key, required|
-        actual = key.to_s == "selected_product_recording_ids" ? selected_recording_ids : context[key.to_s]
+        if key.to_s == "selected_product_recording_ids"
+          next selected_recording_ids.intersect?(Array(required).map(&:to_s))
+        end
+
+        actual = context[key.to_s]
         Array(required).map(&:to_s).include?(actual.to_s) ||
           (required.is_a?(Array) && Array(actual).map(&:to_s).intersect?(required.map(&:to_s)))
       end
@@ -63,10 +67,12 @@ module RecordingStudioBilling
       return nil unless current_product
 
       rule = published_rules.find do |candidate|
+        next unless %w[replaces upgrade_from downgrade_from same_family].include?(candidate.rule_type)
+
         candidate.target_product_recording_id == current_product.recording.id &&
           conditions_met?(candidate)
       end
-      return rule.rule_type if rule && %w[replaces upgrade_from downgrade_from same_family].include?(rule.rule_type)
+      return rule.rule_type if rule
 
       nil
     end

@@ -30,7 +30,7 @@ module RecordingStudioBilling
     end
 
     def initialize(root_recording: nil, effective_at: Time.current, candidate: nil, price_recording_ids: nil,
-                   replacements: {}, rule_context: {}, actor: nil)
+                   replacements: {}, rule_context: {}, actor: nil, now: Time.current)
       @root_recording = root_recording
       @effective_at = effective_at
       @candidate = candidate
@@ -41,6 +41,7 @@ module RecordingStudioBilling
       end
       @rule_context = rule_context.to_h
       @actor = actor
+      @now = now
     end
 
     def publish!
@@ -60,7 +61,7 @@ module RecordingStudioBilling
           manifests = persist_manifests(root, graph)
           envelope = snapshot_envelope(root, graph, manifests)
           publication = find_or_create_candidate!(root, manifests, envelope)
-          activate_candidate!(publication) if publication.effective_at <= Time.current
+          activate_candidate!(publication) if publication.effective_at <= now
           publication
         end
       end
@@ -73,7 +74,7 @@ module RecordingStudioBilling
         publication = CommercialPublicationCandidate.lock.find(initial_candidate.id)
         authorize!(:activate, root:, publication:)
         return publication if publication.activated?
-        raise ArgumentError, "publication candidate is not effective yet" if publication.effective_at > Time.current
+        raise ArgumentError, "publication candidate is not effective yet" if publication.effective_at > now
 
         verify_candidate!(publication)
         activate_candidate!(publication)
@@ -82,7 +83,7 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor
+    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor, :now
 
     def canonical_root!
       root = RecordingStudio.root_recording_or_self(root_recording)
@@ -563,7 +564,7 @@ module RecordingStudioBilling
     end
 
     def matching_activated_candidate(root, graph)
-      return if effective_at > Time.current
+      return if effective_at > now
 
       selection = publication_selection
       CommercialPublicationCandidate
@@ -689,7 +690,10 @@ module RecordingStudioBilling
 
     def activate_candidate!(publication)
       verify_candidate!(publication)
-      RecordingStudioBilling.with_commercial_publication do
+      RecordingStudioBilling.send(
+        :with_commercial_publication,
+        RecordingStudioBilling.send(:commercial_publication_capability)
+      ) do
         envelope = publication.snapshot_envelope
         records = envelope.fetch("recordings").keys.sort.map { |id| RecordingStudio::Recording.unscoped.lock.find(id) }
         replacements_for(envelope).each do |prior|
@@ -710,7 +714,7 @@ module RecordingStudioBilling
           ) { |revision| revision.state = "published" }
         end
         CommercialManifest.where(manifest_digest: publication.manifest_digests).order(:id).each(&:mark_used!)
-        publication.update!(activated_at: Time.current)
+        publication.update!(activated_at: now)
         records.each do |recording|
           recording.reload.log_event!(
             action: "commercial_published",

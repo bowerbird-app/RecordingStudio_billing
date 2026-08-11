@@ -5,6 +5,7 @@
 module RecordingStudioBilling
   class MarketResolver
     Resolution = Data.define(:market, :currency_code, :country_code, :stage, :source, :outcome, :previous_market)
+    VerifiedCountryEvidence = Data.define(:country_code, :source)
     SOURCES = %i[verified_account provider host declaration ip default].freeze
     STAGES = %i[display provisional_charge final_charge].freeze
 
@@ -44,7 +45,9 @@ module RecordingStudioBilling
         default: configuration.market_default_country
       }
       source, country = country_sources_for(stage).filter_map do |key|
-        [key, normalize_country(values[key])] if valid_country?(values[key])
+        value = values[key]
+        country = stage == :final_charge ? verified_country(value, key) : normalize_country(value)
+        [key, country] if valid_country?(country)
       end.first
       raise ArgumentError, "no trusted country is available for market resolution" unless country
 
@@ -55,6 +58,13 @@ module RecordingStudioBilling
       return %i[verified_account provider host] if stage == :final_charge
 
       SOURCES
+    end
+
+    def verified_country(value, expected_source)
+      return unless value.is_a?(VerifiedCountryEvidence) &&
+                    value.source.to_s == expected_source.to_s
+
+      normalize_country(value.country_code)
     end
 
     def select_market(country)

@@ -60,6 +60,9 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'published, retired, and historical commercial records are immutable';
   END IF;
+  IF TG_OP = 'UPDATE' AND OLD.state = 'draft' AND NEW.state <> 'draft' THEN
+    RAISE EXCEPTION 'commercial publication must create an authorized revision';
+  END IF;
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
   END IF;
@@ -1565,4 +1568,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260217072816'),
 ('20260217072815'),
 ('20250101000000');
-

@@ -15,8 +15,8 @@ module RecordingStudioBilling
     def call
       CommercialPublicationCandidate.where(activated_at: nil).where(effective_at: ..@now).order(:effective_at, :id)
                                     .filter_map do |candidate|
-        CommercialPublisher.activate!(candidate:, actor: @actor)
-      rescue ActiveRecord::RecordNotFound
+        CommercialPublisher.activate!(candidate:, actor: @actor, now: @now)
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ArgumentError
         nil
       end
     end
