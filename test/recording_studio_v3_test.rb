@@ -426,7 +426,20 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
 
   def clear_billing_test_data!
     connection = ActiveRecord::Base.connection
-    tables = COMMERCIAL_RECORDABLES.map(&:table_name).map { |table| connection.quote_table_name(table) }.join(", ")
+    models = [
+      RecordingStudioBilling::PurchaseEffect,
+      RecordingStudioBilling::Purchase,
+      RecordingStudioBilling::SubscriptionItemVersion,
+      RecordingStudioBilling::Subscription,
+      RecordingStudioBilling::CheckoutAttempt,
+      RecordingStudioBilling::CheckoutIntentItem,
+      RecordingStudioBilling::CheckoutIntent,
+      RecordingStudioBilling::FinancialCommand,
+      RecordingStudioBilling::CommercialPublicationCandidate,
+      RecordingStudioBilling::CommercialManifest,
+      *COMMERCIAL_RECORDABLES
+    ]
+    tables = models.map(&:table_name).map { |table| connection.quote_table_name(table) }.join(", ")
     connection.execute("TRUNCATE TABLE #{tables} RESTART IDENTITY CASCADE")
     RecordingStudioRootSwitchable::Selection.delete_all if defined?(RecordingStudioRootSwitchable::Selection)
     RecordingStudio::Event.unscoped.delete_all

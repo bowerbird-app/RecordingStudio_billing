@@ -10,6 +10,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+--
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
@@ -230,6 +237,61 @@ $$;
 
 
 --
+-- Name: rs_billing_protect_purchase(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_purchase() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' OR TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'purchases are immutable'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_checkout_intents intent JOIN recording_studio_billing_checkout_intent_items item ON item.id = NEW.checkout_intent_item_id WHERE intent.id = NEW.checkout_intent_id AND intent.root_recording_id = NEW.root_recording_id AND intent.account_recording_id = NEW.account_recording_id AND item.checkout_intent_id = intent.id AND item.manifest_digest = NEW.manifest_digest AND EXISTS (SELECT 1 FROM recording_studio_billing_commercial_manifests manifest WHERE manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL)) THEN RAISE EXCEPTION 'purchase source authority is invalid'; END IF;
+  IF NOT rs_billing_safe_financial_json(NEW.commercial_snapshot) THEN RAISE EXCEPTION 'purchase contains unsafe data'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_purchase_effect(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_purchase_effect() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' OR TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'purchase effects are append-only'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_purchases purchase WHERE purchase.id = NEW.purchase_id AND purchase.root_recording_id = NEW.root_recording_id AND purchase.account_recording_id = NEW.account_recording_id AND purchase.manifest_digest = NEW.manifest_digest) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN RAISE EXCEPTION 'purchase effect authority or payload is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_subscription_item_version(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_subscription_item_version() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE expected_version integer;
+BEGIN
+  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'subscription item versions are append-only'; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_subscriptions subscription JOIN recording_studio_billing_checkout_intents intent ON intent.id = NEW.checkout_intent_id JOIN recording_studio_billing_checkout_intent_items item ON item.id = NEW.checkout_intent_item_id WHERE subscription.id = NEW.subscription_id AND subscription.root_recording_id = NEW.root_recording_id AND subscription.account_recording_id = NEW.account_recording_id AND intent.root_recording_id = NEW.root_recording_id AND intent.account_recording_id = NEW.account_recording_id AND item.checkout_intent_id = intent.id AND item.manifest_digest = NEW.manifest_digest AND EXISTS (SELECT 1 FROM recording_studio_billing_commercial_manifests manifest WHERE manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL)) THEN RAISE EXCEPTION 'subscription item version source authority is invalid'; END IF;
+    IF NEW.line_key <> (CASE WHEN NEW.mode = 'recurring_addon' THEN NEW.product_recording_id::text || ':' || NEW.billing_option_recording_id::text ELSE NEW.product_recording_id::text END) THEN RAISE EXCEPTION 'subscription item version line identity is invalid'; END IF;
+    SELECT COALESCE(MAX(version_number), 0) + 1 INTO expected_version FROM recording_studio_billing_subscription_item_versions WHERE subscription_id = NEW.subscription_id AND line_key = NEW.line_key;
+    IF NEW.version_number IS DISTINCT FROM expected_version THEN RAISE EXCEPTION 'subscription item versions must be sequential'; END IF;
+    IF NOT rs_billing_safe_financial_json(NEW.commercial_snapshot) THEN RAISE EXCEPTION 'subscription item version contains unsafe data'; END IF;
+    RETURN NEW;
+  END IF;
+  IF (to_jsonb(OLD) - 'effective_ends_at' - 'superseded_at' - 'updated_at') IS DISTINCT FROM (to_jsonb(NEW) - 'effective_ends_at' - 'superseded_at' - 'updated_at') OR OLD.effective_ends_at IS NOT NULL OR NEW.effective_ends_at IS NULL THEN RAISE EXCEPTION 'subscription item version history is immutable'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: rs_billing_protect_tax_calculation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -259,6 +321,22 @@ CREATE FUNCTION public.rs_billing_safe_financial_json(payload jsonb) RETURNS boo
     '$.** ? (@.type() == "string" && @ like_regex "^[[:space:]]*(https?|ftp)://" flag "i")'
   );
 $_$;
+
+
+--
+-- Name: rs_billing_subscription_lifecycle(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_subscription_lifecycle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'subscriptions are durable'; END IF;
+  IF OLD.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR OLD.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR OLD.identifier IS DISTINCT FROM NEW.identifier OR OLD.provider_reference IS DISTINCT FROM NEW.provider_reference THEN RAISE EXCEPTION 'subscription authority is immutable'; END IF;
+  IF NOT ((OLD.state = 'trialing' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'active' AND NEW.state IN ('past_due', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'past_due' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'paused' AND NEW.state IN ('active', 'cancelled', 'expired')) OR OLD.state = NEW.state) THEN RAISE EXCEPTION 'subscription lifecycle transition is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
 
 
 --
@@ -517,6 +595,26 @@ $$;
 
 
 --
+-- Name: rs_billing_validate_lifecycle_projection(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_lifecycle_projection() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM recording_studio_recordings root
+    JOIN recording_studio_recordings account_recording ON account_recording.id = NEW.account_recording_id
+    JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id
+    WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL
+      AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = root.id AND account_recording.parent_recording_id = root.id AND account_recording.trashed_at IS NULL AND account.root_recording_id = root.id
+  ) THEN RAISE EXCEPTION 'lifecycle root or account authority is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: rs_billing_validate_tax_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -735,10 +833,10 @@ CREATE TABLE public.recording_studio_billing_checkout_attempts (
     updated_at timestamp(6) without time zone NOT NULL,
     financial_command_attempt_id uuid,
     CONSTRAINT rs_billing_checkout_attempts_error_object CHECK ((jsonb_typeof(safe_error_details) = 'object'::text)),
-    CONSTRAINT rs_billing_checkout_attempts_lifecycle CHECK (((((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying])::text[])) AND (completed_at IS NULL)) OR (((state)::text = ANY ((ARRAY['succeeded'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'unknown'::character varying])::text[])) AND (completed_at IS NOT NULL)))),
+    CONSTRAINT rs_billing_checkout_attempts_lifecycle CHECK (((((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text])) AND (completed_at IS NULL)) OR (((state)::text = ANY (ARRAY[('succeeded'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('unknown'::character varying)::text])) AND (completed_at IS NOT NULL)))),
     CONSTRAINT rs_billing_checkout_attempts_number CHECK ((attempt_number > 0)),
     CONSTRAINT rs_billing_checkout_attempts_result_object CHECK ((jsonb_typeof(safe_result) = 'object'::text)),
-    CONSTRAINT rs_billing_checkout_attempts_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'unknown'::character varying])::text[])))
+    CONSTRAINT rs_billing_checkout_attempts_state CHECK (((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('succeeded'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('unknown'::character varying)::text])))
 );
 
 
@@ -769,7 +867,7 @@ CREATE TABLE public.recording_studio_billing_checkout_intent_items (
     CONSTRAINT rs_billing_checkout_items_currency CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT rs_billing_checkout_items_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT rs_billing_checkout_items_manifest_object CHECK ((jsonb_typeof(commercial_manifest) = 'object'::text)),
-    CONSTRAINT rs_billing_checkout_items_presentation CHECK (((presentation)::text = ANY ((ARRAY['embedded'::character varying, 'redirect'::character varying, 'payment_link'::character varying, 'invoice'::character varying, 'no_charge'::character varying])::text[]))),
+    CONSTRAINT rs_billing_checkout_items_presentation CHECK (((presentation)::text = ANY (ARRAY[('embedded'::character varying)::text, ('redirect'::character varying)::text, ('payment_link'::character varying)::text, ('invoice'::character varying)::text, ('no_charge'::character varying)::text]))),
     CONSTRAINT rs_billing_checkout_items_quantity CHECK ((quantity > 0))
 );
 
@@ -792,7 +890,7 @@ CREATE TABLE public.recording_studio_billing_checkout_intents (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT rs_billing_checkout_intents_fingerprint CHECK (((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'validated'::character varying, 'awaiting_confirmation'::character varying, 'pending_provider'::character varying, 'requires_requote'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'requires_review'::character varying])::text[])))
+    CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('validated'::character varying)::text, ('awaiting_confirmation'::character varying)::text, ('pending_provider'::character varying)::text, ('requires_requote'::character varying)::text, ('completed'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('requires_review'::character varying)::text])))
 );
 
 
@@ -1159,6 +1257,60 @@ CREATE TABLE public.recording_studio_billing_provider_accounts (
 
 
 --
+-- Name: recording_studio_billing_purchase_effects; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_purchase_effects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    purchase_id uuid NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    effect_kind character varying NOT NULL,
+    idempotency_key character varying NOT NULL,
+    manifest_digest character varying NOT NULL,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    effective_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_purchase_effect_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_purchase_effect_kind CHECK (((effect_kind)::text = ANY ((ARRAY['one_off_addon'::character varying, 'credit_pack'::character varying])::text[]))),
+    CONSTRAINT rs_billing_purchase_effect_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text))
+);
+
+
+--
+-- Name: recording_studio_billing_purchases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_purchases (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    checkout_intent_id uuid NOT NULL,
+    checkout_intent_item_id uuid NOT NULL,
+    product_recording_id uuid NOT NULL,
+    billing_option_recording_id uuid NOT NULL,
+    price_recording_id uuid NOT NULL,
+    provider_account_recording_id uuid NOT NULL,
+    provider_adapter_key character varying NOT NULL,
+    mode character varying NOT NULL,
+    currency_code character varying NOT NULL,
+    amount_minor bigint NOT NULL,
+    quantity integer NOT NULL,
+    manifest_digest character varying NOT NULL,
+    commercial_snapshot jsonb NOT NULL,
+    completed_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_purchase_amount_quantity CHECK (((amount_minor >= 0) AND (quantity > 0))),
+    CONSTRAINT rs_billing_purchase_currency CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT rs_billing_purchase_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_purchase_modes CHECK (((mode)::text = ANY ((ARRAY['one_off_addon'::character varying, 'one_off_credit_pack'::character varying])::text[]))),
+    CONSTRAINT rs_billing_purchase_snapshot_object CHECK ((jsonb_typeof(commercial_snapshot) = 'object'::text))
+);
+
+
+--
 -- Name: recording_studio_billing_rate_cards; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1192,6 +1344,64 @@ CREATE TABLE public.recording_studio_billing_rates (
     CONSTRAINT recording_studio_billing_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT rs_billing_rates_conversion CHECK ((((conversion_numerator IS NOT NULL) AND (conversion_numerator > 0) AND (conversion_denominator IS NOT NULL) AND (conversion_denominator > 0) AND (conversion_decimal IS NULL)) OR ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NOT NULL) AND (conversion_decimal > (0)::numeric)))),
     CONSTRAINT rs_billing_rates_conversion_present CHECK ((NOT ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NULL))))
+);
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_subscription_item_versions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    subscription_id uuid NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    checkout_intent_id uuid NOT NULL,
+    checkout_intent_item_id uuid NOT NULL,
+    line_key character varying NOT NULL,
+    version_number integer NOT NULL,
+    product_recording_id uuid NOT NULL,
+    billing_option_recording_id uuid NOT NULL,
+    price_recording_id uuid NOT NULL,
+    provider_account_recording_id uuid NOT NULL,
+    provider_adapter_key character varying NOT NULL,
+    mode character varying NOT NULL,
+    currency_code character varying NOT NULL,
+    amount_minor bigint NOT NULL,
+    quantity integer NOT NULL,
+    "interval" character varying,
+    interval_count integer,
+    manifest_digest character varying NOT NULL,
+    commercial_snapshot jsonb NOT NULL,
+    effective_starts_at timestamp(6) without time zone NOT NULL,
+    effective_ends_at timestamp(6) without time zone,
+    superseded_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_subscription_item_amount_quantity CHECK (((amount_minor >= 0) AND (quantity > 0))),
+    CONSTRAINT rs_billing_subscription_item_currency CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT rs_billing_subscription_item_dates CHECK (((effective_ends_at IS NULL) OR (effective_ends_at >= effective_starts_at))),
+    CONSTRAINT rs_billing_subscription_item_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_subscription_item_line_key CHECK (((line_key)::text ~ '^[0-9a-f-]{36}(:[0-9a-f-]{36})?$'::text)),
+    CONSTRAINT rs_billing_subscription_item_modes CHECK (((mode)::text = ANY ((ARRAY['free_plan'::character varying, 'monthly_subscription'::character varying, 'annual_subscription'::character varying, 'trial_subscription'::character varying, 'recurring_addon'::character varying])::text[]))),
+    CONSTRAINT rs_billing_subscription_item_snapshot_object CHECK ((jsonb_typeof(commercial_snapshot) = 'object'::text))
+);
+
+
+--
+-- Name: recording_studio_billing_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_subscriptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    identifier uuid DEFAULT gen_random_uuid() NOT NULL,
+    state character varying NOT NULL,
+    provider_reference character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_subscriptions_state CHECK (((state)::text = ANY ((ARRAY['trialing'::character varying, 'active'::character varying, 'past_due'::character varying, 'paused'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[])))
 );
 
 
@@ -1547,6 +1757,22 @@ ALTER TABLE ONLY public.recording_studio_billing_provider_accounts
 
 
 --
+-- Name: recording_studio_billing_purchase_effects recording_studio_billing_purchase_effects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
+    ADD CONSTRAINT recording_studio_billing_purchase_effects_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_purchases recording_studio_billing_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchases
+    ADD CONSTRAINT recording_studio_billing_purchases_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1560,6 +1786,22 @@ ALTER TABLE ONLY public.recording_studio_billing_rate_cards
 
 ALTER TABLE ONLY public.recording_studio_billing_rates
     ADD CONSTRAINT recording_studio_billing_rates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions recording_studio_billing_subscription_item_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
+    ADD CONSTRAINT recording_studio_billing_subscription_item_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_subscriptions recording_studio_billing_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscriptions
+    ADD CONSTRAINT recording_studio_billing_subscriptions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1624,6 +1866,34 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.workspaces
     ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_on_account_recording_id_40b0a22061; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_40b0a22061 ON public.recording_studio_billing_subscription_item_versions USING btree (account_recording_id);
+
+
+--
+-- Name: idx_on_account_recording_id_513c128e1f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_513c128e1f ON public.recording_studio_billing_subscriptions USING btree (account_recording_id);
+
+
+--
+-- Name: idx_on_account_recording_id_530b2ad4ba; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_530b2ad4ba ON public.recording_studio_billing_purchases USING btree (account_recording_id);
+
+
+--
+-- Name: idx_on_account_recording_id_60eab6e700; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_60eab6e700 ON public.recording_studio_billing_purchase_effects USING btree (account_recording_id);
 
 
 --
@@ -1694,6 +1964,13 @@ CREATE INDEX idx_on_checkout_intent_id_3bbe25d7ff ON public.recording_studio_bil
 --
 
 CREATE INDEX idx_on_checkout_intent_id_3c0ba4cf49 ON public.recording_studio_billing_checkout_attempts USING btree (checkout_intent_id);
+
+
+--
+-- Name: idx_on_checkout_intent_id_60a7fdca1d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_checkout_intent_id_60a7fdca1d ON public.recording_studio_billing_subscription_item_versions USING btree (checkout_intent_id);
 
 
 --
@@ -1837,6 +2114,20 @@ CREATE INDEX idx_on_provider_account_recording_id_e7e6d6a62d ON public.recording
 
 
 --
+-- Name: idx_on_root_recording_id_107421795e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_107421795e ON public.recording_studio_billing_subscription_item_versions USING btree (root_recording_id);
+
+
+--
+-- Name: idx_on_root_recording_id_52395a8cdb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_52395a8cdb ON public.recording_studio_billing_subscriptions USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_root_recording_id_c1ebf50973; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1858,10 +2149,24 @@ CREATE INDEX idx_on_root_recording_id_d63849b28a ON public.recording_studio_bill
 
 
 --
+-- Name: idx_on_root_recording_id_e8f7404b06; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_e8f7404b06 ON public.recording_studio_billing_purchase_effects USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_root_recording_id_f7b40e9183; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_f7b40e9183 ON public.recording_studio_billing_checkout_intents USING btree (root_recording_id);
+
+
+--
+-- Name: idx_on_subscription_id_eca2627d32; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_subscription_id_eca2627d32 ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_id);
 
 
 --
@@ -2012,6 +2317,48 @@ CREATE UNIQUE INDEX idx_rs_billing_one_processing_attempt ON public.recording_st
 
 
 --
+-- Name: idx_rs_billing_purchase_checkout_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_purchase_checkout_item ON public.recording_studio_billing_purchases USING btree (checkout_intent_item_id);
+
+
+--
+-- Name: idx_rs_billing_purchase_effect_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_purchase_effect_idempotency ON public.recording_studio_billing_purchase_effects USING btree (root_recording_id, idempotency_key);
+
+
+--
+-- Name: idx_rs_billing_subscription_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_subscription_account ON public.recording_studio_billing_subscriptions USING btree (root_recording_id, account_recording_id);
+
+
+--
+-- Name: idx_rs_billing_subscription_item_checkout_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_subscription_item_checkout_item ON public.recording_studio_billing_subscription_item_versions USING btree (checkout_intent_item_id);
+
+
+--
+-- Name: idx_rs_billing_subscription_item_line_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_subscription_item_line_version ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_id, line_key, version_number);
+
+
+--
+-- Name: idx_rs_billing_subscriptions_identifier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_subscriptions_identifier ON public.recording_studio_billing_subscriptions USING btree (identifier);
+
+
+--
 -- Name: idx_rs_billing_tax_command_revision; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2065,6 +2412,27 @@ CREATE UNIQUE INDEX index_admin_roots_on_name ON public.admin_roots USING btree 
 --
 
 CREATE INDEX index_recording_studio_billing_prices_on_market_recording_id ON public.recording_studio_billing_prices USING btree (market_recording_id);
+
+
+--
+-- Name: index_recording_studio_billing_purchase_effects_on_purchase_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_recording_studio_billing_purchase_effects_on_purchase_id ON public.recording_studio_billing_purchase_effects USING btree (purchase_id);
+
+
+--
+-- Name: index_recording_studio_billing_purchases_on_checkout_intent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_recording_studio_billing_purchases_on_checkout_intent_id ON public.recording_studio_billing_purchases USING btree (checkout_intent_id);
+
+
+--
+-- Name: index_recording_studio_billing_purchases_on_root_recording_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_recording_studio_billing_purchases_on_root_recording_id ON public.recording_studio_billing_purchases USING btree (root_recording_id);
 
 
 --
@@ -2460,6 +2828,48 @@ CREATE TRIGGER rs_billing_manifests_protect_history BEFORE DELETE OR UPDATE ON p
 
 
 --
+-- Name: recording_studio_billing_purchases rs_billing_purchase_authority; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_purchase_authority BEFORE INSERT ON public.recording_studio_billing_purchases FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_lifecycle_projection();
+
+
+--
+-- Name: recording_studio_billing_purchase_effects rs_billing_purchase_effect_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_purchase_effect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_purchase_effects FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_purchase_effect();
+
+
+--
+-- Name: recording_studio_billing_purchases rs_billing_purchase_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_purchase_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_purchases FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_purchase();
+
+
+--
+-- Name: recording_studio_billing_subscriptions rs_billing_subscription_authority; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_subscription_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_subscriptions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_lifecycle_projection();
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions rs_billing_subscription_item_version_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_subscription_item_version_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_subscription_item_versions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_subscription_item_version();
+
+
+--
+-- Name: recording_studio_billing_subscriptions rs_billing_subscription_lifecycle; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_subscription_lifecycle BEFORE DELETE OR UPDATE ON public.recording_studio_billing_subscriptions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_subscription_lifecycle();
+
+
+--
 -- Name: recording_studio_billing_tax_calculations rs_billing_tax_calculation_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2506,6 +2916,14 @@ ALTER TABLE ONLY public.recording_studio_recordings
 
 
 --
+-- Name: recording_studio_billing_purchases fk_rails_2db0688675; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchases
+    ADD CONSTRAINT fk_rails_2db0688675 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_checkout_intents fk_rails_2ec9aa65bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2530,6 +2948,22 @@ ALTER TABLE ONLY public.recording_studio_billing_billing_options
 
 
 --
+-- Name: recording_studio_billing_purchase_effects fk_rails_3e3b69f431; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
+    ADD CONSTRAINT fk_rails_3e3b69f431 FOREIGN KEY (purchase_id) REFERENCES public.recording_studio_billing_purchases(id);
+
+
+--
+-- Name: recording_studio_billing_purchases fk_rails_436859f7d5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchases
+    ADD CONSTRAINT fk_rails_436859f7d5 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_checkout_intent_items fk_rails_454ae16426; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2546,6 +2980,30 @@ ALTER TABLE ONLY public.recording_studio_billing_financial_commands
 
 
 --
+-- Name: recording_studio_billing_purchase_effects fk_rails_481999b1e3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
+    ADD CONSTRAINT fk_rails_481999b1e3 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions fk_rails_4992812ca8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
+    ADD CONSTRAINT fk_rails_4992812ca8 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_purchase_effects fk_rails_4b371c645a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
+    ADD CONSTRAINT fk_rails_4b371c645a FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_plan_updates fk_rails_511ec0e839; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2559,6 +3017,14 @@ ALTER TABLE ONLY public.recording_studio_billing_plan_updates
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_580f212427 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions fk_rails_59234eacda; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
+    ADD CONSTRAINT fk_rails_59234eacda FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -2634,6 +3100,30 @@ ALTER TABLE ONLY public.recording_studio_billing_meters
 
 
 --
+-- Name: recording_studio_billing_subscription_item_versions fk_rails_77212d5465; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
+    ADD CONSTRAINT fk_rails_77212d5465 FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
+
+
+--
+-- Name: recording_studio_billing_subscription_item_versions fk_rails_7ad7f1b975; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
+    ADD CONSTRAINT fk_rails_7ad7f1b975 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
+
+
+--
+-- Name: recording_studio_billing_purchases fk_rails_7f6c19f3a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_purchases
+    ADD CONSTRAINT fk_rails_7f6c19f3a5 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
+
+
+--
 -- Name: recording_studio_billing_cost_cards fk_rails_7fe81ededc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2663,6 +3153,14 @@ ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_prices
     ADD CONSTRAINT fk_rails_9546dcb8cf FOREIGN KEY (billing_option_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_subscriptions fk_rails_97d9baa876; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscriptions
+    ADD CONSTRAINT fk_rails_97d9baa876 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -2794,6 +3292,14 @@ ALTER TABLE ONLY public.recording_studio_billing_cost_rates
 
 
 --
+-- Name: recording_studio_billing_subscriptions fk_rails_eb5461aa73; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_subscriptions
+    ADD CONSTRAINT fk_rails_eb5461aa73 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_products fk_rails_f2d073142d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2846,41 +3352,4 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 --
 
 SET search_path TO "$user", public;
-
-INSERT INTO "schema_migrations" (version) VALUES
-('20260811000004'),
-('20260811000003'),
-('20260811000002'),
-('20260811000001'),
-('20260811000000'),
-('20260810000011'),
-('20260810000010'),
-('20260810000009'),
-('20260810000008'),
-('20260810000007'),
-('20260810000006'),
-('20260810000005'),
-('20260810000004'),
-('20260810000003'),
-('20260810000002'),
-('20260810000000'),
-('20260809999999'),
-('20260612000000'),
-('20260421000000'),
-('20260217233016'),
-('20260217072940'),
-('20260217072923'),
-('20260217072826'),
-('20260217072825'),
-('20260217072824'),
-('20260217072823'),
-('20260217072822'),
-('20260217072821'),
-('20260217072820'),
-('20260217072819'),
-('20260217072818'),
-('20260217072817'),
-('20260217072816'),
-('20260217072815'),
-('20250101000000');
 

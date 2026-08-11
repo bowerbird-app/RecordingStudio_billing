@@ -58,6 +58,10 @@ module RecordingStudioBilling
       ExecuteCheckoutIntent.call(...)
     end
 
+    def project_completed_checkout_intent(...)
+      ProjectCompletedCheckoutIntent.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end

@@ -379,16 +379,118 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     refute RecordingStudioBilling::CheckoutIntent.where(state: "pending_provider", financial_command_id: nil).exists?
   end
 
+  test "projects every supported commercial lifecycle mode from frozen completed checkout terms" do
+    cases = {
+      ["plan", "recurring", "month", 0, 0] => "free_plan",
+      ["plan", "recurring", "month", 0, 1_000] => "monthly_subscription",
+      ["plan", "recurring", "year", 0, 1_000] => "annual_subscription",
+      ["plan", "recurring", "month", 14, 1_000] => "trial_subscription",
+      ["addon", "recurring", "month", 0, 1_000] => "recurring_addon",
+      ["addon", "one_time", nil, 0, 1_000] => "one_off_addon",
+      ["credit_pack", "one_time", nil, 0, 1_000] => "one_off_credit_pack"
+    }
+
+    cases.each_with_index do |((kind, recurrence, interval, trial_days, amount), expected_mode), index|
+      RecordingStudioBilling.configuration.reset_registries!
+      graph = published_catalogue(kind:, recurrence:, interval:, trial_days:, amount:)
+      intent = create_intent(graph, country: "IT", key: "lifecycle-#{index}").intent
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+      result = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+      assert result.projected?
+      assert_equal "completed", intent.reload.state
+      if expected_mode.start_with?("one_off")
+        assert_equal expected_mode, result.purchase.mode
+        assert_equal(expected_mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon", result.purchase.effects.sole.effect_kind)
+      else
+        assert_equal expected_mode, result.subscription.item_versions.sole.mode
+        assert_equal(expected_mode == "trial_subscription" ? "trialing" : "active", result.subscription.state)
+      end
+    end
+  end
+
+  test "lifecycle projection is root isolated, idempotent, append-only, and provider neutral" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    intent = create_intent(graph, country: "IT", key: "project-idempotently").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    first = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    repeated = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
+
+    assert first.projected?
+    assert repeated.existing?
+    assert_equal 1, RecordingStudioBilling::SubscriptionItemVersion.where(subscription: first.subscription).count
+    assert_raises(ActiveRecord::StatementInvalid) { first.subscription.item_versions.sole.update_column(:amount_minor, 1) }
+    assert_raises(ActiveRecord::RecordNotFound) do
+      RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: other_root)
+    end
+    source = File.read(Rails.root.join("../../app/services/recording_studio_billing/project_completed_checkout_intent.rb"))
+    refute_match(/Stripe::|stripe_credential|:stripe/, source)
+  end
+
+  test "base plan variants replace one product line while recurring add-ons remain active" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    annual, = published_option(graph, product_recording: graph[:option].product_recording, kind: "plan", recurrence: "recurring", interval: "year")
+    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+    plan_intent = create_intent(graph, country: "IT", key: "base-monthly").intent
+    addon_intent = create_intent(graph, country: "IT", key: "recurring-addon", option: addon).intent
+
+    [plan_intent, addon_intent].each do |intent|
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+      RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    end
+    replacement_intent = create_intent(graph, country: "IT", key: "base-annual", option: annual).intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: replacement_intent, root_recording: graph[:customer_root])
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: replacement_intent, root_recording: graph[:customer_root]).subscription
+
+    plan_versions = subscription.item_versions.where(product_recording_id: graph[:option].product_recording_id).order(:version_number)
+    addon_versions = subscription.item_versions.where(billing_option_recording_id: addon.recording.id).order(:version_number)
+    assert_equal [1, 2], plan_versions.pluck(:version_number)
+    assert_equal [graph[:option].recording.id, annual.recording.id], plan_versions.pluck(:billing_option_recording_id)
+    assert_equal [graph[:option].product_recording_id], plan_versions.pluck(:line_key).uniq
+    assert_predicate plan_versions.first, :effective_ends_at?
+    assert_nil plan_versions.last.effective_ends_at
+    assert_equal [1], addon_versions.pluck(:version_number)
+    assert_nil addon_versions.sole.effective_ends_at
+    assert_equal 2, subscription.item_versions.where(effective_ends_at: nil).count
+    assert_equal 2, subscription.item_versions.where(effective_ends_at: nil).distinct.count(:line_key)
+  end
+
+  test "subscription lifecycle transitions are explicit and reject terminal or invalid moves" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month", trial_days: 7)
+    intent = create_intent(graph, country: "IT", key: "lifecycle-transitions").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
+
+    assert_equal "active", RecordingStudioBilling::SubscriptionLifecycle.activate(subscription:, root_recording: graph[:customer_root]).state
+    assert_equal "paused", RecordingStudioBilling::SubscriptionLifecycle.pause(subscription:, root_recording: graph[:customer_root]).state
+    assert_equal "active", RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:, root_recording: graph[:customer_root]).state
+    assert_equal "cancelled", RecordingStudioBilling::SubscriptionLifecycle.cancel(subscription:, root_recording: graph[:customer_root]).state
+    assert_raises(ArgumentError) { RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:, root_recording: graph[:customer_root]) }
+  end
+
+  test "lifecycle snapshots reject unsafe payloads and tampered manifests" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    intent = create_intent(graph, country: "IT", key: "lifecycle-safe").intent
+    item = intent.items.sole
+    item.commercial_manifest = { "raw_provider_payload" => "unsafe" }
+    refute item.valid?
+
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: intent.items.sole.manifest_digest)
+    assert_raises(ActiveRecord::StatementInvalid) { manifest.update_column(:canonical_data, {}) }
+  end
+
   private
 
-  def create_intent(graph, country:, key:)
+  def create_intent(graph, country:, key:, option: graph[:option])
     RecordingStudioBilling.create_checkout_intent(
       root_recording: graph[:customer_root], local_idempotency_key: key, country_code: country,
-      items: [{ billing_option_recording_id: graph[:option].recording.id, quantity: 1 }]
+      items: [{ billing_option_recording_id: option.recording.id, quantity: 1 }]
     )
   end
 
-  def published_catalogue
+  def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000)
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root, key: "billing_#{SecureRandom.hex(4)}")
     provider_recording = record_child(
@@ -398,19 +500,26 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     )
     italy_market = market("italy", "IT", provider_recording, provider_root, admin.recording, "requote")
     germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording, "requote")
-    product_recording = record_child(RecordingStudioBilling::Product.new(provider_account_recording: provider_recording, key: "product_#{SecureRandom.hex(4)}", kind: "service", feature_values: {}), provider_root, admin.recording)
-    option_recording = record_child(RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}", recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), provider_root, product_recording)
-    italy_price = price("italy", option_recording, italy_market, 1_000, provider_root)
-    germany_price = price("germany", option_recording, germany_market, 1_200, provider_root)
-    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: provider_root, price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
-    option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_recording.recordable.key)
-    published_italy_price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: italy_price.recordable.key)
-    published_germany_price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: germany_price.recordable.key)
+    graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
+    option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:, trial_days:, amount:)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"], markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
     RecordingStudioBilling.register_provider("fake", adapter)
     customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Customer #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: customer_root, name: "Customer account")
-    { customer_root:, option:, italy_price: published_italy_price, germany_price: published_germany_price, adapter: }
+    graph.merge(customer_root:, option:, italy_price: published_italy_price, germany_price: published_germany_price, adapter:)
+  end
+
+  def published_option(graph, product_recording: nil, kind:, recurrence:, interval:, trial_days: 0, amount: 1_000)
+    product_recording ||= record_child(RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording], key: "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording)
+    option_recording = record_child(RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}", recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), graph[:provider_root], product_recording)
+    italy_price = price("italy", option_recording, graph[:italy_market], amount, graph[:provider_root])
+    germany_price = price("germany", option_recording, graph[:germany_market], amount + 200, graph[:provider_root])
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root], price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
+    [
+      RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_recording.recordable.key),
+      RecordingStudioBilling::Price.with_current_recording.find_by!(key: italy_price.recordable.key),
+      RecordingStudioBilling::Price.with_current_recording.find_by!(key: germany_price.recordable.key)
+    ]
   end
 
   def market(key, country, provider, root, parent, verification_policy)
@@ -427,7 +536,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def clear_data!
     connection = ActiveRecord::Base.connection
-    tables = [RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
+    tables = [RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
     connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
     RecordingStudio::Event.unscoped.delete_all
     RecordingStudio::Recording.unscoped.delete_all

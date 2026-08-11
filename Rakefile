@@ -77,7 +77,13 @@ namespace :test do
     Dir.chdir(DUMMY_APP_ROOT) do
       env = dummy_bundle_env
 
-      run_command!(env, "bundle", "exec", "bin/rails", "db:drop", "db:create", "db:migrate")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:environment:set", "RAILS_ENV=test")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:drop")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:create")
+      run_command!(env, "bundle", "exec", "bin/rails", "runner", "ActiveRecord::Base.connection.execute('DROP SCHEMA public CASCADE'); ActiveRecord::Base.connection.execute('CREATE SCHEMA public')")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:schema:load")
+      run_command!(env, "bundle", "exec", "bin/rails", "runner", "context = ActiveRecord::Base.connection_pool.migration_context; context.migrations.each { |migration| context.schema_migration.create_version(migration.version.to_s) }")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:seed")
       run_command!(env, "bundle", "exec", "bin/rails", "test")
       DUMMY_TEST_FILES.each do |test_file|
         run_command!(env, "bundle", "exec", "ruby", "-I#{TEST_ROOT}", test_file)
@@ -86,7 +92,7 @@ namespace :test do
   end
 
   desc "Run gem and dummy app tests"
-  task all: %i[test dummy]
+  task all: %i[dummy test]
 end
 
 namespace :app do
