@@ -48,6 +48,10 @@ module RecordingStudioBilling
     def publication_managed_state_is_authorized
       return if is_a?(FeatureOverride)
       return unless state != "draft"
+      # CommercialPublisher validates the complete graph before entering its
+      # activation context. Existing published dependencies have not changed
+      # state and therefore do not need to be authorized again.
+      return if persisted? && !will_save_change_to_state?
       return if RecordingStudioBilling.commercial_publication_in_progress?
 
       errors.add(:state, "may only change through an authorized commercial publication")

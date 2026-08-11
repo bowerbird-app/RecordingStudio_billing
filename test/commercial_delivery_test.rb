@@ -274,6 +274,47 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     assert_includes error.record.errors[:state], "may only change through an authorized commercial publication"
     assert_equal "draft", graph[:italy_price].reload.state
+
+    direct_publication = RecordingStudioBilling::Price.new(
+      billing_option_recording: graph[:option].recording,
+      market_recording: graph[:italy_market].recording,
+      key: "direct_publication_price",
+      amount_minor: 1_000,
+      currency_code: "EUR",
+      currency_exponent: 2,
+      pricing_model: "flat",
+      version: 1,
+      scope: "direct",
+      state: "published"
+    )
+    assert_not_predicate direct_publication, :valid?
+    assert_includes direct_publication.errors[:state], "may only change through an authorized commercial publication"
+  end
+
+  test "publishes a new draft using unchanged published dependencies" do
+    graph = commercial_graph
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root],
+      price_recording_ids: [graph[:italy_price].recording.id],
+      actor: publication_actor
+    )
+
+    provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: graph[:provider].key)
+    market = RecordingStudioBilling::Market.with_current_recording.find_by!(key: graph[:italy_market].key)
+    product = RecordingStudioBilling::Product.with_current_recording.find_by!(key: graph[:product].key)
+    option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: graph[:option].key)
+    assert_equal %w[published published published published], [provider, market, product, option].map(&:state)
+    assert [provider, market, product, option].all?(&:valid?)
+
+    additional_price = price("additional", option.recording, market.recording, 1_100, graph[:root], scope: "additional")
+    candidate = RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: graph[:root],
+      price_recording_ids: [additional_price.id],
+      actor: publication_actor
+    )
+
+    assert_predicate candidate, :activated?
+    assert_equal "published", additional_price.reload.recordable.state
   end
 
   test "database history guard preserves recordables and delivery artifacts" do
@@ -396,6 +437,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     assert_equal "retired", prior_recording.reload.recordable.state
     assert_equal "published", replacement_recording.reload.recordable.state
+    assert_predicate prior_recording.recordable, :valid?
+    assert_predicate replacement_recording.recordable, :valid?
     selected = RecordingStudioBilling::CommercialPriceSelector.new(
       billing_option: option_recording.reload.recordable,
       market: market_recording.reload.recordable,
@@ -950,12 +993,12 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     )
   end
 
-  def price(name, option, market, amount, root)
+  def price(name, option, market, amount, root, scope: "default")
     record_child(
       RecordingStudioBilling::Price.new(
         billing_option_recording: option, market_recording: market, key: "#{name}_eur_price",
         amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat",
-        version: 1, scope: "default"
+        version: 1, scope: scope
       ), root, option
     )
   end
