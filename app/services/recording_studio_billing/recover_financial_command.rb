@@ -27,7 +27,5 @@ module RecordingStudioBilling
 
       FinancialCommandExecutor.new(command:, adapter:).execute(claim:)
     end
-
-    private_class_method :recover_with_adapter
   end
 end

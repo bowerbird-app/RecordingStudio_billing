@@ -146,11 +146,9 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
   def create_safe_payload_function
     execute <<~SQL
       CREATE FUNCTION rs_billing_safe_financial_json(payload jsonb) RETURNS boolean AS $$
-        SELECT NOT EXISTS (
-          SELECT 1
-          FROM jsonb_path_query(payload, '$.** ? (@.type() == "object")') AS object(value)
-          CROSS JOIN LATERAL jsonb_object_keys(object.value) AS key(name)
-          WHERE key.name ~* '(authorization|credential|password|secret|token|api[_-]?key|private[_-]?key|signature|card[_-]?(number|cvc|cvv)|payment[_-]?(nonce|credential)|bank[_-]?account|routing[_-]?number|provider[_-]?(url|uri|id|identifier|account[_-]?id|customer[_-]?id|response|payload|body)|raw[_-]?(provider|response|payload|body)|(^|[_-])(tax|vat)[_-]?(id|identifier|number)|(^|[_-])(email|phone|address|postal[_-]?code|ip[_-]?address)|(^|[_-])(url|uri))$'
+        SELECT NOT jsonb_path_exists(
+          payload,
+          '$.**.keyvalue() ? (@.key like_regex "(authorization|credential|password|secret|token|api[_-]?key|private[_-]?key|signature|card[_-]?(number|cvc|cvv)|payment[_-]?(nonce|credential)|bank[_-]?account|routing[_-]?number|provider[_-]?(url|uri|id|identifier|account[_-]?id|customer[_-]?id|response|payload|body)|raw[_-]?(provider|response|payload|body)|(^|[_-])(tax|vat)[_-]?(id|identifier|number)|(^|[_-])(email|phone|address|postal[_-]?code|ip[_-]?address)|(^|[_-])(url|uri)$)" flag "i")'
         ) AND NOT jsonb_path_exists(
           payload,
           '$.** ? (@.type() == "string" && @ like_regex "^[[:space:]]*(https?|ftp)://" flag "i")'
@@ -163,12 +161,6 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
     execute <<~SQL
       CREATE FUNCTION rs_billing_validate_command_authority() RETURNS trigger AS $$
       BEGIN
-        IF NOT rs_billing_safe_financial_json(NEW.canonical_request -> 'request')
-           OR NOT rs_billing_safe_financial_json(NEW.normalized_result)
-           OR NOT rs_billing_safe_financial_json(NEW.safe_error_details)
-           OR NEW.provider_reference ~* '^[[:space:]]*(https?|ftp)://' THEN
-          RAISE EXCEPTION 'financial command contains unsafe persisted data';
-        END IF;
         IF TG_OP = 'UPDATE' AND NOT (NEW.state = 'processing' AND OLD.state IS DISTINCT FROM NEW.state) THEN
           RETURN NEW;
         END IF;
@@ -215,6 +207,12 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
             AND admin.root_recording_id = admin_recording.root_recording_id
         ) THEN
           RAISE EXCEPTION 'financial command provider authority is invalid';
+        END IF;
+        IF NOT rs_billing_safe_financial_json(NEW.canonical_request -> 'request')
+           OR NOT rs_billing_safe_financial_json(NEW.normalized_result)
+           OR NOT rs_billing_safe_financial_json(NEW.safe_error_details)
+           OR NEW.provider_reference ~* '^[[:space:]]*(https?|ftp)://' THEN
+          RAISE EXCEPTION 'financial command contains unsafe persisted data';
         END IF;
         RETURN NEW;
       END;

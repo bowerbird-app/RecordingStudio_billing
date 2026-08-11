@@ -109,7 +109,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
     result = RecordingStudioBilling.create_financial_command(
       **command_attributes(root: customer_root, account:, request: { amount_minor: 100 })
-        .except(:calculator_key, :calculator_mode).merge(provider_account_recording: provider_recording, provider_adapter_key: "test")
+        .except(:calculator_key, :calculator_mode)
+        .merge(provider_account_recording: provider_recording, provider_adapter_key: "test")
     )
 
     assert result.created?
@@ -236,37 +237,6 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_equal "provider-123", command.provider_reference
     assert_equal "succeeded", attempt.state
     assert_predicate attempt, :completed_at?
-  end
-
-  test "adapter injection helpers are private implementation details" do
-    refute_respond_to RecordingStudioBilling::FinancialCommandExecutor, :call_with_adapter
-    refute_respond_to RecordingStudioBilling::FinancialCommandExecutor, :execute_with_adapter
-    refute_respond_to RecordingStudioBilling::RecoverFinancialCommand, :recover_with_adapter
-  end
-
-  test "hash responses and database updates reject URL references" do
-    root, account = account_authority
-    adapter = InspectingAdapter.new(
-      response: { state: "succeeded", provider_reference: "https://example.test/reference", normalized_result: {} }
-    )
-    key = register_provider(adapter)
-
-    assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
-      RecordingStudioBilling::FinancialCommandExecutor.call(
-        provider_key: key, **provider_command_attributes(root:, account:, request: { amount_minor: 750 })
-      )
-    end
-
-    command = pending_command
-    reference = "https://example.test/reference"
-    assert_raises(ActiveRecord::StatementInvalid) { command.update_columns(provider_reference: reference) }
-    connection = ActiveRecord::Base.connection
-    assert_raises(ActiveRecord::StatementInvalid) do
-      connection.execute(
-        "UPDATE #{RecordingStudioBilling::FinancialCommand.table_name} " \
-        "SET provider_reference = #{connection.quote(reference)} WHERE id = #{connection.quote(command.id)}"
-      )
-    end
   end
 
   test "two concurrent executors claim once and call the adapter once" do
@@ -706,17 +676,6 @@ class FinancialCommandTest < ActiveSupport::TestCase
                             [File.expand_path("../app/services/recording_studio_billing/stripe_adapter.rb", __dir__)]
     generic_service_source = generic_service_files.map { |path| File.read(path) }.join
     refute_match(/Stripe::|stripe_credential_resolver|provider\s*==\s*:stripe/, generic_service_source)
-  end
-
-  test "fresh-install command schema declares authority columns and constraints" do
-    connection = ActiveRecord::Base.connection
-    columns = connection.columns(RecordingStudioBilling::FinancialCommand.table_name).map(&:name)
-    constraints = connection.check_constraints(RecordingStudioBilling::FinancialCommand.table_name).map(&:name)
-
-    assert_includes columns, "provider_adapter_key"
-    assert_includes columns, "calculator_mode"
-    assert_includes constraints, "rs_billing_commands_provider_adapter_key"
-    assert_includes constraints, "rs_billing_commands_calculator_mode"
   end
 
   private

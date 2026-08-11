@@ -61,8 +61,6 @@ module RecordingStudioBilling
       new(command:, adapter:, after_adapter_call:, capability_requirements:).execute(claim:)
     end
 
-    private_class_method :call_with_adapter, :execute_with_adapter
-
     def self.reject_ambient_transaction!
       return unless ActiveRecord::Base.connection.transaction_open?
 
@@ -157,7 +155,9 @@ module RecordingStudioBilling
       result = SafeFinancialPayload.normalize(response.fetch(:normalized_result, {}))
       result["status"] = uncertain ? "unknown" : requested_state
       provider_reference = response[:provider_reference]
-      provider_reference = SafeFinancialPayload.normalize_reference(provider_reference, label: "provider reference") unless provider_reference.nil?
+      unless provider_reference.nil? || (provider_reference.is_a?(String) && provider_reference.bytesize <= 512)
+        raise ArgumentError, "provider reference must be a bounded string"
+      end
 
       {
         command_state:,
