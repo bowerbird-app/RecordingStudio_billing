@@ -274,22 +274,23 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       currency_exponent: 2,
       pricing_model: "flat",
       version: 1,
-      scope: "standard",
-      state: "published"
+      scope: "standard"
     )
     assert_predicate price, :valid?
     record_child(price, admin_root, option_recording)
 
-    active_replacement = price.dup
-    active_replacement.key = "monthly_usd_v2"
-    active_replacement.version = 2
-    assert_not_predicate active_replacement, :valid?
-    assert_includes active_replacement.errors[:billing_option_recording_id], "has already been taken"
+    invalid_version = price.dup
+    invalid_version.key = "monthly_usd_invalid"
+    invalid_version.version = 0
+    assert_not_predicate invalid_version, :valid?
+    assert_includes invalid_version.errors[:version], "must be greater than or equal to 1"
 
-    historical_duplicate = price.dup
-    historical_duplicate.key = "monthly_usd_v1_retired"
-    historical_duplicate.state = "retired"
-    assert_predicate historical_duplicate, :valid?
+    direct_publication = price.dup
+    direct_publication.key = "monthly_usd_v2"
+    direct_publication.version = 2
+    direct_publication.state = "published"
+    assert_not_predicate direct_publication, :valid?
+    assert_includes direct_publication.errors[:state], "may only change through an authorized commercial publication"
 
     invalid_product = RecordingStudioBilling::Product.new(
       provider_account_recording: provider_recording,
