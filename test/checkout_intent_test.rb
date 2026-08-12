@@ -568,6 +568,134 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
   end
 
+  test "records root-scoped usage idempotently and protects its append-only history" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "usage-entitlement")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    created = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
+                                                   idempotency_key: "usage-event", metadata: { "source" => "studio" })
+    existing = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
+                                                    idempotency_key: "usage-event")
+
+    assert created.created?
+    assert existing.existing?
+    assert_equal created.event.id, existing.event.id
+    assert_equal 2, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
+    exhausted = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 4,
+                             idempotency_key: "exhausted-usage")
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Unentitled #{SecureRandom.hex(4)}"))
+    RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Unentitled account")
+    unentitled = RecordingStudioBilling.record_usage(root_recording: other_root, usage_key: "seats", quantity: 1,
+                              idempotency_key: "no-entitlement")
+
+    assert exhausted.denied?
+    assert_equal :exhausted_allowance, exhausted.reason
+    assert unentitled.denied?
+    assert_equal :no_entitlement, unentitled.reason
+    assert_equal 1, RecordingStudioBilling::UsageEvent.where(root_recording: graph[:customer_root]).count
+    assert_equal 0, RecordingStudioBilling::UsageEvent.where(root_recording: other_root).count
+    assert_raises(ActiveRecord::StatementInvalid) { created.event.update_column(:quantity, 3) }
+    assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
+      RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 1,
+                                          idempotency_key: "unsafe-usage", metadata: { "provider_url" => "https://invalid.test" })
+    end
+  end
+
+  test "concurrent usage at the remaining allowance creates exactly one event" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "concurrent-usage-entitlement")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
+                                        idempotency_key: "usage-before-race")
+    ready = Queue.new
+    release = Queue.new
+    results = Queue.new
+
+    threads = 2.times.map do |index|
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ready << true
+          release.pop
+          results << RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 3,
+                                                         idempotency_key: "remaining-usage-#{index}")
+        end
+      end
+    end
+    2.times { ready.pop }
+    2.times { release << true }
+    threads.each(&:join)
+
+    assert_equal %i[created denied], 2.times.map { results.pop.status }.sort
+    assert_equal 2, RecordingStudioBilling::UsageEvent.where(root_recording: graph[:customer_root], usage_key: "seats").count
+    assert_equal 5, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
+  end
+
+  test "consumes credits once with source authority and includes debits in the balance" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "consume-credits").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    created = RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
+                                                      amount: 3, usage_key: "seats", idempotency_key: "consume-once")
+    existing = RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
+                                                       amount: 3, usage_key: "seats", idempotency_key: "consume-once")
+
+    assert created.created?
+    assert existing.existing?
+    assert_equal created.entry.id, existing.entry.id
+    assert_equal(-3, created.entry.amount)
+    assert_equal 2, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+    assert_raises(ActiveRecord::StatementInvalid) { created.entry.update_column(:amount, -4) }
+    usage = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 1,
+                                                idempotency_key: "forged-oversized-debit").event
+    oversized_debit = created.entry.attributes.except("id", "created_at", "updated_at").merge(
+      "id" => SecureRandom.uuid, "purchase_effect_id" => nil, "usage_event_id" => usage.id,
+      "idempotency_key" => usage.idempotency_key, "amount" => -3, "effective_at" => Time.current,
+      "created_at" => Time.current, "updated_at" => Time.current
+    )
+    assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::CreditLedgerEntry.insert_all!([oversized_debit]) }
+    forged = created.entry.attributes.except("id", "created_at", "updated_at").merge(
+      "id" => SecureRandom.uuid, "product_recording_id" => SecureRandom.uuid, "created_at" => Time.current, "updated_at" => Time.current
+    )
+    assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::CreditLedgerEntry.insert_all!([forged]) }
+  end
+
+  test "concurrent last-credit consumption permits exactly one debit" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "concurrent-credits").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    ready = Queue.new
+    release = Queue.new
+    results = Queue.new
+
+    threads = 2.times.map do |index|
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ready << true
+          release.pop
+          results << RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
+                                                             amount: 5, usage_key: "seats", idempotency_key: "last-credit-#{index}")
+        end
+      end
+    end
+    2.times { ready.pop }
+    2.times { release << true }
+    threads.each(&:join)
+
+    assert_equal %i[created denied], 2.times.map { results.pop.status }.sort
+    assert_equal 1, RecordingStudioBilling::CreditLedgerEntry.where(direction: "debit").count
+    assert_equal 0, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+  end
+
   test "public entitlement APIs normalize an account child recording and fail closed across roots" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
@@ -723,7 +851,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def clear_data!
     connection = ActiveRecord::Base.connection
-    tables = [RecordingStudioBilling::EntitlementGrant, RecordingStudioBilling::CreditLedgerEntry, RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
+    tables = [RecordingStudioBilling::UsageEvent, RecordingStudioBilling::EntitlementGrant, RecordingStudioBilling::CreditLedgerEntry, RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
     connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
     RecordingStudio::Event.unscoped.delete_all
     RecordingStudio::Recording.unscoped.delete_all

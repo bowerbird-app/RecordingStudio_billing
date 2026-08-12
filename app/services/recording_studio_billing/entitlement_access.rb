@@ -15,6 +15,10 @@ module RecordingStudioBilling
 
     def enabled?(feature_key) = boolean(feature_key)
 
+    def has_feature?(feature_key)
+      effective_grants.where(feature_key:).exists?
+    end
+
     def boolean(feature_key)
       values_for(feature_key, "boolean").any? { |value| value == true }
     end
@@ -32,6 +36,13 @@ module RecordingStudioBilling
     def credit_balance(credit_key)
       CreditLedgerEntry.where(root_recording: root_recording, account_recording:, product_recording_id: credit_key)
                        .where(effective_at: ..at).sum(:amount)
+    end
+
+    def usage_total(usage_key, from: nil, to: nil)
+      events = UsageEvent.where(root_recording:, account_recording:, usage_key:)
+      events = events.where(occurred_at: from..) if from
+      events = events.where(occurred_at: ..to) if to
+      events.sum(:quantity)
     end
 
     def feature_value(feature_key)

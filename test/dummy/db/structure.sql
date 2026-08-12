@@ -10,6 +10,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+--
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
@@ -187,17 +194,45 @@ CREATE FUNCTION public.rs_billing_protect_credit_ledger_entry() RETURNS trigger
     AS $$
 BEGIN
   IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'credit ledger entries are append-only'; END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM recording_studio_billing_purchase_effects effect
-    JOIN recording_studio_billing_purchases purchase ON purchase.id = effect.purchase_id
-    WHERE effect.id = NEW.purchase_effect_id AND effect.effect_kind = 'credit_pack'
-      AND effect.root_recording_id = NEW.root_recording_id AND effect.account_recording_id = NEW.account_recording_id
-      AND effect.manifest_digest = NEW.manifest_digest AND purchase.manifest_digest = NEW.manifest_digest
-      AND purchase.product_recording_id = NEW.product_recording_id
-      AND purchase.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.credit_key, 'definition', 'type'] = '"allowance"'::jsonb
-      AND jsonb_typeof(purchase.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.credit_key, 'value']) = 'number'
-      AND (purchase.commercial_snapshot #>> ARRAY['canonical_data', 'features', NEW.credit_key, 'value'])::bigint * purchase.quantity = NEW.amount
-  ) THEN RAISE EXCEPTION 'credit ledger source authority is invalid'; END IF;
+  IF NEW.direction = 'credit' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM recording_studio_billing_purchase_effects effect
+      JOIN recording_studio_billing_purchases purchase ON purchase.id = effect.purchase_id
+      WHERE effect.id = NEW.purchase_effect_id AND effect.effect_kind = 'credit_pack'
+        AND effect.root_recording_id = NEW.root_recording_id AND effect.account_recording_id = NEW.account_recording_id
+        AND effect.manifest_digest = NEW.manifest_digest AND purchase.manifest_digest = NEW.manifest_digest
+        AND purchase.product_recording_id = NEW.product_recording_id
+        AND purchase.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.credit_key, 'definition', 'type'] = '"allowance"'::jsonb
+        AND jsonb_typeof(purchase.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.credit_key, 'value']) = 'number'
+        AND (purchase.commercial_snapshot #>> ARRAY['canonical_data', 'features', NEW.credit_key, 'value'])::bigint * purchase.quantity = NEW.amount
+    ) THEN RAISE EXCEPTION 'credit ledger source authority is invalid'; END IF;
+  ELSIF NEW.direction = 'debit' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM recording_studio_billing_usage_events event
+      WHERE event.id = NEW.usage_event_id AND event.root_recording_id = NEW.root_recording_id
+        AND event.account_recording_id = NEW.account_recording_id AND event.usage_key = NEW.credit_key
+        AND event.idempotency_key = NEW.idempotency_key
+    ) OR NOT EXISTS (
+      SELECT 1 FROM recording_studio_billing_credit_ledger_entries credit
+      WHERE credit.direction = 'credit' AND credit.root_recording_id = NEW.root_recording_id
+        AND credit.account_recording_id = NEW.account_recording_id AND credit.product_recording_id = NEW.product_recording_id
+        AND credit.credit_key = NEW.credit_key AND credit.manifest_digest = NEW.manifest_digest
+    ) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
+      RAISE EXCEPTION 'credit debit source authority is invalid';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+  'recording-studio-billing:credits:' || NEW.root_recording_id::text || ':' || NEW.account_recording_id::text || ':' || NEW.product_recording_id::text,
+  0
+));
+IF COALESCE((
+  SELECT SUM(amount) FROM recording_studio_billing_credit_ledger_entries
+  WHERE root_recording_id = NEW.root_recording_id AND account_recording_id = NEW.account_recording_id
+    AND product_recording_id = NEW.product_recording_id
+), 0) + NEW.amount < 0 THEN
+  RAISE EXCEPTION 'credit debit would make the balance negative';
+END IF;
+
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -364,6 +399,28 @@ CREATE FUNCTION public.rs_billing_protect_tax_calculation() RETURNS trigger
     AS $$
 BEGIN
   RAISE EXCEPTION 'tax calculations are immutable and append-only';
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_usage_event(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_usage_event() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'usage events are append-only'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM recording_studio_recordings root
+    JOIN recording_studio_recordings account_recording ON account_recording.id = NEW.account_recording_id
+    JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id
+    WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL
+      AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = root.id AND account_recording.parent_recording_id = root.id AND account_recording.trashed_at IS NULL AND account.root_recording_id = root.id
+  ) THEN RAISE EXCEPTION 'usage event root or account authority is invalid'; END IF;
+  IF NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN RAISE EXCEPTION 'usage event contains unsafe metadata'; END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -1040,7 +1097,7 @@ CREATE TABLE public.recording_studio_billing_credit_ledger_entries (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     root_recording_id uuid NOT NULL,
     account_recording_id uuid NOT NULL,
-    purchase_effect_id uuid NOT NULL,
+    purchase_effect_id uuid,
     product_recording_id uuid NOT NULL,
     manifest_digest character varying NOT NULL,
     credit_key character varying NOT NULL,
@@ -1048,8 +1105,14 @@ CREATE TABLE public.recording_studio_billing_credit_ledger_entries (
     effective_at timestamp(6) without time zone NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT rs_billing_credit_ledger_amount CHECK ((amount > 0)),
-    CONSTRAINT rs_billing_credit_ledger_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text))
+    direction character varying DEFAULT 'credit'::character varying NOT NULL,
+    usage_event_id uuid,
+    idempotency_key character varying,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT rs_billing_credit_ledger_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_credit_ledger_direction CHECK (((direction)::text = ANY (ARRAY[('credit'::character varying)::text, ('debit'::character varying)::text]))),
+    CONSTRAINT rs_billing_credit_ledger_direction_amount CHECK (((((direction)::text = 'credit'::text) AND (amount > 0) AND (purchase_effect_id IS NOT NULL) AND (usage_event_id IS NULL) AND (idempotency_key IS NULL)) OR (((direction)::text = 'debit'::text) AND (amount < 0) AND (purchase_effect_id IS NULL) AND (usage_event_id IS NOT NULL) AND (idempotency_key IS NOT NULL)))),
+    CONSTRAINT rs_billing_credit_ledger_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text))
 );
 
 
@@ -1563,6 +1626,28 @@ CREATE TABLE public.recording_studio_billing_tax_calculations (
 
 
 --
+-- Name: recording_studio_billing_usage_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_usage_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    usage_key character varying NOT NULL,
+    feature_key character varying,
+    usage_unit_recording_id uuid,
+    quantity bigint NOT NULL,
+    occurred_at timestamp(6) without time zone NOT NULL,
+    idempotency_key character varying NOT NULL,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_usage_event_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
+    CONSTRAINT rs_billing_usage_event_quantity CHECK ((quantity > 0))
+);
+
+
+--
 -- Name: recording_studio_billing_usage_units; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1940,6 +2025,14 @@ ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
 
 
 --
+-- Name: recording_studio_billing_usage_events recording_studio_billing_usage_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_usage_events
+    ADD CONSTRAINT recording_studio_billing_usage_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2028,6 +2121,13 @@ CREATE INDEX idx_on_account_recording_id_530b2ad4ba ON public.recording_studio_b
 --
 
 CREATE INDEX idx_on_account_recording_id_60eab6e700 ON public.recording_studio_billing_purchase_effects USING btree (account_recording_id);
+
+
+--
+-- Name: idx_on_account_recording_id_78c80a89c5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_78c80a89c5 ON public.recording_studio_billing_usage_events USING btree (account_recording_id);
 
 
 --
@@ -2276,6 +2376,13 @@ CREATE INDEX idx_on_root_recording_id_52395a8cdb ON public.recording_studio_bill
 
 
 --
+-- Name: idx_on_root_recording_id_90af0f36c2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_90af0f36c2 ON public.recording_studio_billing_usage_events USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_root_recording_id_9d3d42ce71; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2343,6 +2450,13 @@ CREATE INDEX idx_on_supersedes_id_d934e98c73 ON public.recording_studio_billing_
 --
 
 CREATE INDEX idx_on_target_product_recording_id_2d78d41b32 ON public.recording_studio_billing_product_rules USING btree (target_product_recording_id);
+
+
+--
+-- Name: idx_on_usage_event_id_5ee4df7b33; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_usage_event_id_5ee4df7b33 ON public.recording_studio_billing_credit_ledger_entries USING btree (usage_event_id);
 
 
 --
@@ -2458,6 +2572,13 @@ CREATE INDEX idx_rs_billing_commands_stale_processing ON public.recording_studio
 
 
 --
+-- Name: idx_rs_billing_credit_debit_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_credit_debit_idempotency ON public.recording_studio_billing_credit_ledger_entries USING btree (root_recording_id, idempotency_key) WHERE ((direction)::text = 'debit'::text);
+
+
+--
 -- Name: idx_rs_billing_credit_ledger_balance; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2469,6 +2590,13 @@ CREATE INDEX idx_rs_billing_credit_ledger_balance ON public.recording_studio_bil
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_effect_key ON public.recording_studio_billing_credit_ledger_entries USING btree (purchase_effect_id, credit_key);
+
+
+--
+-- Name: idx_rs_billing_credit_ledger_usage_event; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_usage_event ON public.recording_studio_billing_credit_ledger_entries USING btree (usage_event_id);
 
 
 --
@@ -2567,6 +2695,20 @@ CREATE INDEX idx_rs_billing_tax_fingerprint ON public.recording_studio_billing_t
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_tax_idempotency ON public.recording_studio_billing_tax_calculations USING btree (root_recording_id, idempotency_key, revision_number);
+
+
+--
+-- Name: idx_rs_billing_usage_event_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_usage_event_idempotency ON public.recording_studio_billing_usage_events USING btree (root_recording_id, idempotency_key);
+
+
+--
+-- Name: idx_rs_billing_usage_event_total; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rs_billing_usage_event_total ON public.recording_studio_billing_usage_events USING btree (root_recording_id, account_recording_id, usage_key, occurred_at);
 
 
 --
@@ -3088,6 +3230,13 @@ CREATE TRIGGER rs_billing_tax_calculation_history BEFORE DELETE OR UPDATE ON pub
 
 
 --
+-- Name: recording_studio_billing_usage_events rs_billing_usage_event_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_usage_event_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_events FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_event();
+
+
+--
 -- Name: recording_studio_billing_credit_ledger_entries fk_rails_0eb965f4e9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3320,6 +3469,14 @@ ALTER TABLE ONLY public.recording_studio_billing_meters
 
 
 --
+-- Name: recording_studio_billing_credit_ledger_entries fk_rails_7582e03759; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
+    ADD CONSTRAINT fk_rails_7582e03759 FOREIGN KEY (usage_event_id) REFERENCES public.recording_studio_billing_usage_events(id);
+
+
+--
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_77212d5465; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3400,6 +3557,14 @@ ALTER TABLE ONLY public.recording_studio_billing_subscriptions
 
 
 --
+-- Name: recording_studio_billing_usage_events fk_rails_98ba3ca398; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_usage_events
+    ADD CONSTRAINT fk_rails_98ba3ca398 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_checkout_intents fk_rails_9ad6795b60; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3421,6 +3586,14 @@ ALTER TABLE ONLY public.recording_studio_billing_features
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT fk_rails_9eb3a96d12 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_usage_events fk_rails_b6561d39f1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_usage_events
+    ADD CONSTRAINT fk_rails_b6561d39f1 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -3598,6 +3771,8 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260811000008'),
+('20260811000007'),
 ('20260811000006'),
 ('20260811000005'),
 ('20260811000004'),

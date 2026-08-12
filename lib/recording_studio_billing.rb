@@ -87,6 +87,18 @@ module RecordingStudioBilling
       entitlement_access(root_recording:).credit_balance(product_id)
     end
 
+    def usage_total(root_recording:, usage_key:, from: nil, to: nil)
+      entitlement_access(root_recording:).usage_total(usage_key.to_s, from:, to:)
+    end
+
+    def record_usage(...)
+      RecordUsage.call(...)
+    end
+
+    def consume_credits(...)
+      ConsumeCredits.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end
