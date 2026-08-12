@@ -85,7 +85,7 @@ module RecordingStudioBilling
       cap = limit || allowance
       return nil unless cap
 
-      total = UsageEvent.where(root_recording: root, account_recording: account, usage_key:).where(occurred_at: ..occurred_at).sum(:quantity)
+      total = UsageEvent.where(root_recording: root, account_recording: account, usage_key:).sum(:quantity)
       total + Integer(@quantity) > cap ? :exhausted_allowance : nil
     rescue ArgumentError, TypeError
       :ambiguous_configuration

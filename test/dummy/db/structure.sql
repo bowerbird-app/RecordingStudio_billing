@@ -10,13 +10,6 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
-
-
---
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
 --
 
@@ -336,6 +329,57 @@ $$;
 
 
 --
+-- Name: rs_billing_protect_meter_aggregation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_meter_aggregation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'meter aggregations are append-only'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM recording_studio_recordings root
+    JOIN recording_studio_recordings account_recording ON account_recording.id = NEW.account_recording_id
+    JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id
+    WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL
+      AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = root.id AND account_recording.parent_recording_id = root.id AND account_recording.trashed_at IS NULL AND account.root_recording_id = root.id
+  ) OR NOT EXISTS (
+    SELECT 1 FROM recording_studio_billing_commercial_manifests manifest
+    WHERE manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL
+      AND manifest.canonical_data #> ARRAY['usage_rating', 'meters', NEW.meter_recording_id::text, 'usage_unit_recording_id'] = to_jsonb(NEW.usage_unit_recording_id::text)
+      AND manifest.canonical_data #> ARRAY['usage_rating', 'meters', NEW.meter_recording_id::text, 'aggregation'] = to_jsonb(NEW.aggregation)
+      AND NEW.input_snapshot ->> 'meter_recording_id' = NEW.meter_recording_id::text
+      AND NEW.input_snapshot ->> 'usage_unit_recording_id' = NEW.usage_unit_recording_id::text
+      AND NEW.input_snapshot ->> 'aggregation' = NEW.aggregation
+      AND NEW.input_snapshot ->> 'window_starts_at' = to_char(NEW.window_starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      AND NEW.input_snapshot ->> 'window_ends_at' = to_char(NEW.window_ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      AND NEW.usage_event_ids = ARRAY(
+        SELECT event.id FROM recording_studio_billing_usage_events event
+        WHERE event.root_recording_id = NEW.root_recording_id AND event.account_recording_id = NEW.account_recording_id
+          AND event.usage_key = manifest.canonical_data #>> ARRAY['usage_rating', 'meters', NEW.meter_recording_id::text, 'usage_key']
+          AND event.occurred_at >= NEW.window_starts_at AND event.occurred_at < NEW.window_ends_at
+        ORDER BY event.occurred_at, event.id
+      )
+      AND NEW.input_snapshot -> 'events' = COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('id', event.id::text, 'quantity', event.quantity) ORDER BY event.occurred_at, event.id)
+        FROM recording_studio_billing_usage_events event WHERE event.id = ANY(NEW.usage_event_ids)
+      ), '[]'::jsonb)
+      AND NEW.quantity = CASE NEW.aggregation
+        WHEN 'sum' THEN (SELECT SUM(event.quantity) FROM recording_studio_billing_usage_events event WHERE event.id = ANY(NEW.usage_event_ids))
+        WHEN 'count' THEN cardinality(NEW.usage_event_ids)
+        WHEN 'maximum' THEN (SELECT MAX(event.quantity) FROM recording_studio_billing_usage_events event WHERE event.id = ANY(NEW.usage_event_ids))
+        WHEN 'latest' THEN (SELECT event.quantity FROM recording_studio_billing_usage_events event WHERE event.id = ANY(NEW.usage_event_ids) ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1)
+      END
+      AND NEW.input_digest = encode(digest(NEW.input_snapshot::text, 'sha256'), 'hex')
+  ) OR NOT rs_billing_safe_financial_json(NEW.input_snapshot) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
+    RAISE EXCEPTION 'meter aggregation source authority is invalid';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: rs_billing_protect_purchase(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -361,6 +405,50 @@ CREATE FUNCTION public.rs_billing_protect_purchase_effect() RETURNS trigger
 BEGIN
   IF TG_OP = 'DELETE' OR TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'purchase effects are append-only'; END IF;
   IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_purchases purchase WHERE purchase.id = NEW.purchase_id AND purchase.root_recording_id = NEW.root_recording_id AND purchase.account_recording_id = NEW.account_recording_id AND purchase.manifest_digest = NEW.manifest_digest) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN RAISE EXCEPTION 'purchase effect authority or payload is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_rated_usage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_rated_usage() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'rated usages are append-only'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM recording_studio_billing_meter_aggregations aggregation
+    JOIN recording_studio_billing_commercial_manifests manifest ON manifest.manifest_digest = NEW.manifest_digest
+    WHERE aggregation.id = NEW.meter_aggregation_id AND aggregation.root_recording_id = NEW.root_recording_id
+      AND aggregation.account_recording_id = NEW.account_recording_id AND aggregation.manifest_digest = NEW.manifest_digest
+      AND aggregation.window_starts_at = NEW.window_starts_at AND aggregation.window_ends_at = NEW.window_ends_at
+      AND manifest.used_at IS NOT NULL
+      AND NEW.aggregation_snapshot = aggregation.input_snapshot
+      AND NEW.rate_snapshot -> 'rate' = manifest.canonical_data #> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text]
+      AND NEW.rate_snapshot -> 'customer_rate' = manifest.canonical_data #> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text]
+      AND (NEW.cost_rate_recording_id IS NULL OR NEW.rate_snapshot -> 'cost_rate' = manifest.canonical_data #> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text])
+      AND (NEW.cost_rate_recording_id IS NOT NULL OR NEW.rate_snapshot -> 'cost_rate' = 'null'::jsonb)
+      AND manifest.canonical_data #> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'rate_card_recording_id'] = to_jsonb(NEW.rate_card_recording_id::text)
+      AND manifest.canonical_data #> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'usage_unit_recording_id'] = to_jsonb(aggregation.usage_unit_recording_id::text)
+      AND manifest.canonical_data #> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'usage_unit_recording_id'] = to_jsonb(aggregation.usage_unit_recording_id::text)
+      AND (NEW.cost_rate_recording_id IS NULL OR manifest.canonical_data #> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'cost_card_recording_id'] = to_jsonb(NEW.cost_card_recording_id::text))
+      AND (NEW.cost_rate_recording_id IS NULL OR manifest.canonical_data #> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'usage_unit_recording_id'] = to_jsonb(aggregation.usage_unit_recording_id::text))
+      AND NEW.quantity = aggregation.quantity * (manifest.canonical_data #>> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'conversion_numerator'])::bigint / (manifest.canonical_data #>> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'conversion_denominator'])::bigint
+      AND (aggregation.quantity * (manifest.canonical_data #>> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'conversion_numerator'])::bigint) % (manifest.canonical_data #>> ARRAY['usage_rating', 'rates', NEW.rate_recording_id::text, 'conversion_denominator'])::bigint = 0
+      AND NEW.customer_amount_minor = (manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'amount_minor'])::bigint * CASE manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'pricing_model']
+        WHEN 'per_unit' THEN NEW.quantity
+        WHEN 'package' THEN NEW.quantity / (manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'package_size'])::bigint
+      END
+      AND (manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'pricing_model'] <> 'package' OR NEW.quantity % (manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'package_size'])::bigint = 0)
+      AND NEW.customer_currency_code = manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'currency_code']
+      AND NEW.customer_currency_exponent = (manifest.canonical_data #>> ARRAY['usage_rating', 'customer_rates', NEW.customer_price_recording_id::text, 'currency_exponent'])::integer
+      AND (NEW.cost_rate_recording_id IS NULL AND NEW.cost_card_recording_id IS NULL AND NEW.cost_amount_minor IS NULL AND NEW.cost_currency_code IS NULL AND NEW.cost_currency_exponent IS NULL OR NEW.cost_rate_recording_id IS NOT NULL AND NEW.cost_amount_minor = NEW.quantity * (manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'amount_minor'])::bigint AND NEW.cost_currency_code = manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'currency_code'] AND NEW.cost_currency_exponent = (manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'currency_exponent'])::integer)
+  ) OR NOT rs_billing_safe_financial_json(NEW.aggregation_snapshot) OR NOT rs_billing_safe_financial_json(NEW.rate_snapshot) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
+    RAISE EXCEPTION 'rated usage source authority is invalid';
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -1278,6 +1366,38 @@ CREATE TABLE public.recording_studio_billing_markets (
 
 
 --
+-- Name: recording_studio_billing_meter_aggregations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_meter_aggregations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    meter_recording_id uuid NOT NULL,
+    usage_unit_recording_id uuid NOT NULL,
+    manifest_digest character varying NOT NULL,
+    aggregation character varying NOT NULL,
+    window_starts_at timestamp(6) without time zone NOT NULL,
+    window_ends_at timestamp(6) without time zone NOT NULL,
+    aggregated_at timestamp(6) without time zone NOT NULL,
+    quantity bigint NOT NULL,
+    event_count integer NOT NULL,
+    usage_event_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    input_digest character varying NOT NULL,
+    input_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_meter_aggregation_event_ids CHECK ((cardinality(usage_event_ids) = event_count)),
+    CONSTRAINT rs_billing_meter_aggregation_events CHECK ((event_count > 0)),
+    CONSTRAINT rs_billing_meter_aggregation_input_object CHECK ((jsonb_typeof(input_snapshot) = 'object'::text)),
+    CONSTRAINT rs_billing_meter_aggregation_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
+    CONSTRAINT rs_billing_meter_aggregation_mode CHECK (((aggregation)::text = ANY ((ARRAY['sum'::character varying, 'count'::character varying, 'maximum'::character varying, 'latest'::character varying])::text[]))),
+    CONSTRAINT rs_billing_meter_aggregation_window CHECK ((window_ends_at > window_starts_at))
+);
+
+
+--
 -- Name: recording_studio_billing_meters; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1496,6 +1616,46 @@ CREATE TABLE public.recording_studio_billing_rate_cards (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
+);
+
+
+--
+-- Name: recording_studio_billing_rated_usages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_rated_usages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    meter_aggregation_id uuid NOT NULL,
+    manifest_digest character varying NOT NULL,
+    rate_recording_id uuid NOT NULL,
+    customer_price_recording_id uuid NOT NULL,
+    cost_rate_recording_id uuid,
+    rate_card_recording_id uuid NOT NULL,
+    cost_card_recording_id uuid,
+    quantity bigint NOT NULL,
+    customer_amount_minor bigint,
+    customer_currency_code character varying,
+    customer_currency_exponent integer,
+    cost_amount_minor bigint,
+    cost_currency_code character varying,
+    cost_currency_exponent integer,
+    window_starts_at timestamp(6) without time zone NOT NULL,
+    window_ends_at timestamp(6) without time zone NOT NULL,
+    rated_at timestamp(6) without time zone NOT NULL,
+    aggregation_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    rate_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_rated_usage_aggregation_object CHECK ((jsonb_typeof(aggregation_snapshot) = 'object'::text)),
+    CONSTRAINT rs_billing_rated_usage_cost_money CHECK ((((cost_amount_minor IS NULL) AND (cost_currency_code IS NULL) AND (cost_currency_exponent IS NULL)) OR ((cost_amount_minor >= 0) AND ((cost_currency_code)::text ~ '^[A-Z]{3}$'::text) AND ((cost_currency_exponent >= 0) AND (cost_currency_exponent <= 3))))),
+    CONSTRAINT rs_billing_rated_usage_customer_money CHECK ((((customer_amount_minor IS NULL) AND (customer_currency_code IS NULL) AND (customer_currency_exponent IS NULL)) OR ((customer_amount_minor >= 0) AND ((customer_currency_code)::text ~ '^[A-Z]{3}$'::text) AND ((customer_currency_exponent >= 0) AND (customer_currency_exponent <= 3))))),
+    CONSTRAINT rs_billing_rated_usage_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
+    CONSTRAINT rs_billing_rated_usage_quantity CHECK ((quantity >= 0)),
+    CONSTRAINT rs_billing_rated_usage_rate_object CHECK ((jsonb_typeof(rate_snapshot) = 'object'::text)),
+    CONSTRAINT rs_billing_rated_usage_window CHECK ((window_ends_at > window_starts_at))
 );
 
 
@@ -1913,6 +2073,14 @@ ALTER TABLE ONLY public.recording_studio_billing_markets
 
 
 --
+-- Name: recording_studio_billing_meter_aggregations recording_studio_billing_meter_aggregations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
+    ADD CONSTRAINT recording_studio_billing_meter_aggregations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: recording_studio_billing_meters recording_studio_billing_meters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1990,6 +2158,14 @@ ALTER TABLE ONLY public.recording_studio_billing_purchases
 
 ALTER TABLE ONLY public.recording_studio_billing_rate_cards
     ADD CONSTRAINT recording_studio_billing_rate_cards_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_rated_usages recording_studio_billing_rated_usages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usages
+    ADD CONSTRAINT recording_studio_billing_rated_usages_pkey PRIMARY KEY (id);
 
 
 --
@@ -2096,6 +2272,13 @@ CREATE INDEX idx_on_account_recording_id_2171ed6580 ON public.recording_studio_b
 
 
 --
+-- Name: idx_on_account_recording_id_3fadc96c0d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_3fadc96c0d ON public.recording_studio_billing_rated_usages USING btree (account_recording_id);
+
+
+--
 -- Name: idx_on_account_recording_id_40b0a22061; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2156,6 +2339,13 @@ CREATE INDEX idx_on_account_recording_id_9e348b517e ON public.recording_studio_b
 --
 
 CREATE INDEX idx_on_account_recording_id_bf46d23ae6 ON public.recording_studio_billing_feature_overrides USING btree (account_recording_id);
+
+
+--
+-- Name: idx_on_account_recording_id_cb3ff602b6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_cb3ff602b6 ON public.recording_studio_billing_meter_aggregations USING btree (account_recording_id);
 
 
 --
@@ -2292,6 +2482,13 @@ CREATE INDEX idx_on_market_recording_id_2ba99ee38f ON public.recording_studio_bi
 
 
 --
+-- Name: idx_on_meter_aggregation_id_e92f2d7213; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_meter_aggregation_id_e92f2d7213 ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
+
+
+--
 -- Name: idx_on_product_recording_id_387e136700; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2369,6 +2566,13 @@ CREATE INDEX idx_on_root_recording_id_107421795e ON public.recording_studio_bill
 
 
 --
+-- Name: idx_on_root_recording_id_162489a73e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_162489a73e ON public.recording_studio_billing_meter_aggregations USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_root_recording_id_52395a8cdb; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2387,6 +2591,13 @@ CREATE INDEX idx_on_root_recording_id_90af0f36c2 ON public.recording_studio_bill
 --
 
 CREATE INDEX idx_on_root_recording_id_9d3d42ce71 ON public.recording_studio_billing_credit_ledger_entries USING btree (root_recording_id);
+
+
+--
+-- Name: idx_on_root_recording_id_9fc1094773; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_9fc1094773 ON public.recording_studio_billing_rated_usages USING btree (root_recording_id);
 
 
 --
@@ -2614,6 +2825,13 @@ CREATE INDEX idx_rs_billing_entitlement_grants_access ON public.recording_studio
 
 
 --
+-- Name: idx_rs_billing_meter_aggregation_input; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_meter_aggregation_input ON public.recording_studio_billing_meter_aggregations USING btree (root_recording_id, account_recording_id, meter_recording_id, window_starts_at, window_ends_at, manifest_digest, input_digest);
+
+
+--
 -- Name: idx_rs_billing_one_account_per_root; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2646,6 +2864,13 @@ CREATE UNIQUE INDEX idx_rs_billing_purchase_checkout_item ON public.recording_st
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_purchase_effect_idempotency ON public.recording_studio_billing_purchase_effects USING btree (root_recording_id, idempotency_key);
+
+
+--
+-- Name: idx_rs_billing_rated_usage_aggregation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_rated_usage_aggregation ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
 
 
 --
@@ -3174,6 +3399,13 @@ CREATE TRIGGER rs_billing_manifests_protect_history BEFORE DELETE OR UPDATE ON p
 
 
 --
+-- Name: recording_studio_billing_meter_aggregations rs_billing_meter_aggregation_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_meter_aggregation_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_meter_aggregations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_meter_aggregation();
+
+
+--
 -- Name: recording_studio_billing_purchases rs_billing_purchase_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3192,6 +3424,13 @@ CREATE TRIGGER rs_billing_purchase_effect_history BEFORE INSERT OR DELETE OR UPD
 --
 
 CREATE TRIGGER rs_billing_purchase_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_purchases FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_purchase();
+
+
+--
+-- Name: recording_studio_billing_rated_usages rs_billing_rated_usage_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_rated_usage_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rated_usages FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_rated_usage();
 
 
 --
@@ -3266,6 +3505,14 @@ ALTER TABLE ONLY public.recording_studio_billing_feature_overrides
 
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT fk_rails_1b30f1de5f FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_rated_usages fk_rails_21585faf73; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usages
+    ADD CONSTRAINT fk_rails_21585faf73 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -3378,6 +3625,14 @@ ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_updates
     ADD CONSTRAINT fk_rails_511ec0e839 FOREIGN KEY (billing_option_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_rated_usages fk_rails_54b225ad68; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usages
+    ADD CONSTRAINT fk_rails_54b225ad68 FOREIGN KEY (meter_aggregation_id) REFERENCES public.recording_studio_billing_meter_aggregations(id);
 
 
 --
@@ -3597,11 +3852,27 @@ ALTER TABLE ONLY public.recording_studio_billing_usage_events
 
 
 --
+-- Name: recording_studio_billing_meter_aggregations fk_rails_b715e0782f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
+    ADD CONSTRAINT fk_rails_b715e0782f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_checkout_intents fk_rails_bab17f442c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
     ADD CONSTRAINT fk_rails_bab17f442c FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_rated_usages fk_rails_bcb788189f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usages
+    ADD CONSTRAINT fk_rails_bcb788189f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -3709,6 +3980,14 @@ ALTER TABLE ONLY public.recording_studio_billing_cost_rates
 
 
 --
+-- Name: recording_studio_billing_meter_aggregations fk_rails_eb540df9eb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
+    ADD CONSTRAINT fk_rails_eb540df9eb FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_subscriptions fk_rails_eb5461aa73; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3771,6 +4050,7 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260811000009'),
 ('20260811000008'),
 ('20260811000007'),
 ('20260811000006'),

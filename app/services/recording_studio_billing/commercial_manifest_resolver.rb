@@ -198,6 +198,7 @@ module RecordingStudioBilling
                   usage_unit_recording_id
                 ])
         end,
+        "usage_rating" => usage_rating_terms,
         "tax_policy" => tax_policy_snapshot,
         "discount_policy" => { "enabled" => false, "source" => "none" },
         "rounding" => { "policy" => market.rounding_policy },
@@ -284,6 +285,29 @@ module RecordingStudioBilling
       }
     end
 
+    def usage_rating_terms
+      records = usage_rating_records
+      {
+        "meters" => records.grep(Meter).to_h do |meter|
+          [meter.recording.id, terms(meter, %w[key aggregation usage_unit_recording_id]).merge(
+            "meter_recording_id" => meter.recording.id,
+            "usage_key" => meter.key
+          )]
+        end,
+        "rate_cards" => records.grep(RateCard).to_h { |card| [card.recording.id, terms(card, %w[key])] },
+        "rates" => records.grep(Rate).to_h do |rate|
+          [rate.recording.id, terms(rate, %w[key rate_card_recording_id usage_unit_recording_id conversion_numerator conversion_denominator conversion_decimal]).merge("rate_recording_id" => rate.recording.id)]
+        end,
+        "cost_cards" => records.grep(CostCard).to_h { |card| [card.recording.id, terms(card, %w[key])] },
+        "cost_rates" => records.grep(CostRate).to_h do |rate|
+          [rate.recording.id, terms(rate, %w[key cost_card_recording_id usage_unit_recording_id amount_minor currency_code currency_exponent]).merge("cost_rate_recording_id" => rate.recording.id)]
+        end,
+        "customer_rates" => overage_prices.to_h do |price|
+          [price.recording.id, terms(price, %w[key usage_unit_recording_id amount_minor currency_code currency_exponent pricing_model package_size version scope]).merge("customer_price_recording_id" => price.recording.id)]
+        end
+      }
+    end
+
     def terms(record, keys)
       keys.index_with { |key| record.public_send(key) }
     end
@@ -332,11 +356,27 @@ module RecordingStudioBilling
                     else
                       []
                     end
+        rating_records = usage_rating_records
         [
           product, billing_option, price, market, provider, *overage_prices,
           *usage_units, *resolved_product_rules, *rule_targets, *resolved_plan_updates,
-          *features.order(:id).to_a, *overrides
+          *features.order(:id).to_a, *overrides, *rating_records
         ].compact.uniq
+      end
+    end
+
+    def usage_rating_records
+      @usage_rating_records ||= begin
+        unit_ids = overage_prices.map(&:usage_unit_recording_id).compact.uniq
+        state = publication_candidate ? Meter.with_current_recording.where.not(state: "retired") : Meter.with_current_recording.where(state: "published")
+        meters = state.where(usage_unit_recording_id: unit_ids).order(:id).to_a
+        rates_scope = publication_candidate ? Rate.with_current_recording.where.not(state: "retired") : Rate.with_current_recording.where(state: "published")
+        rates = rates_scope.where(usage_unit_recording_id: unit_ids).order(:id).to_a
+        cost_rates_scope = publication_candidate ? CostRate.with_current_recording.where.not(state: "retired") : CostRate.with_current_recording.where(state: "published")
+        cost_rates = cost_rates_scope.where(usage_unit_recording_id: unit_ids).order(:id).to_a
+        rate_cards = RateCard.with_current_recording.where(recording_studio_recordings: { id: rates.map(&:rate_card_recording_id) }).order(:id).to_a
+        cost_cards = CostCard.with_current_recording.where(recording_studio_recordings: { id: cost_rates.map(&:cost_card_recording_id) }).order(:id).to_a
+        meters + rates + cost_rates + rate_cards + cost_cards
       end
     end
 

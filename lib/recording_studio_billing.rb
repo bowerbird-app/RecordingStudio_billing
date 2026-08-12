@@ -99,6 +99,10 @@ module RecordingStudioBilling
       ConsumeCredits.call(...)
     end
 
+    def rate_usage(...)
+      RateUsage.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end

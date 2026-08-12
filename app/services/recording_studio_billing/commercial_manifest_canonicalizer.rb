@@ -12,7 +12,7 @@ module RecordingStudioBilling
     MAX_DEPTH = 32
     MAX_NODES = 10_000
     MAX_COLLECTION_SIZE = 1_000
-    MAX_STRING_BYTES = 65_536
+    MAX_STRING_BYTES = 262_144
     RESERVED_WRAPPER_KEYS = %w[__decimal__ __time__ __date__].freeze
 
     class << self

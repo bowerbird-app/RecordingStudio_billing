@@ -633,6 +633,42 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal 5, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
   end
 
+  test "a delayed worker with an earlier captured timestamp cannot bypass the locked allowance total" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "reversed-usage-entitlement")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
+                                        idempotency_key: "usage-before-reversed-race")
+
+    earlier_timestamp = Time.current
+    later_timestamp = earlier_timestamp + 1.second
+    first_finished = Queue.new
+    results = Queue.new
+
+    later_worker = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        result = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 3,
+                                                     idempotency_key: "later-timestamp", occurred_at: later_timestamp)
+        results << result
+        first_finished << true
+      end
+    end
+    earlier_worker = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        first_finished.pop
+        results << RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 3,
+                                                        idempotency_key: "earlier-timestamp", occurred_at: earlier_timestamp)
+      end
+    end
+    [later_worker, earlier_worker].each(&:join)
+
+    statuses = 2.times.map { results.pop }
+    assert_equal %i[created denied], statuses.map(&:status).sort
+    assert_equal :exhausted_allowance, statuses.find(&:denied?).reason
+    assert_equal 5, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
+  end
+
   test "consumes credits once with source authority and includes debits in the balance" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
