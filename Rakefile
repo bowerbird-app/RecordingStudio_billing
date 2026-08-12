@@ -82,7 +82,7 @@ namespace :test do
       run_command!(env, "bundle", "exec", "bin/rails", "db:create")
       run_command!(env, "bundle", "exec", "bin/rails", "runner", "ActiveRecord::Base.connection.execute('DROP SCHEMA public CASCADE'); ActiveRecord::Base.connection.execute('CREATE SCHEMA public')")
       run_command!(env, "bundle", "exec", "bin/rails", "db:schema:load")
-      run_command!(env, "bundle", "exec", "bin/rails", "runner", "context = ActiveRecord::Base.connection_pool.migration_context; context.migrations.each { |migration| context.schema_migration.create_version(migration.version.to_s) }")
+      run_command!(env, "bundle", "exec", "bin/rails", "runner", "context = ActiveRecord::Base.connection_pool.migration_context; versions = context.schema_migration.normalized_versions; context.migrations.each { |migration| version = migration.version.to_s; context.schema_migration.create_version(version) unless versions.include?(version) }")
       run_command!(env, "bundle", "exec", "bin/rails", "db:seed")
       run_command!(env, "bundle", "exec", "bin/rails", "test")
       DUMMY_TEST_FILES.each do |test_file|

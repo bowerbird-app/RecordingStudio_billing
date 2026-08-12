@@ -432,7 +432,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   test "base plan variants replace one product line while recurring add-ons remain active" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     annual, = published_option(graph, product_recording: graph[:option].product_recording, kind: "plan", recurrence: "recurring", interval: "year")
-    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month",
+                      price_feature_values: { "projects" => 8, "seats" => 2 })
     plan_intent = create_intent(graph, country: "IT", key: "base-monthly").intent
     addon_intent = create_intent(graph, country: "IT", key: "recurring-addon", option: addon).intent
 
@@ -481,6 +482,183 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) { manifest.update_column(:canonical_data, {}) }
   end
 
+  test "projects frozen lifecycle sources into idempotent root-scoped entitlements" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    intent = create_intent(graph, country: "IT", key: "entitlement-projection").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
+
+    first = RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    assert_equal 4, first.grants.count
+    assert_equal 4, RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).count
+    assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
+    assert_equal 3, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
+    assert_equal "pro", RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "edition")
+    assert_equal({ "edition" => "pro", "enabled" => true, "projects" => 3, "seats" => 5 },
+                 RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root]))
+
+    RecordingStudioBilling::SubscriptionLifecycle.pause(subscription:, root_recording: graph[:customer_root])
+    assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root]))
+    assert_raises(ActiveRecord::StatementInvalid) { first.grants.first.update_column(:value, false) }
+    source = File.read(Rails.root.join("../../app/services/recording_studio_billing/project_entitlements.rb"))
+    refute_match(/Stripe::|stripe_credential|:stripe/, source)
+  end
+
+  test "numeric entitlement grants honor frozen maximum and minimum rules" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+      "projects" => entitlement_features.fetch("projects").merge(merge_rule: "maximum", default: 3),
+      "seats" => entitlement_features.fetch("seats").merge(merge_rule: "minimum", default: 5)
+    )
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "numeric-base")
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+      "projects" => entitlement_features.fetch("projects").merge(merge_rule: "maximum", default: 10),
+      "seats" => entitlement_features.fetch("seats").merge(merge_rule: "minimum", default: 2)
+    )
+    RecordingStudioBilling.configuration.reset_registries!
+    addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
+    addon_graph[:customer_root] = graph[:customer_root]
+    project_subscription!(addon_graph, key: "numeric-addon")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    assert_equal 10, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
+    assert_equal 2, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "seats")
+  end
+
+  test "replace numeric entitlements reject conflicting active projected values" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "replace-base")
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+      "projects" => entitlement_features.fetch("projects").merge(default: 10)
+    )
+    RecordingStudioBilling.configuration.reset_registries!
+    addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
+    addon_graph[:customer_root] = graph[:customer_root]
+    project_subscription!(addon_graph, key: "replace-addon")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
+    end
+    assert_match(/replace values conflict/, error.message)
+  end
+
+  test "credit-pack projection is idempotent and the ledger rejects forged facts" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "credit-pack").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    entry = RecordingStudioBilling::CreditLedgerEntry.sole
+
+    assert_equal 5, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+    assert_equal 1, RecordingStudioBilling::CreditLedgerEntry.count
+    assert_raises(ActiveRecord::StatementInvalid) { entry.update_column(:amount, 999) }
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::CreditLedgerEntry.insert_all!([entry.attributes.except("id", "created_at", "updated_at").merge(
+        "id" => SecureRandom.uuid, "credit_key" => "forged", "amount" => 1, "created_at" => Time.current, "updated_at" => Time.current
+      )])
+    end
+  end
+
+  test "public entitlement APIs normalize an account child recording and fail closed across roots" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    intent = create_intent(graph, country: "IT", key: "normalized-root").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    account_child = RecordingStudioBilling::Account.with_current_recording.find_by!(root_recording: graph[:customer_root]).recording
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
+    RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other account")
+
+    assert RecordingStudioBilling.entitled?(root_recording: account_child, feature_key: "enabled")
+    assert_equal 3, RecordingStudioBilling.feature_value(root_recording: account_child, feature_key: "projects")
+    assert_equal "pro", RecordingStudioBilling.effective_entitlements(root_recording: account_child).fetch("edition")
+    assert_equal 0, RecordingStudioBilling.credit_balance(root_recording: account_child, product_recording: SecureRandom.uuid)
+    assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: other_root))
+    refute RecordingStudioBilling.entitled?(root_recording: other_root, feature_key: "enabled")
+    assert_nil RecordingStudioBilling.feature_value(root_recording: other_root, feature_key: "projects")
+  end
+
+  test "entitlement and credit ledger triggers reject forged source facts" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "trigger-facts").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    grant = RecordingStudioBilling::EntitlementGrant.first
+    entry = RecordingStudioBilling::CreditLedgerEntry.sole
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
+    other_account = RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other account").recording
+
+    [{ "value" => false }, { "merge_rule" => "maximum" }, { "root_recording_id" => other_root.id, "account_recording_id" => other_account.id },
+     { "source_type" => "RecordingStudioBilling::SubscriptionItemVersion" }].each do |changes|
+      assert_raises(ActiveRecord::StatementInvalid) { insert_grant!(grant, changes) }
+    end
+    assert_raises(ActiveRecord::StatementInvalid) { grant.update_column(:feature_key, "forged") }
+    assert_raises(ActiveRecord::StatementInvalid) { insert_ledger!(entry, "amount" => entry.amount + 1) }
+    assert_raises(ActiveRecord::StatementInvalid) { insert_ledger!(entry, "product_recording_id" => SecureRandom.uuid) }
+    assert_raises(ActiveRecord::StatementInvalid) { insert_ledger!(entry, "root_recording_id" => other_root.id, "account_recording_id" => other_account.id) }
+    RecordingStudioBilling.configuration.reset_registries!
+    addon_graph = published_catalogue(kind: "addon", recurrence: "one_time", interval: nil)
+    addon_intent = create_intent(addon_graph, country: "IT", key: "non-credit-effect").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: addon_intent, root_recording: addon_graph[:customer_root])
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: addon_intent, root_recording: addon_graph[:customer_root]).purchase
+    effect = purchase.effects.sole
+    forged = entry.attributes.except("id", "created_at", "updated_at").merge("id" => SecureRandom.uuid,
+      "purchase_effect_id" => effect.id, "root_recording_id" => effect.root_recording_id, "account_recording_id" => effect.account_recording_id,
+      "product_recording_id" => purchase.product_recording_id, "manifest_digest" => effect.manifest_digest, "created_at" => Time.current, "updated_at" => Time.current)
+    assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::CreditLedgerEntry.insert_all!([forged]) }
+  end
+
+  test "one-off add-on grants remain effective while terminal subscriptions do not" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "addon", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "one-off-addon").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
+
+    { paused: :pause, cancelled: :cancel, expired: :expire }.each do |state, transition|
+      RecordingStudioBilling.configuration.reset_registries!
+      subscription_graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+      subscription_intent = create_intent(subscription_graph, country: "IT", key: "terminal-#{state}").intent
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: subscription_intent, root_recording: subscription_graph[:customer_root])
+      subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: subscription_intent, root_recording: subscription_graph[:customer_root]).subscription
+      RecordingStudioBilling::SubscriptionLifecycle.public_send(transition, subscription:, root_recording: subscription_graph[:customer_root])
+      RecordingStudioBilling.project_entitlements(root_recording: subscription_graph[:customer_root])
+      assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: subscription_graph[:customer_root]))
+    end
+  end
+
+  test "conflicting active projected variants raise ambiguity through the public API" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "variant-base")
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+      "edition" => entitlement_features.fetch("edition").merge(default: "enterprise")
+    )
+    RecordingStudioBilling.configuration.reset_registries!
+    addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
+    addon_graph[:customer_root] = graph[:customer_root]
+    project_subscription!(addon_graph, key: "variant-addon")
+    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+
+    assert_raises(RecordingStudioBilling::EntitlementAccess::AmbiguousVariant) do
+      RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "edition")
+    end
+  end
+
   private
 
   def create_intent(graph, country:, key:, option: graph[:option])
@@ -488,6 +666,12 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       root_recording: graph[:customer_root], local_idempotency_key: key, country_code: country,
       items: [{ billing_option_recording_id: option.recording.id, quantity: 1 }]
     )
+  end
+
+  def project_subscription!(graph, key:)
+    intent = create_intent(graph, country: "IT", key:).intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
   end
 
   def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000)
@@ -509,11 +693,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph.merge(customer_root:, option:, italy_price: published_italy_price, germany_price: published_germany_price, adapter:)
   end
 
-  def published_option(graph, product_recording: nil, kind:, recurrence:, interval:, trial_days: 0, amount: 1_000)
+  def published_option(graph, product_recording: nil, kind:, recurrence:, interval:, trial_days: 0, amount: 1_000, option_feature_values: {}, price_feature_values: {})
     product_recording ||= record_child(RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording], key: "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording)
-    option_recording = record_child(RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}", recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), graph[:provider_root], product_recording)
-    italy_price = price("italy", option_recording, graph[:italy_market], amount, graph[:provider_root])
-    germany_price = price("germany", option_recording, graph[:germany_market], amount + 200, graph[:provider_root])
+    option_recording = record_child(RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}", recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording)
+    RecordingStudioBilling.configuration.feature_definitions.each do |key, definition|
+      record_child(RecordingStudioBilling::Feature.new(product_recording:, key:, kind: definition.fetch("type"), definition: {}), graph[:provider_root], product_recording)
+    end
+    italy_price = price("italy", option_recording, graph[:italy_market], amount, graph[:provider_root], price_feature_values)
+    germany_price = price("germany", option_recording, graph[:germany_market], amount + 200, graph[:provider_root], price_feature_values)
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root], price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
     [
       RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_recording.recordable.key),
@@ -526,8 +713,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     record_child(RecordingStudioBilling::Market.new(provider_account_recording: provider, key: "#{key}_market", country_codes: [country], country_groups: {}, allowed_currency_codes: ["EUR"], default_currency_code: "EUR", priority: 10, specificity: 1, fallback: false, ppa_policy: "standard", rounding_policy: "half_up", tax_presentation_policy: "exclusive", verification_policy:), root, parent)
   end
 
-  def price(key, option, market, amount, root)
-    record_child(RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "#{key}_price", amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default"), root, option)
+  def price(key, option, market, amount, root, feature_values = {})
+    record_child(RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "#{key}_price", amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values:), root, option)
   end
 
   def record_child(recordable, root, parent)
@@ -536,12 +723,35 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def clear_data!
     connection = ActiveRecord::Base.connection
-    tables = [RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
+    tables = [RecordingStudioBilling::EntitlementGrant, RecordingStudioBilling::CreditLedgerEntry, RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
     connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
     RecordingStudio::Event.unscoped.delete_all
     RecordingStudio::Recording.unscoped.delete_all
     Workspace.delete_all
     AdminRoot.delete_all
     User.delete_all
+  end
+
+  def insert_grant!(grant, changes)
+    attributes = grant.attributes.except("id", "created_at", "updated_at").merge(
+      "id" => SecureRandom.uuid, "created_at" => Time.current, "updated_at" => Time.current
+    ).merge(changes)
+    RecordingStudioBilling::EntitlementGrant.insert_all!([attributes])
+  end
+
+  def insert_ledger!(entry, changes)
+    attributes = entry.attributes.except("id", "created_at", "updated_at").merge(
+      "id" => SecureRandom.uuid, "created_at" => Time.current, "updated_at" => Time.current
+    ).merge(changes)
+    RecordingStudioBilling::CreditLedgerEntry.insert_all!([attributes])
+  end
+
+  def entitlement_features
+    {
+      "enabled" => { source: "catalogue", merge_rule: "replace", default: true, type: "boolean", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 1, validation: {} },
+      "projects" => { source: "catalogue", merge_rule: "replace", default: 3, type: "limit", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 2, validation: { "minimum" => 0 } },
+      "seats" => { source: "catalogue", merge_rule: "replace", default: 5, type: "allowance", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 3, validation: { "minimum" => 0 } },
+      "edition" => { source: "catalogue", merge_rule: "replace", default: "pro", type: "variant", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 4, validation: {} }
+    }
   end
 end

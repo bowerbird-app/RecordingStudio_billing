@@ -62,6 +62,31 @@ module RecordingStudioBilling
       ProjectCompletedCheckoutIntent.call(...)
     end
 
+    def project_entitlements(...)
+      ProjectEntitlements.call(...)
+    end
+
+    def entitlement_access(...)
+      EntitlementAccess.for(...)
+    end
+
+    def effective_entitlements(root_recording:)
+      entitlement_access(root_recording:).to_h
+    end
+
+    def entitled?(root_recording:, feature_key:)
+      entitlement_access(root_recording:).enabled?(feature_key)
+    end
+
+    def feature_value(root_recording:, feature_key:)
+      entitlement_access(root_recording:).feature_value(feature_key)
+    end
+
+    def credit_balance(root_recording:, product_recording:)
+      product_id = product_recording.respond_to?(:id) ? product_recording.id : product_recording
+      entitlement_access(root_recording:).credit_balance(product_id)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end
