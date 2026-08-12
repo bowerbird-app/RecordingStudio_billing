@@ -199,6 +199,14 @@ module RecordingStudioBilling
                 ])
         end,
         "usage_rating" => usage_rating_terms,
+        "usage_settlement" => {
+          "provider_account_recording_id" => product.provider_account_recording_id,
+          "provider_adapter_key" => product.provider_account_recording.recordable.adapter_key,
+          "market_recording_id" => market.recording.id,
+          "market_country_codes" => market.country_codes,
+          "collection_method" => billing_option.collection_method,
+          "operation" => "collect_usage"
+        },
         "tax_policy" => tax_policy_snapshot,
         "discount_policy" => { "enabled" => false, "source" => "none" },
         "rounding" => { "policy" => market.rounding_policy },

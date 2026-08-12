@@ -103,6 +103,10 @@ module RecordingStudioBilling
       RateUsage.call(...)
     end
 
+    def create_rated_usage_settlement(...)
+      CreateRatedUsageSettlement.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end

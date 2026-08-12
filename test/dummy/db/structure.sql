@@ -1,3 +1,12 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict ju4cA98zXHra1sWvBtDGHR8tT3iKenDdPbXnMJergoQ035IIi0cAVzeCG9f7i4x
+
+-- Dumped from database version 16.14 (Debian 16.14-1.pgdg13+1)
+-- Dumped by pg_dump version 16.14 (Debian 16.14-1.pgdg13+1)
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -8,6 +17,13 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: public; Type: SCHEMA; Schema: -; Owner: -
+--
+
+-- *not* creating schema, since initdb creates it
+
 
 --
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
@@ -448,6 +464,49 @@ BEGIN
       AND (NEW.cost_rate_recording_id IS NULL AND NEW.cost_card_recording_id IS NULL AND NEW.cost_amount_minor IS NULL AND NEW.cost_currency_code IS NULL AND NEW.cost_currency_exponent IS NULL OR NEW.cost_rate_recording_id IS NOT NULL AND NEW.cost_amount_minor = NEW.quantity * (manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'amount_minor'])::bigint AND NEW.cost_currency_code = manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'currency_code'] AND NEW.cost_currency_exponent = (manifest.canonical_data #>> ARRAY['usage_rating', 'cost_rates', NEW.cost_rate_recording_id::text, 'currency_exponent'])::integer)
   ) OR NOT rs_billing_safe_financial_json(NEW.aggregation_snapshot) OR NOT rs_billing_safe_financial_json(NEW.rate_snapshot) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
     RAISE EXCEPTION 'rated usage source authority is invalid';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_protect_rated_usage_settlement(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_rated_usage_settlement() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'rated usage settlements are append-only'; END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM recording_studio_billing_rated_usages rated
+    JOIN recording_studio_billing_meter_aggregations aggregation ON aggregation.id = rated.meter_aggregation_id
+    JOIN recording_studio_billing_financial_commands command ON command.id = NEW.financial_command_id
+    JOIN recording_studio_billing_commercial_manifests manifest ON manifest.manifest_digest = NEW.manifest_digest
+    WHERE rated.id = NEW.rated_usage_id AND rated.root_recording_id = NEW.root_recording_id
+      AND rated.account_recording_id = NEW.account_recording_id AND rated.manifest_digest = NEW.manifest_digest
+      AND manifest.used_at IS NOT NULL
+      AND command.root_recording_id = NEW.root_recording_id AND command.account_recording_id = NEW.account_recording_id
+      AND command.command_type = 'usage_settlement' AND command.provider_account_recording_id = NEW.provider_account_recording_id
+      AND command.canonical_request -> 'request' = NEW.canonical_request AND command.request_fingerprint = NEW.request_fingerprint
+      AND command.canonical_request #> '{authority,commercial_manifest_digests}' = jsonb_build_array(NEW.manifest_digest)
+      AND manifest.canonical_data #>> '{usage_settlement,provider_account_recording_id}' = NEW.provider_account_recording_id::text
+      AND NEW.canonical_request ->> 'rated_usage_id' = rated.id::text
+      AND NEW.canonical_request ->> 'meter_recording_id' = aggregation.meter_recording_id::text
+      AND NEW.canonical_request ->> 'rate_recording_id' = rated.rate_recording_id::text
+      AND NEW.canonical_request ->> 'customer_price_recording_id' = rated.customer_price_recording_id::text
+      AND NEW.canonical_request ->> 'amount_minor' = rated.customer_amount_minor::text
+      AND NEW.canonical_request ->> 'currency' = rated.customer_currency_code
+      AND NEW.canonical_request ->> 'currency_exponent' = rated.customer_currency_exponent::text
+      AND NEW.canonical_request ->> 'window_starts_at' = to_char(rated.window_starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      AND NEW.canonical_request ->> 'window_ends_at' = to_char(rated.window_ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+      AND NEW.canonical_request ->> 'manifest_digest' = rated.manifest_digest
+      AND NEW.canonical_request ->> 'market_recording_id' = manifest.canonical_data #>> '{usage_settlement,market_recording_id}'
+      AND NEW.canonical_request ->> 'collection_method' = manifest.canonical_data #>> '{usage_settlement,collection_method}'
+  ) OR NOT rs_billing_safe_financial_json(NEW.canonical_request) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) THEN
+    RAISE EXCEPTION 'rated usage settlement source authority is invalid';
   END IF;
   RETURN NEW;
 END;
@@ -1392,7 +1451,7 @@ CREATE TABLE public.recording_studio_billing_meter_aggregations (
     CONSTRAINT rs_billing_meter_aggregation_events CHECK ((event_count > 0)),
     CONSTRAINT rs_billing_meter_aggregation_input_object CHECK ((jsonb_typeof(input_snapshot) = 'object'::text)),
     CONSTRAINT rs_billing_meter_aggregation_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
-    CONSTRAINT rs_billing_meter_aggregation_mode CHECK (((aggregation)::text = ANY ((ARRAY['sum'::character varying, 'count'::character varying, 'maximum'::character varying, 'latest'::character varying])::text[]))),
+    CONSTRAINT rs_billing_meter_aggregation_mode CHECK (((aggregation)::text = ANY (ARRAY[('sum'::character varying)::text, ('count'::character varying)::text, ('maximum'::character varying)::text, ('latest'::character varying)::text]))),
     CONSTRAINT rs_billing_meter_aggregation_window CHECK ((window_ends_at > window_starts_at))
 );
 
@@ -1616,6 +1675,30 @@ CREATE TABLE public.recording_studio_billing_rate_cards (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
+);
+
+
+--
+-- Name: recording_studio_billing_rated_usage_settlements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_rated_usage_settlements (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    rated_usage_id uuid NOT NULL,
+    financial_command_id uuid NOT NULL,
+    provider_account_recording_id uuid NOT NULL,
+    manifest_digest character varying NOT NULL,
+    canonical_request jsonb DEFAULT '{}'::jsonb NOT NULL,
+    request_fingerprint character varying NOT NULL,
+    safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_settlement_fingerprint CHECK (((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_settlement_manifest_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT rs_billing_settlement_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text)),
+    CONSTRAINT rs_billing_settlement_request_object CHECK ((jsonb_typeof(canonical_request) = 'object'::text))
 );
 
 
@@ -2161,6 +2244,14 @@ ALTER TABLE ONLY public.recording_studio_billing_rate_cards
 
 
 --
+-- Name: recording_studio_billing_rated_usage_settlements recording_studio_billing_rated_usage_settlements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT recording_studio_billing_rated_usage_settlements_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: recording_studio_billing_rated_usages recording_studio_billing_rated_usages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2335,6 +2426,13 @@ CREATE INDEX idx_on_account_recording_id_9e348b517e ON public.recording_studio_b
 
 
 --
+-- Name: idx_on_account_recording_id_b17008f7e2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_b17008f7e2 ON public.recording_studio_billing_rated_usage_settlements USING btree (account_recording_id);
+
+
+--
 -- Name: idx_on_account_recording_id_bf46d23ae6; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2440,6 +2538,13 @@ CREATE INDEX idx_on_financial_command_attempt_id_0ab43bb24a ON public.recording_
 
 
 --
+-- Name: idx_on_financial_command_id_0ee66789ae; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_financial_command_id_0ee66789ae ON public.recording_studio_billing_rated_usage_settlements USING btree (financial_command_id);
+
+
+--
 -- Name: idx_on_financial_command_id_144b6e8c5b; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2531,6 +2636,13 @@ CREATE INDEX idx_on_provider_account_recording_id_917bf5f52e ON public.recording
 
 
 --
+-- Name: idx_on_provider_account_recording_id_9cd826d9a7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_provider_account_recording_id_9cd826d9a7 ON public.recording_studio_billing_rated_usage_settlements USING btree (provider_account_recording_id);
+
+
+--
 -- Name: idx_on_provider_account_recording_id_d0aeb02284; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2559,6 +2671,13 @@ CREATE INDEX idx_on_purchase_effect_id_1cf8fc1656 ON public.recording_studio_bil
 
 
 --
+-- Name: idx_on_rated_usage_id_93c519e44f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_rated_usage_id_93c519e44f ON public.recording_studio_billing_rated_usage_settlements USING btree (rated_usage_id);
+
+
+--
 -- Name: idx_on_root_recording_id_107421795e; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2570,6 +2689,13 @@ CREATE INDEX idx_on_root_recording_id_107421795e ON public.recording_studio_bill
 --
 
 CREATE INDEX idx_on_root_recording_id_162489a73e ON public.recording_studio_billing_meter_aggregations USING btree (root_recording_id);
+
+
+--
+-- Name: idx_on_root_recording_id_3e16fc4553; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_3e16fc4553 ON public.recording_studio_billing_rated_usage_settlements USING btree (root_recording_id);
 
 
 --
@@ -2871,6 +2997,20 @@ CREATE UNIQUE INDEX idx_rs_billing_purchase_effect_idempotency ON public.recordi
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_rated_usage_aggregation ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
+
+
+--
+-- Name: idx_rs_billing_settlement_command; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_settlement_command ON public.recording_studio_billing_rated_usage_settlements USING btree (financial_command_id);
+
+
+--
+-- Name: idx_rs_billing_settlement_rated_usage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_settlement_rated_usage ON public.recording_studio_billing_rated_usage_settlements USING btree (rated_usage_id);
 
 
 --
@@ -3434,6 +3574,13 @@ CREATE TRIGGER rs_billing_rated_usage_history BEFORE INSERT OR DELETE OR UPDATE 
 
 
 --
+-- Name: recording_studio_billing_rated_usage_settlements rs_billing_rated_usage_settlement_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_rated_usage_settlement_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rated_usage_settlements FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_rated_usage_settlement();
+
+
+--
 -- Name: recording_studio_billing_subscriptions rs_billing_subscription_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3473,6 +3620,14 @@ CREATE TRIGGER rs_billing_tax_calculation_history BEFORE DELETE OR UPDATE ON pub
 --
 
 CREATE TRIGGER rs_billing_usage_event_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_events FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_event();
+
+
+--
+-- Name: recording_studio_billing_rated_usage_settlements fk_rails_0753a25392; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT fk_rails_0753a25392 FOREIGN KEY (rated_usage_id) REFERENCES public.recording_studio_billing_rated_usages(id);
 
 
 --
@@ -3609,6 +3764,14 @@ ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_4992812ca8 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_rated_usage_settlements fk_rails_49d937bf87; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT fk_rails_49d937bf87 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -3844,6 +4007,14 @@ ALTER TABLE ONLY public.recording_studio_billing_product_rules
 
 
 --
+-- Name: recording_studio_billing_rated_usage_settlements fk_rails_ae4a8877f1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT fk_rails_ae4a8877f1 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_usage_events fk_rails_b6561d39f1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3916,11 +4087,27 @@ ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
 
 
 --
+-- Name: recording_studio_billing_rated_usage_settlements fk_rails_c69d309478; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT fk_rails_c69d309478 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_rate_cards fk_rails_ca9368a435; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rate_cards
     ADD CONSTRAINT fk_rails_ca9368a435 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
+-- Name: recording_studio_billing_rated_usage_settlements fk_rails_cb2aba86cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
+    ADD CONSTRAINT fk_rails_cb2aba86cf FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
 
 --
@@ -4047,47 +4234,5 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 -- PostgreSQL database dump complete
 --
 
-SET search_path TO "$user", public;
-
-INSERT INTO "schema_migrations" (version) VALUES
-('20260811000009'),
-('20260811000008'),
-('20260811000007'),
-('20260811000006'),
-('20260811000005'),
-('20260811000004'),
-('20260811000003'),
-('20260811000002'),
-('20260811000001'),
-('20260811000000'),
-('20260810000011'),
-('20260810000010'),
-('20260810000009'),
-('20260810000008'),
-('20260810000007'),
-('20260810000006'),
-('20260810000005'),
-('20260810000004'),
-('20260810000003'),
-('20260810000002'),
-('20260810000000'),
-('20260809999999'),
-('20260612000000'),
-('20260421000000'),
-('20260217233016'),
-('20260217072940'),
-('20260217072923'),
-('20260217072826'),
-('20260217072825'),
-('20260217072824'),
-('20260217072823'),
-('20260217072822'),
-('20260217072821'),
-('20260217072820'),
-('20260217072819'),
-('20260217072818'),
-('20260217072817'),
-('20260217072816'),
-('20260217072815'),
-('20250101000000');
+\unrestrict ju4cA98zXHra1sWvBtDGHR8tT3iKenDdPbXnMJergoQ035IIi0cAVzeCG9f7i4x
 
