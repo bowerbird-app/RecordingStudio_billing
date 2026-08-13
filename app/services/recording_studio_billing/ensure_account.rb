@@ -38,7 +38,7 @@ module RecordingStudioBilling
         root_recording: root,
         parent_recording: root
       )
-      account
+      Account.with_current_recording.find(account.id)
     end
 
     def current_account(root)

@@ -48,8 +48,8 @@ module RecordingStudioBilling
     private
 
     attr_reader :account_recording_input, :calculator_key, :calculator_mode, :command_type, :commercial_manifest_digests,
-          :local_idempotency_key, :provider_account_recording_input, :provider_adapter_key, :request,
-          :root_recording_input
+                :local_idempotency_key, :provider_account_recording_input, :provider_adapter_key, :request,
+                :root_recording_input
 
     def command_attributes
       validate_scalar_inputs!
@@ -112,9 +112,7 @@ module RecordingStudioBilling
               recording.parent_recording_id == billing_admin_recording.id &&
               recording.root_recording_id == billing_admin_recording.root_recording_id
       raise ArgumentError, "provider account must belong directly to its BillingAdmin" unless valid
-      unless recording.recordable.adapter_key == provider_adapter_key
-        raise ArgumentError, "provider account adapter key does not match the financial command"
-      end
+      raise ArgumentError, "provider account adapter key does not match the financial command" unless recording.recordable.adapter_key == provider_adapter_key
 
       recording
     end
@@ -129,9 +127,7 @@ module RecordingStudioBilling
 
       manifests.each do |manifest|
         allowed_roots = [root.id, provider_recording&.root_recording_id].compact
-        unless allowed_roots.include?(manifest.root_recording_id)
-          raise ArgumentError, "commercial manifest belongs to another root"
-        end
+        raise ArgumentError, "commercial manifest belongs to another root" unless allowed_roots.include?(manifest.root_recording_id)
         raise ArgumentError, "commercial manifest is not published and used" unless manifest.used_at?
         unless manifest.schema_version == CommercialManifest::SCHEMA_VERSION &&
                manifest.resolver_version == CommercialManifest::RESOLVER_VERSION
@@ -146,9 +142,7 @@ module RecordingStudioBilling
           "recording_snapshots" => manifest.recording_snapshots,
           "snapshot_references" => manifest.snapshot_references
         }
-        unless CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest
-          raise ArgumentError, "commercial manifest digest is invalid"
-        end
+        raise ArgumentError, "commercial manifest digest is invalid" unless CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest
       end
 
       commercial_manifest_digests
@@ -187,6 +181,7 @@ module RecordingStudioBilling
     def validate_scalar_inputs!
       raise ArgumentError, "command type is invalid" unless command_type.match?(/\A[a-z][a-z0-9_]*\z/)
       raise ArgumentError, "local idempotency key is required" if local_idempotency_key.empty?
+
       provider_authority = provider_account_recording_input.present? && provider_adapter_key.present?
       tax_authority = calculator_key.present? && calculator_mode.present?
       return if provider_authority ^ tax_authority

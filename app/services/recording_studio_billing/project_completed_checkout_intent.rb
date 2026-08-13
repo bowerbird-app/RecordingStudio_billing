@@ -18,13 +18,20 @@ module RecordingStudioBilling
       CheckoutIntent.transaction do
         intent = resolve_intent.lock!
         verify_eligibility!(intent)
-        item = intent.items.lock.sole
-        return existing_result(item) if existing_projection(item)
+        results = intent.items.lock.order(:created_at, :id).map do |item|
+          next existing_result(item) if existing_projection(item)
 
-        mode = commercial_mode(item)
-        result = SubscriptionItemVersion::MODES.include?(mode) ? project_subscription!(intent, item, mode) : project_purchase!(intent, item, mode)
+          mode = commercial_mode(item)
+          if SubscriptionItemVersion::MODES.include?(mode)
+            project_subscription!(intent, item,
+                                  mode)
+          else
+            project_purchase!(intent, item,
+                              mode)
+          end
+        end
         intent.update!(state: "completed") unless intent.state == "completed"
-        result
+        combine_results(results)
       end
     rescue ActiveRecord::RecordNotUnique
       retry
@@ -44,27 +51,32 @@ module RecordingStudioBilling
     def verify_eligibility!(intent)
       root = RecordingStudio.root_recording_or_self(root_recording_input || intent.root_recording)
       raise ActiveRecord::RecordNotFound, "checkout intent not found" unless intent.root_recording_id == root.id
-      raise ArgumentError, "checkout intent is not eligible for lifecycle projection" unless %w[awaiting_confirmation completed].include?(intent.state)
+      raise ArgumentError, "checkout intent is not eligible for lifecycle projection" unless %w[awaiting_confirmation
+                                                                                                completed].include?(intent.state)
+
       command = intent.financial_command
-      unless command&.command_type == "checkout" && command.state == "succeeded" && command.root_recording_id == intent.root_recording_id && command.account_recording_id == intent.account_recording_id
-        raise ArgumentError, "checkout intent has no completed authoritative command"
-      end
+      raise ArgumentError, "checkout intent has no completed authoritative command" unless command&.command_type == "checkout" && command.state == "succeeded" && command.root_recording_id == intent.root_recording_id && command.account_recording_id == intent.account_recording_id
+
       account = intent.account_recording
-      unless account.recordable_type == "RecordingStudioBilling::Account" && account.root_recording_id == root.id && account.parent_recording_id == root.id && account.recordable.root_recording_id == root.id
-        raise ArgumentError, "checkout intent account authority is invalid"
-      end
-      raise ArgumentError, "unsupported_checkout_composition" unless intent.items.one?
+      raise ArgumentError, "checkout intent account authority is invalid" unless account.recordable_type == "RecordingStudioBilling::Account" && account.root_recording_id == root.id && account.parent_recording_id == root.id && account.recordable.root_recording_id == root.id
+
       intent.items.each { |item| verify_frozen_item!(intent, command, item) }
     end
 
-    def verify_frozen_item!(intent, command, item)
-      raise ArgumentError, "checkout command authority is invalid" unless command.canonical_request.dig("authority", "commercial_manifest_digests")&.include?(item.manifest_digest)
-      raise ArgumentError, "checkout provider authority is invalid" unless item.provider_account_recording_id == command.provider_account_recording_id && item.provider_account_recording.recordable.adapter_key == command.provider_adapter_key
-      manifest = CommercialManifest.lock.find_by!(manifest_digest: item.manifest_digest)
-      envelope = { "schema_version" => manifest.schema_version, "resolver_version" => manifest.resolver_version, "root_recording_id" => manifest.root_recording_id, "canonical_data" => manifest.canonical_data, "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references }
-      unless manifest.used_at? && CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest && manifest.manifest_digest == item.manifest_digest
-        raise ArgumentError, "checkout commercial manifests are invalid"
+    def verify_frozen_item!(_intent, command, item)
+      raise ArgumentError, "checkout command authority is invalid" unless command.canonical_request.dig("authority",
+                                                                                                        "commercial_manifest_digests")&.include?(item.manifest_digest)
+
+      unless item.provider_account_recording_id == command.provider_account_recording_id && item.provider_account_recording.recordable.adapter_key == command.provider_adapter_key
+        raise ArgumentError,
+              "checkout provider authority is invalid"
       end
+
+      manifest = CommercialManifest.lock.find_by!(manifest_digest: item.manifest_digest)
+      envelope = { "schema_version" => manifest.schema_version, "resolver_version" => manifest.resolver_version,
+                   "root_recording_id" => manifest.root_recording_id, "canonical_data" => manifest.canonical_data, "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references }
+      raise ArgumentError, "checkout commercial manifests are invalid" unless manifest.used_at? && CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest && manifest.manifest_digest == item.manifest_digest
+
       SafeFinancialPayload.validate!(item.commercial_manifest)
     end
 
@@ -97,20 +109,58 @@ module RecordingStudioBilling
       Result.new(status: :existing, subscription: nil, purchase: Purchase.find_by!(checkout_intent_item_id: item.id))
     end
 
+    def combine_results(results)
+      return results.first if results.one?
+
+      status = results.all?(&:existing?) ? :existing : :projected
+      Result.new(
+        status:,
+        subscription: results.filter_map(&:subscription).first,
+        purchase: results.filter_map(&:purchase).first
+      )
+    end
+
     def project_subscription!(intent, item, mode)
-      subscription = Subscription.lock.find_or_create_by!(root_recording: intent.root_recording, account_recording: intent.account_recording) do |record|
+      identity = subscription_identity(item)
+      subscription = Subscription.lock.find_or_create_by!(root_recording: intent.root_recording, account_recording: intent.account_recording,
+                                                          execution_group_fingerprint: identity.fetch(:execution_group_fingerprint)) do |record|
         record.identifier = SecureRandom.uuid
         record.state = mode == "trial_subscription" ? "trialing" : "active"
+        record.provider_account_recording_id = identity.fetch(:provider_account_recording_id)
+        record.currency_code = identity.fetch(:currency_code)
+        record.collection_method = identity.fetch(:collection_method)
+        record.billing_anchor = identity.fetch(:billing_anchor)
+        record.payment_terms_days = identity.fetch(:payment_terms_days)
+        record.market_recording_id = identity.fetch(:market_recording_id)
       end
       line_key = subscription_line_key(item, mode)
-      previous = subscription.item_versions.where(line_key:, effective_ends_at: nil).order(version_number: :desc).first
+      subscription_item = subscription.items.lock.find_or_create_by!(line_key:) do |record|
+        record.root_recording = intent.root_recording
+        record.account_recording = intent.account_recording
+        record.state = "active"
+      end
+      previous = subscription_item.versions.where(effective_ends_at: nil).order(version_number: :desc).first
       now = Time.current
       previous&.update!(effective_ends_at: now, superseded_at: now)
       terms = item.commercial_manifest.fetch("canonical_data")
       option = terms.fetch("billing_option")
       price = terms.fetch("price")
-      subscription.item_versions.create!(root_recording: intent.root_recording, account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, line_key:, version_number: subscription.item_versions.where(line_key:).maximum(:version_number).to_i + 1, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity, interval: option["interval"], interval_count: option["interval_count"], manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, effective_starts_at: now)
+      subscription_item.versions.create!(subscription: subscription, root_recording: intent.root_recording,
+                                         account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, source_type: "checkout", source_id: item.id, source_snapshot: item.commercial_manifest, line_key:, version_number: subscription_item.versions.maximum(:version_number).to_i + 1, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity, interval: option["interval"], interval_count: option["interval_count"], manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, effective_starts_at: now)
       Result.new(status: :projected, subscription:, purchase: nil)
+    end
+
+    def subscription_identity(item)
+      option = item.commercial_manifest.dig("canonical_data", "billing_option")
+      values = {
+        provider_account_recording_id: item.provider_account_recording_id,
+        currency_code: item.currency_code,
+        collection_method: item.collection_method,
+        billing_anchor: option.fetch("lifecycle_policy"),
+        payment_terms_days: option.fetch("payment_terms_days"),
+        market_recording_id: item.market_recording_id
+      }
+      values.merge(execution_group_fingerprint: Subscription.execution_group_fingerprint(values))
     end
 
     def subscription_line_key(item, mode)
@@ -121,9 +171,11 @@ module RecordingStudioBilling
 
     def project_purchase!(intent, item, mode)
       terms = item.commercial_manifest.fetch("canonical_data")
-      purchase = Purchase.create!(root_recording: intent.root_recording, account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: terms.dig("price", "amount_minor"), quantity: item.quantity, manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, completed_at: Time.current)
+      purchase = Purchase.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
+                                  checkout_intent: intent, checkout_intent_item_id: item.id, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: terms.dig("price", "amount_minor"), quantity: item.quantity, manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, completed_at: Time.current)
       effect_kind = mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon"
-      purchase.effects.create!(root_recording: intent.root_recording, account_recording: intent.account_recording, effect_kind:, idempotency_key: "checkout-item:#{item.id}:#{effect_kind}", manifest_digest: item.manifest_digest, safe_metadata: { "product_recording_id" => item.product_recording_id, "quantity" => item.quantity }, effective_at: purchase.completed_at)
+      purchase.effects.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
+                               effect_kind:, idempotency_key: "checkout-item:#{item.id}:#{effect_kind}", manifest_digest: item.manifest_digest, safe_metadata: { "product_recording_id" => item.product_recording_id, "quantity" => item.quantity }, effective_at: purchase.completed_at)
       Result.new(status: :projected, subscription: nil, purchase:)
     end
   end

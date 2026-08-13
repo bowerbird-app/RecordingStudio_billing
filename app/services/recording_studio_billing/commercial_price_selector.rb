@@ -7,6 +7,7 @@ module RecordingStudioBilling
       @market = market
       @currency_code = currency_code
       @scope = scope
+      raise ArgumentError, "unsupported V1 price scope" unless @scope == Price::V1_SCOPE
     end
 
     def price!

@@ -2,7 +2,8 @@
 
 module RecordingStudioBilling
   class CheckoutIntent < RecordingStudioBilling::ApplicationRecord
-    STATES = %w[draft validated awaiting_confirmation pending_provider requires_requote completed failed cancelled expired requires_review].freeze
+    STATES = %w[draft validated awaiting_confirmation pending_provider requires_requote completed failed cancelled
+                expired requires_review].freeze
 
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false

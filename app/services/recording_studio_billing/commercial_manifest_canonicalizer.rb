@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 require "digest"
 require "json"

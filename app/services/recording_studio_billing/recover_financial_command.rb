@@ -4,9 +4,7 @@ module RecordingStudioBilling
   class RecoverFinancialCommand
     def self.call(command:, provider_key:, lease_duration: FinancialCommandClaim::DEFAULT_LEASE, after_claim: nil)
       adapter_key = provider_key.to_s
-      unless command.provider_adapter_key == adapter_key
-        raise ArgumentError, "provider adapter key does not match the financial command"
-      end
+      raise ArgumentError, "provider adapter key does not match the financial command" unless command.provider_adapter_key == adapter_key
 
       adapter = RecordingStudioBilling.configuration.provider_registry.fetch(adapter_key)
       recover_with_adapter(command:, adapter:, lease_duration:, after_claim:)

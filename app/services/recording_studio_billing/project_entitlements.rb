@@ -15,7 +15,8 @@ module RecordingStudioBilling
       EntitlementGrant.transaction do
         root = RecordingStudio.root_recording_or_self(root_recording_input).lock!
         sources_for(root).map { |source| project_source(source, root) }.then do |projected|
-          Result.new(grants: projected.flat_map(&:first), credit_entries: projected.flat_map(&:last), existing?: projected.empty?)
+          Result.new(grants: projected.flat_map(&:first), credit_entries: projected.flat_map(&:last),
+                     existing?: projected.empty?)
         end
       end
     rescue ActiveRecord::RecordNotUnique
@@ -34,21 +35,25 @@ module RecordingStudioBilling
     end
 
     def resolve_source(root)
-      unless source_input.is_a?(SubscriptionItemVersion) || source_input.is_a?(PurchaseEffect)
-        raise ArgumentError, "entitlement source must be a subscription item version or purchase effect"
+      raise ArgumentError, "entitlement source must be a subscription item version or purchase effect" unless source_input.is_a?(SubscriptionItemVersion) || source_input.is_a?(PurchaseEffect)
+
+      unless source_input.root_recording_id == root.id
+        raise ActiveRecord::RecordNotFound,
+              "entitlement source not found"
       end
-      raise ActiveRecord::RecordNotFound, "entitlement source not found" unless source_input.root_recording_id == root.id
 
       source_input.lock!
     end
 
     def verify_source!(source, root)
       raise ActiveRecord::RecordNotFound, "entitlement source not found" unless source.root_recording_id == root.id
+
       account = source.account_recording
       unless account.recordable_type == "RecordingStudioBilling::Account" && account.root_recording_id == root.id &&
              account.parent_recording_id == root.id && account.recordable.root_recording_id == root.id
         raise ArgumentError, "entitlement account authority is invalid"
       end
+
       SafeFinancialPayload.validate!(snapshot(source))
       manifest = CommercialManifest.lock.find_by!(manifest_digest: source.manifest_digest)
       envelope = {
@@ -60,9 +65,9 @@ module RecordingStudioBilling
              snapshot(source).fetch("canonical_data") == manifest.canonical_data
         raise ArgumentError, "entitlement frozen manifest is invalid"
       end
-      if source.is_a?(PurchaseEffect) && source.purchase.manifest_digest != source.manifest_digest
-        raise ArgumentError, "entitlement purchase effect manifest is invalid"
-      end
+      return unless source.is_a?(PurchaseEffect) && source.purchase.manifest_digest != source.manifest_digest
+
+      raise ArgumentError, "entitlement purchase effect manifest is invalid"
     end
 
     def snapshot(source)
@@ -74,6 +79,7 @@ module RecordingStudioBilling
         features.each do |key, feature|
           definition = feature.fetch("definition")
           raise ArgumentError, "entitlement feature kind is invalid" unless Feature::TYPES.include?(definition.fetch("type"))
+
           SafeFinancialPayload.validate!({ key => feature })
         end
       end
@@ -103,7 +109,7 @@ module RecordingStudioBilling
       verify_source!(source, root)
       grants = features(source).map do |feature_key, feature|
         EntitlementGrant.find_or_create_by!(root_recording: root, source_type: source.class.name,
-                                             source_id: source.id, feature_key:) do |grant|
+                                            source_id: source.id, feature_key:) do |grant|
           grant.account_recording = source.account_recording
           grant.manifest_digest = source.manifest_digest
           grant.feature_kind = feature.fetch("definition").fetch("type")

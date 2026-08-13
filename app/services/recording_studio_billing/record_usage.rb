@@ -27,7 +27,11 @@ module RecordingStudioBilling
         existing = UsageEvent.find_by(root_recording: root, idempotency_key:)
         next Result.new(status: :existing, event: existing, reason: nil) if existing
 
-        denial = entitlement_denial(root, account)
+        policy = policy_decision(root, account)
+        denial = policy.fetch(:denial) || (!policy.fetch(:configured) && entitlement_denial(root,
+                                                                                            account)) || late_usage_denial(
+                                                                                              root, account
+                                                                                            )
         next Result.new(status: :denied, event: nil, reason: denial) if denial
 
         event = UsageEvent.create!(attributes)
@@ -54,10 +58,13 @@ module RecordingStudioBilling
     def event_attributes(root, account)
       raise ArgumentError, "usage key is invalid" unless usage_key.match?(/\A[a-z][a-z0-9_:-]*\z/)
       raise ArgumentError, "idempotency key is required" if idempotency_key.empty?
+
       quantity = Integer(@quantity)
       raise ArgumentError, "quantity must be positive" unless quantity.positive?
       raise ArgumentError, "occurred at is required" unless occurred_at.respond_to?(:to_time)
 
+      late = late_period(root, account)
+      route = late_usage_route(late)
       {
         root_recording_id: root.id,
         account_recording_id: account.id,
@@ -66,7 +73,9 @@ module RecordingStudioBilling
         quantity:,
         occurred_at: occurred_at.to_time,
         idempotency_key:,
-        safe_metadata: SafeFinancialPayload.normalize(metadata)
+        classification: late ? "late" : "timely",
+        late_usage_period_id: late&.id,
+        safe_metadata: SafeFinancialPayload.normalize(metadata.merge(route ? { "late_usage_routing" => route } : {}))
       }
     rescue SafeFinancialPayload::UnsafeValue
       raise
@@ -89,6 +98,61 @@ module RecordingStudioBilling
       total + Integer(@quantity) > cap ? :exhausted_allowance : nil
     rescue ArgumentError, TypeError
       :ambiguous_configuration
+    end
+
+    def policy_decision(root, account)
+      policies = UsageAllowancePolicy.active_at(occurred_at).where(root_recording: root, account_recording: account, usage_key:)
+                                     .joins(:usage_period)
+                                     .where("recording_studio_billing_usage_periods.starts_at <= ? AND recording_studio_billing_usage_periods.ends_at > ?", occurred_at, occurred_at)
+                                     .includes(:usage_period).to_a
+      return { configured: false, denial: nil } if policies.empty?
+      return { configured: true, denial: :ambiguous_configuration } unless policies.one?
+
+      policy = policies.first
+      reported = UsageEvent.where(root_recording: root, account_recording: account, usage_key:)
+                           .where(occurred_at: policy.usage_period.starts_at...policy.usage_period.ends_at).sum(:quantity)
+      requested = Integer(@quantity)
+      prepaid = UsageCreditGrant.available_at(occurred_at).where(root_recording: root, account_recording: account,
+                                                                 credit_key: usage_key)
+                                .sum(&:available_quantity)
+      case policy.policy_kind
+      when "unlimited", "automatic_overage", "prepaid_then_overage"
+        { configured: true, denial: nil }
+      when "hard_limit"
+        { configured: true, denial: reported + requested > policy.limit_quantity ? :exhausted_allowance : nil }
+      when "prepaid_only", "prepaid_then_block"
+        { configured: true, denial: requested > prepaid ? :exhausted_prepaid : nil }
+      when "addon_required"
+        { configured: true, denial: requested > prepaid ? :addon_required : nil }
+      else
+        { configured: true, denial: :ambiguous_configuration }
+      end
+    rescue ArgumentError, TypeError
+      { configured: true, denial: :ambiguous_configuration }
+    end
+
+    def late_period(root, account)
+      UsagePeriod.where(root_recording: root, account_recording: account, usage_key:, state: %w[closed submitted invoiced reconciled requires_review])
+                 .where("starts_at <= ? AND ends_at > ?", occurred_at, occurred_at).order(:ends_at).first
+    end
+
+    def late_usage_denial(root, account)
+      period = late_period(root, account)
+      return nil unless period
+
+      case late_usage_route(period)
+      when "next_invoice", "adjustment" then nil
+      when "admin_review" then :late_usage_requires_review
+      when "reject" then :late_usage_rejected
+      else :late_usage_policy_unavailable
+      end
+    end
+
+    def late_usage_route(period)
+      return unless period
+
+      policy = period.safe_metadata.fetch("late_usage_policy", "reject")
+      policy if %w[next_invoice adjustment].include?(policy)
     end
 
     def lock_usage_bucket!(root, account)

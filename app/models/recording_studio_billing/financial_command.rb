@@ -12,7 +12,9 @@ module RecordingStudioBilling
                         dependent: :restrict_with_error, inverse_of: :financial_command
     scope :pending_work, -> { where(state: "pending") }
     scope :stale_processing, ->(now = Time.current) { where(state: "processing", lease_expires_at: ..now) }
-    scope :reconciliation_work, -> { where(state: "requires_reconciliation").or(where(reconciliation_state: "pending")) }
+    scope :reconciliation_work, lambda {
+      where(state: "requires_reconciliation").or(where(reconciliation_state: "pending"))
+    }
 
     validates :operation_id, :command_type, :canonical_request, :request_fingerprint,
               :local_idempotency_key, :provider_idempotency_key, presence: true
@@ -39,7 +41,7 @@ module RecordingStudioBilling
       { normalized_result:, safe_error_details: }.each do |attribute, value|
         SafeFinancialPayload.validate!(
           value,
-          allow_authoritative_totals: attribute == :normalized_result && command_type == "tax_calculation"
+          allow_authoritative_totals: attribute == :normalized_result && command_type.in?(%w[tax_calculation checkout])
         )
       rescue SafeFinancialPayload::UnsafeValue => e
         errors.add(attribute, e.message)
@@ -62,7 +64,10 @@ module RecordingStudioBilling
               authority["commercial_manifest_digests"].is_a?(Array) &&
               authority["commercial_manifest_digests"] == authority["commercial_manifest_digests"].uniq.sort
       errors.add(:canonical_request, "has an invalid canonical envelope") unless valid
-      SafeFinancialPayload.validate!(payload, allow_authoritative_totals: command_type == "tax_calculation") if payload.is_a?(Hash)
+      if payload.is_a?(Hash)
+        SafeFinancialPayload.validate!(payload,
+                                       allow_authoritative_totals: command_type == "tax_calculation")
+      end
       return unless request_fingerprint.present? && envelope.is_a?(Hash)
 
       expected = CommercialManifestCanonicalizer.digest(envelope)

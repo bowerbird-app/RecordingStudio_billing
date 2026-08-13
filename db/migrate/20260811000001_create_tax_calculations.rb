@@ -20,7 +20,7 @@ class CreateTaxCalculations < ActiveRecord::Migration[8.1]
       t.references :commercial_manifest, null: false, type: :uuid,
                                          foreign_key: { to_table: :recording_studio_billing_commercial_manifests }
       t.references :supersedes, type: :uuid,
-                foreign_key: { to_table: :recording_studio_billing_tax_calculations }
+                                foreign_key: { to_table: :recording_studio_billing_tax_calculations }
       t.integer :revision_number, null: false, default: 1
       t.string :calculator_key, null: false
       t.string :calculator_mode, null: false
@@ -44,10 +44,10 @@ class CreateTaxCalculations < ActiveRecord::Migration[8.1]
     end
 
     add_index :recording_studio_billing_tax_calculations, %i[financial_command_id revision_number], unique: true,
-          name: "idx_rs_billing_tax_command_revision"
+                                                                                                    name: "idx_rs_billing_tax_command_revision"
     add_index :recording_studio_billing_tax_calculations,
-          %i[root_recording_id idempotency_key revision_number], unique: true,
-              name: "idx_rs_billing_tax_idempotency"
+              %i[root_recording_id idempotency_key revision_number], unique: true,
+                                                                     name: "idx_rs_billing_tax_idempotency"
     add_index :recording_studio_billing_tax_calculations, :request_fingerprint,
               name: "idx_rs_billing_tax_fingerprint"
     add_check_constraint :recording_studio_billing_tax_calculations,
@@ -71,8 +71,8 @@ class CreateTaxCalculations < ActiveRecord::Migration[8.1]
     add_check_constraint :recording_studio_billing_tax_calculations,
                          "discount_minor <= subtotal_minor", name: "rs_billing_tax_discount"
     add_check_constraint :recording_studio_billing_tax_calculations,
-               "revision_number > 0 AND ((revision_number = 1) = (supersedes_id IS NULL))",
-               name: "rs_billing_tax_revision"
+                         "revision_number > 0 AND ((revision_number = 1) = (supersedes_id IS NULL))",
+                         name: "rs_billing_tax_revision"
     add_check_constraint :recording_studio_billing_tax_calculations,
                          "(behavior = 'exclusive' AND total_minor = subtotal_minor - discount_minor + tax_minor) OR " \
                          "(behavior IN ('inclusive', 'provider_default') AND total_minor = subtotal_minor - discount_minor " \

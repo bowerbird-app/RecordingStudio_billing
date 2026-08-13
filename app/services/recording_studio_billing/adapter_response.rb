@@ -13,12 +13,12 @@ module RecordingStudioBilling
     attr_reader :status, :provider_reference, :result, :error_details, :metadata, :uncertain_outcome
 
     def initialize(status:, provider_reference: nil, result: {}, error_details: {}, metadata: {}, uncertain_outcome: false,
-             allow_authoritative_totals: false)
+                   allow_authoritative_totals: false)
       normalized_status = status.to_s
       @status = STATUSES.include?(normalized_status) ? normalized_status : "unknown"
       @provider_reference = normalize_reference(provider_reference)
       @result = SafeFinancialPayload.normalize(result, allow_authoritative_totals:)
-                .merge("status" => @status).freeze
+                                    .merge("status" => @status).freeze
       @error_details = SafeFinancialPayload.normalize(error_details).freeze
       @metadata = SafeFinancialPayload.normalize(metadata).freeze
       @uncertain_outcome = uncertain_outcome == true || @status == "unknown"

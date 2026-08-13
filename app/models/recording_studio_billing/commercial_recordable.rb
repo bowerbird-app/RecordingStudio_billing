@@ -51,6 +51,7 @@ module RecordingStudioBilling
       # FeatureOverrides use FeatureOverrideReviser. Existing immutable
       # dependencies have not changed state and need no new authorization.
       return if persisted? && !will_save_change_to_state?
+
       authorized = if is_a?(FeatureOverride)
                      RecordingStudioBilling.feature_override_revision_in_progress?
                    else

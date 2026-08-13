@@ -9,20 +9,19 @@ module RecordingStudioBilling
       invalid_request provider_rejection timeout_after_possible_success unknown_provider_state
     ]).uniq.freeze
 
-    attr_reader :calls, :idempotency_keys, :transaction_open_during_calls
-
-    attr_reader :capabilities
+    attr_reader :calls, :idempotency_keys, :transaction_open_during_calls, :capabilities
 
     def initialize(outcome:, capabilities: nil)
       raise ArgumentError, "unsupported fake adapter outcome" unless OUTCOMES.include?(outcome)
 
       @outcome = outcome
       @capabilities = capabilities || ProviderCapabilities.new(
-        operations: %w[charge checkout subscription refund adjustment tax],
+        operations: %w[charge checkout subscription subscription_change refund adjustment tax],
         currencies: %w[EUR GBP USD], markets: %w[CA GB US],
         collection_methods: %w[automatic manual], checkout_modes: %w[payment setup subscription],
         tax_modes: %w[external provider], quantities: %w[fixed adjustable],
-        composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit]
+        composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit],
+        subscription_change_kinds: %w[plan interval addon quantity cancellation resumption]
       )
       @calls = 0
       @idempotency_keys = []
@@ -45,6 +44,10 @@ module RecordingStudioBilling
       raise TimeoutAfterPossibleSuccess, "provider outcome is uncertain" if outcome == :timeout_after_possible_success
 
       response_for(outcome)
+    end
+
+    def provider_reference_type(command:, provider_reference:)
+      "operation" if provider_reference.present? && command.command_type.present?
     end
 
     private

@@ -33,19 +33,19 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
     end
 
     add_index :recording_studio_billing_financial_commands, :operation_id, unique: true,
-              name: "idx_rs_billing_commands_operation"
+                                                                           name: "idx_rs_billing_commands_operation"
     add_index :recording_studio_billing_financial_commands,
               %i[root_recording_id local_idempotency_key], unique: true,
-              name: "idx_rs_billing_commands_local_idempotency"
+                                                           name: "idx_rs_billing_commands_local_idempotency"
     add_index :recording_studio_billing_financial_commands, :provider_idempotency_key, unique: true,
-              name: "idx_rs_billing_commands_provider_idempotency"
+                                                                                       name: "idx_rs_billing_commands_provider_idempotency"
     add_index :recording_studio_billing_financial_commands, :created_at,
-          where: "state = 'pending'", name: "idx_rs_billing_commands_pending_work"
+              where: "state = 'pending'", name: "idx_rs_billing_commands_pending_work"
     add_index :recording_studio_billing_financial_commands, :lease_expires_at,
-          where: "state = 'processing'", name: "idx_rs_billing_commands_stale_processing"
+              where: "state = 'processing'", name: "idx_rs_billing_commands_stale_processing"
     add_index :recording_studio_billing_financial_commands, :updated_at,
-          where: "state = 'requires_reconciliation' OR reconciliation_state = 'pending'",
-          name: "idx_rs_billing_commands_reconciliation_work"
+              where: "state = 'requires_reconciliation' OR reconciliation_state = 'pending'",
+              name: "idx_rs_billing_commands_reconciliation_work"
     add_check_constraint :recording_studio_billing_financial_commands,
                          "state IN (#{quoted(COMMAND_STATES)})", name: "rs_billing_commands_state"
     add_check_constraint :recording_studio_billing_financial_commands,
@@ -77,12 +77,12 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
                          "calculator_mode IS NULL OR calculator_mode IN ('external_calculation', 'provider_calculation')",
                          name: "rs_billing_commands_calculator_mode"
     add_check_constraint :recording_studio_billing_financial_commands,
-               "(claim_token IS NULL AND claimed_at IS NULL AND lease_expires_at IS NULL) OR " \
-               "(claim_token IS NOT NULL AND claimed_at IS NOT NULL AND lease_expires_at > claimed_at)",
-               name: "rs_billing_commands_complete_claim"
+                         "(claim_token IS NULL AND claimed_at IS NULL AND lease_expires_at IS NULL) OR " \
+                         "(claim_token IS NOT NULL AND claimed_at IS NOT NULL AND lease_expires_at > claimed_at)",
+                         name: "rs_billing_commands_complete_claim"
     add_check_constraint :recording_studio_billing_financial_commands,
                          "(state = 'processing') = (claim_token IS NOT NULL)",
-               name: "rs_billing_commands_processing_claimed"
+                         name: "rs_billing_commands_processing_claimed"
 
     create_table :recording_studio_billing_financial_command_attempts, id: :uuid do |t|
       t.references :financial_command, null: false, type: :uuid,
@@ -101,10 +101,10 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
 
     add_index :recording_studio_billing_financial_command_attempts,
               %i[financial_command_id attempt_number], unique: true,
-              name: "idx_rs_billing_command_attempt_number"
+                                                       name: "idx_rs_billing_command_attempt_number"
     add_index :recording_studio_billing_financial_command_attempts, :financial_command_id,
-          unique: true, where: "state = 'processing' AND completed_at IS NULL",
-          name: "idx_rs_billing_one_processing_attempt"
+              unique: true, where: "state = 'processing' AND completed_at IS NULL",
+              name: "idx_rs_billing_one_processing_attempt"
     add_check_constraint :recording_studio_billing_financial_command_attempts,
                          "attempt_number > 0", name: "rs_billing_command_attempts_positive_number"
     add_check_constraint :recording_studio_billing_financial_command_attempts,
@@ -113,10 +113,10 @@ class CreateFinancialCommands < ActiveRecord::Migration[8.1]
                          "completed_at IS NULL OR completed_at >= started_at",
                          name: "rs_billing_command_attempts_times"
     add_check_constraint :recording_studio_billing_financial_command_attempts,
-               "(state = 'processing' AND completed_at IS NULL) OR " \
-               "(state IN ('succeeded', 'failed', 'uncertain', 'requires_reconciliation', 'cancelled') " \
-               "AND completed_at IS NOT NULL)",
-               name: "rs_billing_command_attempts_lifecycle"
+                         "(state = 'processing' AND completed_at IS NULL) OR " \
+                         "(state IN ('succeeded', 'failed', 'uncertain', 'requires_reconciliation', 'cancelled') " \
+                         "AND completed_at IS NOT NULL)",
+                         name: "rs_billing_command_attempts_lifecycle"
     %w[normalized_result safe_error_details safe_metadata].each do |column|
       add_check_constraint :recording_studio_billing_financial_command_attempts,
                            "jsonb_typeof(#{column}) = 'object'",

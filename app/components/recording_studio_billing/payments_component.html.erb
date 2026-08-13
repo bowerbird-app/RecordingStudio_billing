@@ -1,0 +1,11 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("payments_title", "Payments"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :payments) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.payments.each do |payment| %><li><%= payment.amount_minor %> <%= payment.currency_code %>: <%= payment.state %></li><% end %>
+<% end %>
+<% if @presenter.refunds.present? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.refunds.each do |refund| %><li>Refund: <%= refund.amount_minor %> <%= refund.currency_code %></li><% end %>
+  <% end %>
+<% end %>
+<% @presenter.page_contents(:payments).each { |content| %><%= render_extension(content) %><% } %>

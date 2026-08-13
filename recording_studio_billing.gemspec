@@ -29,4 +29,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "recording_studio_admin", "~> 1.1.0"
   spec.add_dependency "recording_studio_root_switchable", "~> 0.3.1"
   spec.add_dependency "recording_studio_webhooks", "~> 0.1.0"
+  spec.add_dependency "stripe", "~> 19.5"
 end

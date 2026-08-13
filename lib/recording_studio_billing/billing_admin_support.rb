@@ -5,16 +5,16 @@ module RecordingStudioBilling
     extend ActiveSupport::Concern
 
     included do |base|
-      unless defined?(RecordingStudioAdmin::AllowsAdminSections)
-        raise LoadError, "recording_studio_admin is required to enable billing admin sections"
-      end
+      raise LoadError, "recording_studio_admin is required to enable billing admin sections" unless defined?(RecordingStudioAdmin::AllowsAdminSections)
 
       base.include RecordingStudioAdmin::AllowsAdminSections
       RecordingStudioBilling.register_capabilities!
       RecordingStudio.enable_capability(:billing_admin, on: base)
 
       base.recording_studio_admin_sections do
-        section :billing
+        section :billing_commercial
+        section :billing_financial
+        section :billing_operations
       end
     end
   end

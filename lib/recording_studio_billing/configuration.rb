@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 require_relative "hooks"
 require_relative "../../app/services/recording_studio_billing/commercial_manifest_canonicalizer"
@@ -11,11 +11,16 @@ require_relative "../../app/services/recording_studio_billing/adapter_response"
 require_relative "../../app/services/recording_studio_billing/stripe_adapter"
 require_relative "../../app/services/recording_studio_billing/tax_calculator_capabilities"
 require_relative "../../app/services/recording_studio_billing/tax_calculator_registry"
+require_relative "../../app/services/recording_studio_billing/tax_response"
+require_relative "../../app/services/recording_studio_billing/stripe_tax_calculator"
 
 module RecordingStudioBilling
   class Configuration
-    attr_reader :provider, :hooks, :tax_policy, :feature_definitions, :market_default_country, :commercial_authorizer,
-          :provider_registry, :tax_calculator_registry, :stripe_credential_resolver
+    attr_reader :provider, :hooks, :tax_policy, :discount_policy, :feature_definitions, :market_default_country, :commercial_authorizer,
+                :provider_registry, :tax_calculator_registry, :stripe_credential_resolver, :billing_copy, :support_url,
+                :billing_presenter_overrides, :billing_provider_components, :stripe_trusted_origins, :stripe_tax_code_resolver,
+                :stripe_portal_customer_resolver, :stripe_portal_configuration_id, :billing_portal_context_resolver,
+                :billing_location_context_resolver
 
     def initialize
       @provider = :stripe
@@ -30,17 +35,33 @@ module RecordingStudioBilling
         semantic_categories: [],
         location_requirements: []
       }.freeze
+      @discount_policy = { enabled: false, policy_version: "v1", rules: [] }.freeze
       @feature_definitions = {}
       @market_default_country = nil
       @commercial_authorizer = nil
+      @billing_copy = {}.freeze
+      @support_url = nil
+      @billing_presenter_overrides = {}.freeze
+      @billing_provider_components = {}.freeze
+      @stripe_trusted_origins = [].freeze
+      @stripe_tax_code_resolver = nil
+      @stripe_portal_customer_resolver = nil
+      @stripe_portal_configuration_id = nil
+      @billing_portal_context_resolver = nil
+      @billing_location_context_resolver = nil
     end
 
     def to_h
       {
         provider: provider,
         tax_policy: tax_policy,
+        discount_policy: discount_policy,
         feature_definitions: feature_definitions,
         market_default_country: market_default_country,
+        billing_copy: billing_copy,
+        support_url: support_url,
+        billing_presenter_overrides: billing_presenter_overrides.keys,
+        billing_provider_components: billing_provider_components.keys,
         hooks_registered: hooks.instance_variable_get(:@registry).transform_values(&:size)
       }
     end
@@ -55,9 +76,7 @@ module RecordingStudioBilling
     def tax_policy=(value)
       policy = value.respond_to?(:to_h) ? value.to_h.transform_keys(&:to_sym) : {}
       presentation = policy.fetch(:presentation, "provider_default").to_s
-      unless %w[inclusive exclusive provider_default].include?(presentation)
-        raise ArgumentError, "tax presentation must be inclusive, exclusive, or provider_default"
-      end
+      raise ArgumentError, "tax presentation must be inclusive, exclusive, or provider_default" unless %w[inclusive exclusive provider_default].include?(presentation)
 
       @tax_policy = {
         enabled: policy.fetch(:enabled, false) == true,
@@ -65,6 +84,22 @@ module RecordingStudioBilling
         presentation: presentation,
         semantic_categories: Array(policy[:semantic_categories]).map(&:to_s).sort,
         location_requirements: Array(policy[:location_requirements]).map(&:to_s).sort
+      }.freeze
+    end
+
+    def discount_policy=(value)
+      policy = value.respond_to?(:to_h) ? value.to_h.transform_keys(&:to_sym) : nil
+      raise ArgumentError, "discount_policy must be an object" unless policy
+
+      rules = Array(policy.fetch(:rules, [])).map do |rule|
+        raise ArgumentError, "discount rules must be objects" unless rule.respond_to?(:to_h)
+
+        rule.to_h.stringify_keys.sort.to_h.freeze
+      end
+      @discount_policy = {
+        enabled: policy.fetch(:enabled, false) == true,
+        policy_version: policy.fetch(:policy_version, "v1").to_s,
+        rules: rules.sort_by { |rule| CommercialManifestCanonicalizer.digest(rule) }
       }.freeze
     end
 
@@ -94,12 +129,98 @@ module RecordingStudioBilling
       @commercial_authorizer = value
     end
 
+    def billing_copy=(value)
+      values = value.respond_to?(:to_h) ? value.to_h : {}
+      @billing_copy = values.to_h.transform_keys(&:to_s).transform_values(&:to_s).freeze
+    end
+
+    def support_url=(value)
+      @support_url = value.presence&.to_s
+    end
+
+    # Maps a billing page key to a presenter class or callable. A callable is
+    # invoked with the default presenter class and must return a class.
+    def billing_presenter_overrides=(value)
+      overrides = value.respond_to?(:to_h) ? value.to_h : {}
+      @billing_presenter_overrides = overrides.transform_keys(&:to_sym).freeze
+    end
+
+    def billing_presenter_override(page, presenter = nil)
+      return billing_presenter_overrides[page.to_sym] unless presenter
+
+      self.billing_presenter_overrides = billing_presenter_overrides.merge(page.to_sym => presenter)
+    end
+
+    def billing_presenter_for(page, default)
+      override = billing_presenter_override(page)
+      return default unless override
+
+      override.respond_to?(:call) ? override.call(default) : override
+    end
+
+    # Maps a provider-specific UI surface (for example :checkout) to a
+    # ViewComponent class. The component receives the corresponding presenter.
+    def billing_provider_components=(value)
+      components = value.respond_to?(:to_h) ? value.to_h : {}
+      @billing_provider_components = components.transform_keys(&:to_sym).freeze
+    end
+
+    def billing_provider_component(name, component = nil)
+      return billing_provider_components[name.to_sym] unless component
+
+      self.billing_provider_components = billing_provider_components.merge(name.to_sym => component)
+    end
+
     def stripe_credential_resolver=(value)
-      if !value.nil? && !value.respond_to?(:call)
-        raise ArgumentError, "stripe credential resolver must respond to call"
-      end
+      raise ArgumentError, "stripe credential resolver must respond to call" if !value.nil? && !value.respond_to?(:call)
 
       @stripe_credential_resolver = value
+    end
+
+    def stripe_trusted_origins=(values)
+      @stripe_trusted_origins = Array(values).map { |value| normalize_https_origin(value) }.uniq.sort.freeze
+    end
+
+    def stripe_tax_code_resolver=(value)
+      raise ArgumentError, "stripe tax code resolver must respond to call" unless value.nil? || value.respond_to?(:call)
+
+      @stripe_tax_code_resolver = value
+    end
+
+    def stripe_portal_customer_resolver=(value)
+      unless value.nil? || value.respond_to?(:call)
+        raise ArgumentError,
+              "stripe portal customer resolver must respond to call"
+      end
+
+      @stripe_portal_customer_resolver = value
+    end
+
+    def stripe_portal_configuration_id=(value)
+      @stripe_portal_configuration_id = if value.nil?
+                                          nil
+                                        else
+                                          SafeFinancialPayload.normalize_reference(value.to_s,
+                                                                                   label: "Stripe portal configuration")
+                                        end
+    end
+
+    def billing_portal_context_resolver=(value)
+      unless value.nil? || value.respond_to?(:call)
+        raise ArgumentError,
+              "billing portal context resolver must respond to call"
+      end
+
+      @billing_portal_context_resolver = value
+    end
+
+    def billing_location_context_resolver=(value)
+      unless value.nil? || value.respond_to?(:call)
+        raise ArgumentError,
+              "billing location context resolver must respond to call"
+      end
+
+      @billing_location_context_resolver = value
     end
 
     def reset_registries!
@@ -110,9 +231,25 @@ module RecordingStudioBilling
     end
 
     def register_builtin_providers!
-      return self if provider_registry.registered?(:stripe)
-
-      provider_registry.register(:stripe, StripeAdapter.new(credential_resolver: -> { stripe_credential_resolver&.call }))
+      unless provider_registry.registered?(:stripe)
+        provider_registry.register(
+          :stripe,
+          StripeAdapter.new(
+            credential_resolver: -> { stripe_credential_resolver&.call },
+            trusted_origins_resolver: -> { stripe_trusted_origins },
+            tax_code_resolver: ->(category) { stripe_tax_code_resolver&.call(category) }
+          )
+        )
+      end
+      unless tax_calculator_registry.keys.include?("stripe_tax")
+        tax_calculator_registry.register(
+          :stripe_tax,
+          StripeAdapter::TaxCalculator.new(
+            credential_resolver: -> { stripe_credential_resolver&.call },
+            tax_code_resolver: ->(category) { stripe_tax_code_resolver&.call(category) }
+          )
+        )
+      end
       self
     end
 
@@ -126,6 +263,20 @@ module RecordingStudioBilling
 
         public_send(setter, v)
       end
+    end
+
+    private
+
+    def normalize_https_origin(value)
+      uri = URI.parse(value.to_s)
+      unless uri.is_a?(URI::HTTPS) && uri.userinfo.nil? && uri.path.to_s.in?(["",
+                                                                              "/"]) && uri.query.nil? && uri.fragment.nil?
+        raise ArgumentError, "stripe trusted origin must be an HTTPS origin"
+      end
+
+      uri.origin
+    rescue URI::InvalidURIError
+      raise ArgumentError, "stripe trusted origin must be an HTTPS origin"
     end
   end
 end

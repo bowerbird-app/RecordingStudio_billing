@@ -5,21 +5,30 @@ class CreateRatedUsageSettlements < ActiveRecord::Migration[8.1]
     create_table :recording_studio_billing_rated_usage_settlements, id: :uuid do |t|
       t.references :root_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
-      t.references :rated_usage, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_rated_usages }
-      t.references :financial_command, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_financial_commands }
-      t.references :provider_account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
+      t.references :rated_usage, null: false, type: :uuid,
+                                 foreign_key: { to_table: :recording_studio_billing_rated_usages }
+      t.references :financial_command, null: false, type: :uuid,
+                                       foreign_key: { to_table: :recording_studio_billing_financial_commands }
+      t.references :provider_account_recording, null: false, type: :uuid,
+                                                foreign_key: { to_table: :recording_studio_recordings }
       t.string :manifest_digest, null: false
       t.jsonb :canonical_request, null: false, default: {}
       t.string :request_fingerprint, null: false
       t.jsonb :safe_metadata, null: false, default: {}
       t.timestamps
     end
-    add_index :recording_studio_billing_rated_usage_settlements, :rated_usage_id, unique: true, name: "idx_rs_billing_settlement_rated_usage"
-    add_index :recording_studio_billing_rated_usage_settlements, :financial_command_id, unique: true, name: "idx_rs_billing_settlement_command"
-    add_check_constraint :recording_studio_billing_rated_usage_settlements, "manifest_digest ~ '^[0-9a-f]{64}$'", name: "rs_billing_settlement_manifest_digest"
-    add_check_constraint :recording_studio_billing_rated_usage_settlements, "request_fingerprint ~ '^[0-9a-f]{64}$'", name: "rs_billing_settlement_fingerprint"
-    add_check_constraint :recording_studio_billing_rated_usage_settlements, "jsonb_typeof(canonical_request) = 'object'", name: "rs_billing_settlement_request_object"
-    add_check_constraint :recording_studio_billing_rated_usage_settlements, "jsonb_typeof(safe_metadata) = 'object'", name: "rs_billing_settlement_metadata_object"
+    add_index :recording_studio_billing_rated_usage_settlements, :rated_usage_id, unique: true,
+                                                                                  name: "idx_rs_billing_settlement_rated_usage"
+    add_index :recording_studio_billing_rated_usage_settlements, :financial_command_id, unique: true,
+                                                                                        name: "idx_rs_billing_settlement_command"
+    add_check_constraint :recording_studio_billing_rated_usage_settlements, "manifest_digest ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_settlement_manifest_digest"
+    add_check_constraint :recording_studio_billing_rated_usage_settlements, "request_fingerprint ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_settlement_fingerprint"
+    add_check_constraint :recording_studio_billing_rated_usage_settlements,
+                         "jsonb_typeof(canonical_request) = 'object'", name: "rs_billing_settlement_request_object"
+    add_check_constraint :recording_studio_billing_rated_usage_settlements, "jsonb_typeof(safe_metadata) = 'object'",
+                         name: "rs_billing_settlement_metadata_object"
 
     execute <<~SQL
       CREATE FUNCTION rs_billing_protect_rated_usage_settlement() RETURNS trigger AS $$

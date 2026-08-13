@@ -14,8 +14,8 @@ module RecordingStudioBilling
       %i[aggregation_snapshot rate_snapshot safe_metadata].each do |attribute|
         SafeFinancialPayload.validate!(public_send(attribute), allow_authoritative_totals: true)
       end
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:base, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:base, e.message)
     end
   end
 end

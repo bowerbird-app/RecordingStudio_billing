@@ -54,7 +54,9 @@ module RecordingStudioBilling
     end
 
     def to_h
-      effective_grants.distinct.pluck(:feature_key).sort.to_h { |feature_key| [feature_key, feature_value(feature_key)] }
+      effective_grants.distinct.pluck(:feature_key).sort.to_h do |feature_key|
+        [feature_key, feature_value(feature_key)]
+      end
     end
 
     private
@@ -83,7 +85,10 @@ module RecordingStudioBilling
       when "maximum" then numeric_values.max
       when "minimum" then numeric_values.min
       when "replace"
-        raise ArgumentError, "entitlement #{kind} replace values conflict for #{feature_key}" if numeric_values.uniq.many?
+        if numeric_values.uniq.many?
+          raise ArgumentError,
+                "entitlement #{kind} replace values conflict for #{feature_key}"
+        end
 
         numeric_values.first
       else
@@ -109,7 +114,8 @@ module RecordingStudioBilling
     def effective_grants
       grants = EntitlementGrant.where(root_recording:, account_recording:)
       subscription_ids = active_subscription_source_ids
-      purchase_effect_ids = PurchaseEffect.where(root_recording:, account_recording:).where(effective_at: ..at).select(:id)
+      purchase_effect_ids = PurchaseEffect.where(root_recording:,
+                                                 account_recording:).where(effective_at: ..at).select(:id)
       grants.where(source_type: "RecordingStudioBilling::SubscriptionItemVersion", source_id: subscription_ids)
             .or(grants.where(source_type: "RecordingStudioBilling::PurchaseEffect", source_id: purchase_effect_ids))
     end

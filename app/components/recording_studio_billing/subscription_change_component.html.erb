@@ -1,0 +1,45 @@
+<% if @presenter.result? %>
+	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_result_title", "Subscription change"), variant: :h1) %>
+	<p><%= @presenter.intent.change_kind.humanize %>: <%= @presenter.intent.state.humanize %></p>
+	<%= render FlatPack::List::Component.new do %>
+		<li>Effective: <%= @presenter.effective_description %></li>
+		<li>Timing: <%= @presenter.intent.timing %></li>
+		<li>Proration: <%= @presenter.intent.proration_policy %></li>
+		<li>Current terms: <%= @presenter.intent.current_manifest_digest %></li>
+		<li>Proposed terms: <%= @presenter.intent.proposed_manifest_digest %></li>
+		<li>Financial effect: <%= @presenter.expected_effects.dig("financial_effect", "authority") %></li>
+		<li>Tax effect: <%= @presenter.expected_effects.dig("tax_effect", "authority") %></li>
+	<% end %>
+<% elsif @presenter.selection? %>
+	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_select_title", "Change subscription"), variant: :h1) %>
+	<% @presenter.eligible_options.each do |option| %>
+		<% change_kinds = @presenter.change_kinds_for(option) %>
+		<% next if change_kinds.empty? %>
+		<%= form_with url: helpers.compare_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
+			<p><%= option.key %></p>
+			<%= hidden_field_tag "subscription_change[billing_option_recording_id]", option.recording.id %>
+			<%= select_tag "subscription_change[change_kind]", options_for_select(change_kinds.map { |kind| [kind.humanize, kind] }) %>
+			<%= number_field_tag "subscription_change[quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity %>
+			<%= render FlatPack::Button::Component.new(text: "Compare", style: :primary, size: :md, type: :submit) %>
+		<% end %>
+	<% end %>
+<% elsif @presenter.proposal %>
+	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_compare_title", "Review subscription change"), variant: :h1) %>
+	<%= render FlatPack::List::Component.new do %>
+		<% @presenter.current_terms.each do |term| %><li>Current <%= term[:line_key] %>: <%= term[:quantity] %> at <%= term[:amount_minor] %> <%= term[:currency_code] %> (<%= term[:interval] %>)</li><% end %>
+		<li>Proposed: <%= @presenter.proposed_terms[:quantity] %> at <%= @presenter.proposed_terms[:amount_minor] %> <%= @presenter.proposed_terms[:currency_code] %> (<%= @presenter.proposed_terms[:interval] %>)</li>
+		<li>Effective: <%= @presenter.effective_description %></li>
+		<li>Financial and tax effects remain subject to the authoritative provider result.</li>
+	<% end %>
+	<%= form_with url: helpers.confirm_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
+		<%= hidden_field_tag "subscription_change[proposal_key]", @presenter.request_key %>
+		<%= render FlatPack::Button::Component.new(text: "Confirm change", style: :primary, size: :md, type: :submit) %>
+	<% end %>
+<% else %>
+	<%= render FlatPack::PageTitle::Component.new(title: @presenter.cancellation? ? @presenter.copy("cancel_title", "Cancel subscription") : @presenter.copy("resume_title", "Resume subscription"), variant: :h1) %>
+	<p><%= @presenter.cancellation? ? @presenter.copy("cancel_notice", "Your plan remains available until provider reconciliation applies this cancellation.") : @presenter.copy("resume_notice", "Your plan resumes only after provider reconciliation applies this request.") %></p>
+	<p>Effective: <%= @presenter.effective_description %>. Financial and tax effects remain subject to the authoritative provider result.</p>
+	<%= button_to @presenter.cancellation? ? @presenter.copy("cancel_confirm", "Confirm cancellation") : @presenter.copy("resume_confirm", "Confirm resumption"), @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post %>
+	<%= link_to @presenter.cancellation? ? @presenter.copy("cancel_keep", "Keep subscription") : @presenter.copy("resume_keep", "Keep subscription paused"), helpers.plan_billing_path(root_recording_id: @presenter.root_recording.id) %>
+<% end %>
+<% @presenter.page_contents(:subscriptions).each { |content| %><%= render_extension(content) %><% } %>

@@ -1,0 +1,7 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("usage_title", "Usage & Credits"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :usage) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.credits.each do |key, balance| %><li><%= key %>: <%= balance %></li><% end %>
+<% end %>
+<p><%= @presenter.copy("usage_notice", "Usage is recorded by trusted server integrations and is never available through this customer surface.") %></p>
+<% @presenter.page_contents(:usage).each { |content| %><%= render_extension(content) %><% } %>

@@ -1,12 +1,16 @@
-<%= render FlatPack::Grid::Component.new(cols: 1, align: :center) do %>
-  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+<div class="fixed inset-0 p-4">
+  <%= render FlatPack::Grid::Component.new(cols: 1, align: :center, class: "h-full w-full place-content-center justify-items-center") do %>
+    <%= render FlatPack::Card::Component.new(style: :default, class: "w-full max-w-md h-auto") do |card| %>
       <% card.body do %>
-        <%= render FlatPack::PageTitle::Component.new(
-          title: "Login",
-          variant: :h2
-        ) %>
+        <div class="space-y-6">
+          <%= render FlatPack::PageTitle::Component.new(
+            title: "Login",
+            variant: :h2,
+            class: "mb-0 pb-0"
+          ) %>
 
-        <%= form_for(resource, as: resource_name, url: session_path(resource_name)) do |f| %>
+          <%= form_for(resource, as: resource_name, url: session_path(resource_name)) do |f| %>
+            <div class="space-y-4">
             <%= render FlatPack::EmailInput::Component.new(
               name: "user[email]",
               label: "Email",
@@ -34,7 +38,9 @@
               size: :md,
               type: "submit"
             ) %>
-        <% end %>
+            </div>
+          <% end %>
+        </div>
       <% end %>
 
       <% card.footer do %>
@@ -44,5 +50,6 @@
           size: :sm
         ) %>
       <% end %>
+    <% end %>
   <% end %>
-<% end %>
+</div>

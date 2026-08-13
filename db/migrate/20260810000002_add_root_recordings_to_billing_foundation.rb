@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/MethodLength
 class AddRootRecordingsToBillingFoundation < ActiveRecord::Migration[8.1]
   def change
     add_reference :recording_studio_billing_accounts, :root_recording,
@@ -31,5 +30,4 @@ class AddRootRecordingsToBillingFoundation < ActiveRecord::Migration[8.1]
     add_index :recording_studio_billing_accounts, :root_recording_id, unique: true
     add_index :recording_studio_billing_billing_admins, :root_recording_id, unique: true
   end
-  # rubocop:enable Metrics/MethodLength
 end

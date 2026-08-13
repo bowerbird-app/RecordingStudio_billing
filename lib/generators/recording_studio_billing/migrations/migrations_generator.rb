@@ -31,7 +31,7 @@ module RecordingStudioBilling
           return
         end
 
-        migration_files = Dir.glob(File.join(migrations_dir, "*.rb")).sort
+        migration_files = Dir.glob(File.join(migrations_dir, "*.rb"))
 
         if migration_files.empty?
           say "No migrations found in RecordingStudioBilling engine.", :yellow
@@ -75,7 +75,6 @@ module RecordingStudioBilling
       def migration_version_exists?(version)
         Dir.glob(File.join(destination_root, "db/migrate", "#{version}_*.rb")).any?
       end
-
     end
   end
 end

@@ -19,7 +19,7 @@ module RecordingStudioBilling
     validates :currency_code, format: { with: /\A[A-Z]{3}\z/ }
     validates :currency_exponent, numericality: { only_integer: true, in: 0..3 }
     validates :pricing_model, inclusion: { in: PRICING_MODELS }
-    validates :scope, presence: true
+    validates :scope, inclusion: { in: [Price::V1_SCOPE] }
     validates :version, numericality: { only_integer: true, greater_than_or_equal_to: 1 }
     validates :billing_option_recording_id, uniqueness: {
       scope: %i[scope market_recording_id usage_unit_recording_id currency_code],

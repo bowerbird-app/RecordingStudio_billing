@@ -3,6 +3,11 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
+# The engine tests always use the dummy application's isolated test database.
+# Never let a shell-level development connection redirect the test subprocess.
+ENV.delete("DATABASE_URL")
+ENV["DB_NAME"] = "app_test"
+
 DUMMY_TEST_FILES = [
   File.expand_path("test/recording_studio_v3_test.rb", __dir__),
   File.expand_path("test/commercial_delivery_test.rb", __dir__),
@@ -55,10 +60,32 @@ def dummy_bundle_base_env
   }
 end
 
-Rake::TestTask.new(:test) do |t|
+Rake::TestTask.new(:root_test_files) do |t|
   t.libs << "test"
-  t.test_files = FileList["test/**/*_test.rb"].exclude(*ROOT_TEST_EXCLUSIONS)
+  t.test_files = []
   t.verbose = false
+end
+
+namespace :test do
+  task :prepare_database do
+    Dir.chdir(DUMMY_APP_ROOT) do
+      env = dummy_bundle_env
+      run_command!(env, "bundle", "exec", "bin/rails", "db:create")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:prepare")
+    end
+  end
+end
+
+task test: "test:prepare_database" do
+  root_env = {
+    "RAILS_ENV" => "test",
+    "DB_NAME" => "app_test",
+    "DATABASE_URL" => nil,
+    "BUNDLE_GEMFILE" => File.expand_path("Gemfile", __dir__)
+  }
+  FileList["test/**/*_test.rb"].exclude(*ROOT_TEST_EXCLUSIONS).each do |test_file|
+    run_command!(root_env, "bundle", "exec", "ruby", "-I#{TEST_ROOT}", test_file)
+  end
 end
 
 namespace :test do
@@ -80,9 +107,8 @@ namespace :test do
       run_command!(env, "bundle", "exec", "bin/rails", "db:environment:set", "RAILS_ENV=test")
       run_command!(env, "bundle", "exec", "bin/rails", "db:drop")
       run_command!(env, "bundle", "exec", "bin/rails", "db:create")
-      run_command!(env, "bundle", "exec", "bin/rails", "runner", "ActiveRecord::Base.connection.execute('DROP SCHEMA public CASCADE'); ActiveRecord::Base.connection.execute('CREATE SCHEMA public')")
-      run_command!(env, "bundle", "exec", "bin/rails", "db:schema:load")
-      run_command!(env, "bundle", "exec", "bin/rails", "runner", "context = ActiveRecord::Base.connection_pool.migration_context; versions = context.schema_migration.normalized_versions; context.migrations.each { |migration| version = migration.version.to_s; context.schema_migration.create_version(version) unless versions.include?(version) }")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:migrate")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:schema:dump")
       run_command!(env, "bundle", "exec", "bin/rails", "db:seed")
       run_command!(env, "bundle", "exec", "bin/rails", "test")
       DUMMY_TEST_FILES.each do |test_file|

@@ -1,0 +1,10 @@
+<nav aria-label="Billing navigation">
+  <% items.each do |item| %>
+    <%= render FlatPack::Sidebar::Item::Component.new(
+      label: item.fetch(:label),
+      href: item.fetch(:href),
+      icon: item.fetch(:icon, :document),
+      active: item[:page]&.to_sym == @current_page
+    ) %>
+  <% end %>
+</nav>

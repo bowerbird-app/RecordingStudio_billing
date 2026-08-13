@@ -11,13 +11,14 @@ module RecordingStudioBilling
 
     def register(key, adapter)
       normalized_key = normalize_key(key)
-      unless adapter.respond_to?(:capabilities) && adapter.capabilities.is_a?(ProviderCapabilities)
-        raise ArgumentError, "provider adapter must declare ProviderCapabilities"
-      end
+      raise ArgumentError, "provider adapter must declare ProviderCapabilities" unless adapter.respond_to?(:capabilities) && adapter.capabilities.is_a?(ProviderCapabilities)
       raise ArgumentError, "provider adapter must respond to call" unless adapter.respond_to?(:call)
 
       @mutex.synchronize do
-        raise ArgumentError, "provider adapter key is already registered: #{normalized_key}" if @adapters.key?(normalized_key)
+        if @adapters.key?(normalized_key)
+          raise ArgumentError,
+                "provider adapter key is already registered: #{normalized_key}"
+        end
 
         @adapters[normalized_key] = adapter
       end

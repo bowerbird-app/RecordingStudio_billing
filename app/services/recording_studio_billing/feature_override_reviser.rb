@@ -35,16 +35,14 @@ module RecordingStudioBilling
     attr_reader :recording, :actor, :attributes
 
     def validate_arguments!
-      unless recording.is_a?(RecordingStudio::Recording) && recording.recordable.is_a?(FeatureOverride)
-        raise ArgumentError, "feature override revision requires a FeatureOverride recording"
-      end
+      raise ArgumentError, "feature override revision requires a FeatureOverride recording" unless recording.is_a?(RecordingStudio::Recording) && recording.recordable.is_a?(FeatureOverride)
       raise ArgumentError, "feature override revision requires attributes" if attributes.empty?
 
       unknown = attributes.keys - ALLOWED_ATTRIBUTES
       raise ArgumentError, "unsupported feature override attributes: #{unknown.join(', ')}" if unknown.any?
-      unless actor.respond_to?(:persisted?) && actor.persisted?
-        raise ArgumentError, "feature override revision actor must be persisted"
-      end
+      return if actor.respond_to?(:persisted?) && actor.persisted?
+
+      raise ArgumentError, "feature override revision actor must be persisted"
     end
 
     def authorize!(root)

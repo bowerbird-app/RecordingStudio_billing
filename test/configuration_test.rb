@@ -40,11 +40,19 @@ class ConfigurationTest < Minitest::Test
   end
 
   def test_accepts_a_stripe_credential_resolver
-    resolver = -> { nil }
+    resolver = -> {}
 
     @configuration.stripe_credential_resolver = resolver
 
     assert_same resolver, @configuration.stripe_credential_resolver
+  end
+
+  def test_normalizes_stripe_trusted_origins_and_registers_the_opt_in_tax_calculator
+    @configuration.stripe_trusted_origins = ["https://app.example.test/", "https://app.example.test"]
+
+    assert_equal ["https://app.example.test"], @configuration.stripe_trusted_origins
+    assert_instance_of RecordingStudioBilling::StripeAdapter::TaxCalculator,
+                       @configuration.tax_calculator_registry.fetch(:stripe_tax)
   end
 
   def test_rejects_a_blank_provider
@@ -63,5 +71,15 @@ class ConfigurationTest < Minitest::Test
     error = assert_raises(ArgumentError) { @configuration.commercial_authorizer = :not_callable }
 
     assert_equal "commercial_authorizer must respond to call", error.message
+  end
+
+  def test_merge_accepts_customer_delivery_copy_and_support_link
+    @configuration.merge!(
+      billing_copy: { settings_notice: "Contact billing support." },
+      support_url: "https://support.example.test/billing"
+    )
+
+    assert_equal "Contact billing support.", @configuration.billing_copy.fetch("settings_notice")
+    assert_equal "https://support.example.test/billing", @configuration.support_url
   end
 end

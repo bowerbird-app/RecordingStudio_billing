@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commit-before-adapter execution boundary. Atomic leases, stale-worker expiry,
   same-key recovery, strict manifest authority, and deterministic fake-adapter
   outcome mappings make interrupted operations safely recoverable.
+- Corrected public billing documentation to describe the verified Webhooks
+  boundary, server-authoritative checkout input, provider-neutral portal
+  context, and the Stripe adapter's unsupported usage settlement and correction
+  operations.
 
 ## [0.1.2] - 2026-07-21
 

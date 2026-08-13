@@ -12,12 +12,13 @@ module RecordingStudioBilling
     def register(key, calculator)
       normalized_key = normalize_key(key)
       capabilities = calculator.respond_to?(:capabilities) && calculator.capabilities
-      unless capabilities.is_a?(TaxCalculatorCapabilities) && calculator.respond_to?(:call)
-        raise ArgumentError, "tax calculator must implement the shared contract"
-      end
+      raise ArgumentError, "tax calculator must implement the shared contract" unless capabilities.is_a?(TaxCalculatorCapabilities) && calculator.respond_to?(:call)
 
       @mutex.synchronize do
-        raise ArgumentError, "tax calculator key is already registered: #{normalized_key}" if @calculators.key?(normalized_key)
+        if @calculators.key?(normalized_key)
+          raise ArgumentError,
+                "tax calculator key is already registered: #{normalized_key}"
+        end
 
         @calculators[normalized_key] = calculator
       end

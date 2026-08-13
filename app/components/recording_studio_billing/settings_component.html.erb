@@ -1,0 +1,23 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("settings_title", "Billing Settings"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :settings) %>
+<p><%= @presenter.notice %></p>
+<%= form_with url: helpers.update_settings_billing_path(root_recording_id: @presenter.root_recording.id), method: :patch do %>
+  <%= label_tag "account_name", @presenter.copy("settings_display_name", "Billing display name") %>
+  <%= text_field_tag "account[name]", @presenter.account.name, id: "account_name" %>
+  <%= email_field_tag "account[contact_email]", @presenter.account.contact_email, autocomplete: "email" %>
+  <%= text_field_tag "account[billing_country_code]", @presenter.account.billing_country_code, maxlength: 2 %>
+  <%= text_field_tag "account[billing_currency_code]", @presenter.account.billing_currency_code, maxlength: 3 %>
+  <%= text_field_tag "account[locale]", @presenter.account.locale %>
+  <%= select_tag "account[time_zone]", options_for_select(ActiveSupport::TimeZone.all.map(&:name), @presenter.account.time_zone), include_blank: true %>
+  <%= text_field_tag "account[tax_location_country_code]", @presenter.account.tax_location_country_code, maxlength: 2 %>
+  <%= text_field_tag "account[tax_location_region_code]", @presenter.account.tax_location_region_code %>
+  <%= text_field_tag "account[tax_location_postal_code]", @presenter.account.tax_location_postal_code %>
+  <%= render FlatPack::Button::Component.new(text: @presenter.copy("settings_save", "Save settings"), style: :primary, size: :md, type: :submit) %>
+<% end %>
+<% if @presenter.support_url.present? %>
+  <%= render FlatPack::Button::Component.new(text: @presenter.copy("support_label", "Billing support"), style: :secondary, size: :md, url: @presenter.support_url, target: "_blank") %>
+<% end %>
+<% if RecordingStudioBilling.configuration.billing_portal_context_resolver %>
+  <%= button_to "Manage payment details", portal_billing_path(root_recording_id: @presenter.root_recording.id), method: :post %>
+<% end %>
+<% @presenter.page_contents(:settings).each { |content| %><%= render_extension(content) %><% } %>

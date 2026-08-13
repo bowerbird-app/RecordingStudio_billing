@@ -14,8 +14,8 @@ module RecordingStudioBilling
 
     def safe_payloads_are_safe
       %i[input_snapshot safe_metadata].each { |attribute| SafeFinancialPayload.validate!(public_send(attribute)) }
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:base, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:base, e.message)
     end
   end
 end

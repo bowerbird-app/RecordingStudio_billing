@@ -5,16 +5,22 @@ module RecordingStudioBilling
     def self.call(...) = new(...).call
 
     def initialize(checkout_intent:, root_recording: nil, recovery: false,
-                   lease_duration: FinancialCommandClaim::DEFAULT_LEASE)
+                   lease_duration: FinancialCommandClaim::DEFAULT_LEASE,
+                   provider_country: nil, host_country: nil)
       @checkout_intent_input = checkout_intent
       @root_recording_input = root_recording
       @recovery = recovery
       @lease_duration = lease_duration
+      @provider_country = provider_country
+      @host_country = host_country
     end
 
     def call
       FinancialCommandExecutor.reject_ambient_transaction!
       intent, command = eligible_intent_and_command!
+      intent = verify_final_market!(intent)
+      return intent unless intent.state == "pending_provider"
+
       adapter_key = command.provider_adapter_key
 
       if recovery
@@ -41,7 +47,25 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :checkout_intent_input, :lease_duration, :recovery, :root_recording_input
+    attr_reader :checkout_intent_input, :host_country, :lease_duration, :provider_country,
+                :recovery, :root_recording_input
+
+    def verify_final_market!(intent)
+      CreateCheckoutIntent.new(root_recording: intent.root_recording, local_idempotency_key: "verification",
+                               items: []).verify_final_market!(intent:, provider_country:,
+                                                               host_country: trusted_host_country(intent))
+    end
+
+    def trusted_host_country(intent)
+      return host_country if host_country
+
+      context = RecordingStudioBilling.configuration.billing_location_context_resolver&.call(
+        root_recording: intent.root_recording, account_recording: intent.account_recording
+      )
+      context.to_h[:host_country]
+    rescue StandardError
+      nil
+    end
 
     def eligible_intent_and_command!
       CheckoutIntent.transaction do
@@ -52,11 +76,11 @@ module RecordingStudioBilling
 
         command = intent.financial_command
         raise ArgumentError, "checkout intent has no pending financial command" unless command
+
         command.lock!
         expected_command_state = recovery ? "requires_reconciliation" : "pending"
-        unless command.command_type == "checkout" && command.state == expected_command_state
-          raise ArgumentError, "checkout financial command is not executable"
-        end
+        raise ArgumentError, "checkout financial command is not executable" unless command.command_type == "checkout" && command.state == expected_command_state
+
         verify_frozen_authority!(intent, command)
         verify_checkout_attempt!(intent, recovery:)
         [intent, command]
@@ -76,30 +100,41 @@ module RecordingStudioBilling
     def verify_frozen_authority!(intent, command)
       authority = command.canonical_request.fetch("authority")
       digests = authority.fetch("commercial_manifest_digests")
-      raise ArgumentError, "checkout command authority is invalid" unless authority["root_recording_id"] == intent.root_recording_id
-      raise ArgumentError, "checkout command authority is invalid" unless authority["provider_adapter_key"] == command.provider_adapter_key
+      unless authority["root_recording_id"] == intent.root_recording_id
+        raise ArgumentError,
+              "checkout command authority is invalid"
+      end
+      unless authority["provider_adapter_key"] == command.provider_adapter_key
+        raise ArgumentError,
+              "checkout command authority is invalid"
+      end
 
       items = intent.items.lock.to_a
       raise ArgumentError, "checkout intent has no items" if items.empty?
-      raise ArgumentError, "checkout command authority is invalid" unless items.map(&:manifest_digest).sort == digests.sort
+
+      unless items.map(&:manifest_digest).sort == digests.sort
+        raise ArgumentError,
+              "checkout command authority is invalid"
+      end
       raise ArgumentError, "checkout provider authority is invalid" unless items.all? do |item|
         item.provider_account_recording_id == command.provider_account_recording_id &&
-          item.provider_account_recording.recordable.adapter_key == command.provider_adapter_key
+        item.provider_account_recording.recordable.adapter_key == command.provider_adapter_key
       end
 
       manifests = CommercialManifest.where(manifest_digest: digests).lock.to_a
       raise ArgumentError, "checkout commercial manifests are invalid" unless manifests.size == digests.size
+
       manifests.each do |manifest|
         envelope = {
           "schema_version" => manifest.schema_version, "resolver_version" => manifest.resolver_version,
           "root_recording_id" => manifest.root_recording_id, "canonical_data" => manifest.canonical_data,
           "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references
         }
-        unless manifest.used_at? && manifest.schema_version == CommercialManifest::SCHEMA_VERSION &&
-               manifest.resolver_version == CommercialManifest::RESOLVER_VERSION &&
-               CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest
-          raise ArgumentError, "checkout commercial manifests are invalid"
-        end
+        next if manifest.used_at? && manifest.schema_version == CommercialManifest::SCHEMA_VERSION &&
+                manifest.resolver_version == CommercialManifest::RESOLVER_VERSION &&
+                CommercialManifestCanonicalizer.digest(envelope) == manifest.manifest_digest
+
+        raise ArgumentError, "checkout commercial manifests are invalid"
       end
     end
 
@@ -108,9 +143,7 @@ module RecordingStudioBilling
       if recovery
         raise ArgumentError, "checkout recovery attempt is not ready" unless current&.completed_at?
       else
-        unless current&.state == "pending" && current.financial_command_attempt_id.nil?
-          raise ArgumentError, "checkout attempt is not ready"
-        end
+        raise ArgumentError, "checkout attempt is not ready" unless current&.state == "pending" && current.financial_command_attempt_id.nil?
       end
     end
 
@@ -146,11 +179,12 @@ module RecordingStudioBilling
 
     def checkout_outcome(command)
       status = command.normalized_result["status"]
-      return ["succeeded", "awaiting_confirmation"] if %w[success duplicate].include?(status)
-      return ["unknown", "pending_provider"] if command.state == "requires_reconciliation" || %w[pending unknown].include?(status)
-      return ["failed", "requires_review"] if %w[unsupported provider_unavailable requires_review].include?(status)
+      return %w[succeeded awaiting_confirmation] if %w[success duplicate].include?(status)
+      return %w[unknown pending_provider] if command.state == "requires_reconciliation" || %w[pending
+                                                                                              unknown].include?(status)
+      return %w[failed requires_review] if %w[unsupported provider_unavailable requires_review].include?(status)
 
-      ["failed", "failed"]
+      %w[failed failed]
     end
   end
 end

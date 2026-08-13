@@ -68,6 +68,7 @@ PATH
       recording_studio_admin (~> 1.1.0)
       recording_studio_root_switchable (~> 0.3.1)
       recording_studio_webhooks (~> 0.1.0)
+      stripe (~> 19.5)
 
 GEM
   remote: https://rubygems.org/
@@ -338,6 +339,9 @@ GEM
       activesupport (>= 6.1)
       sprockets (>= 3.0.0)
     stringio (3.1.9)
+    stripe (19.5.0)
+      bigdecimal
+      logger
     tailwind_merge (0.16.0)
       sin_lru_redux (~> 2.5)
     thor (1.4.0)
@@ -388,6 +392,7 @@ DEPENDENCIES
   rubocop-rails
   simplecov
   sprockets-rails
+  stripe (~> 19.5)
 
 CHECKSUMS
   action_text-trix (2.1.15) sha256=4bf9bbd8fa95954de3f0022dae0d927bce22c1bb31d5dc9c3766f8c145c109c1
@@ -495,6 +500,7 @@ CHECKSUMS
   sprockets (4.2.2) sha256=761e5a49f1c288704763f73139763564c845a8f856d52fba013458f8af1b59b1
   sprockets-rails (3.5.2) sha256=a9e88e6ce9f8c912d349aa5401509165ec42326baf9e942a85de4b76dbc4119e
   stringio (3.1.9) sha256=c111af13d3a73eab96a3bc2655ecf93788d13d28cb8e25c1dcbff89ace885121
+  stripe (19.5.0) sha256=04d7bf83c65e5021cfc94bac92f2dd95d3843dcd70cac1cb8362757398bf5aaf
   tailwind_merge (0.16.0) sha256=e2a2b26aaef57ae6af6d0e98380bbcbf324ce4e9778cd56df8e837c30e66005c
   thor (1.4.0) sha256=8763e822ccb0f1d7bee88cde131b19a65606657b847cc7b7b4b82e772bcd8a3d
   timeout (0.4.4) sha256=f0f6f970104b82427cd990680f539b6bbb8b1e55efa913a55c6492935e4e0edb

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
   class FeatureResolver

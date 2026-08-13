@@ -80,12 +80,48 @@ module RecordingStudioBilling
       RecordingStudioBilling::Hooks.run(:after_initialize, self)
     end
 
+    initializer "recording_studio_billing.stripe_content_security_policy",
+                after: "recording_studio_billing.load_config" do |app|
+      next unless app.config.respond_to?(:content_security_policy)
+
+      app.config.content_security_policy do |policy|
+        policy.frame_src :self, *StripeAdapter::STRIPE_BROWSER_ORIGINS
+        policy.script_src :self, "https://js.stripe.com"
+        policy.connect_src :self, "https://api.stripe.com", "https://r.stripe.com"
+      end
+    end
+
     initializer "recording_studio_billing.register_capabilities", before: "recording_studio.load_config" do
       RecordingStudioBilling.register_capabilities!
     end
 
+    initializer "recording_studio_billing.register_admin_definitions" do
+      next unless defined?(RecordingStudioAdmin)
+
+      [
+        RecordingStudioBilling::BillingCommercialSection,
+        RecordingStudioBilling::BillingFinancialSection,
+        RecordingStudioBilling::BillingOperationsSection
+      ].each { |section| RecordingStudioAdmin.register_section(section) }
+
+      [
+        RecordingStudioBilling::BillingCommercialScreen,
+        RecordingStudioBilling::BillingFinancialScreen,
+        RecordingStudioBilling::BillingOperationsScreen,
+        *RecordingStudioBilling::ADMIN_OPERATION_SCREEN_CLASSES
+      ].each { |screen| RecordingStudioAdmin.register_screen(screen) }
+
+      [
+        RecordingStudioBilling::BillingCommercialResource,
+        RecordingStudioBilling::BillingFinancialResource,
+        RecordingStudioBilling::BillingOperationsResource,
+        *RecordingStudioBilling::ADMIN_OPERATION_RESOURCE_CLASSES
+      ].each { |resource| RecordingStudioAdmin.register_resource(resource) }
+    end
+
     config.to_prepare do
       RecordingStudioBilling.register_builtin_providers!
+      RecordingStudioBilling.register_webhook_actions!
     end
 
     initializer "recording_studio_billing.register_recordable_types", after: "recording_studio.load_config" do

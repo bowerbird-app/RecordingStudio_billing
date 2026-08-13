@@ -1,0 +1,8 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("invoice_title", "Invoice"), variant: :h1) %>
+<p><%= @presenter.invoice.total_minor %> <%= @presenter.invoice.currency_code %></p>
+<p><%= @presenter.invoice.state %></p>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.invoice.lines.each do |line| %><li><%= line.description %>: <%= line.amount_minor %> <%= line.currency_code %></li><% end %>
+<% end %>
+<%= render FlatPack::Button::Component.new(text: @presenter.copy("invoice_download", "Download invoice"), style: :secondary, size: :md, url: helpers.download_invoice_path(@presenter.invoice, root_recording_id: @presenter.root_recording.id)) %>
+<% @presenter.page_contents(:invoice).each { |content| %><%= render_extension(content) %><% } %>

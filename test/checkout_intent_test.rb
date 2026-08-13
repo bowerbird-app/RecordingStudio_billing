@@ -8,13 +8,18 @@ require "rails/test_help"
 
 class CheckoutIntentTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  parallelize(workers: 1)
 
   setup do
     clear_data!
-    @actor = User.create!(email: "checkout-#{SecureRandom.hex(4)}@example.com", password: "Password1!", password_confirmation: "Password1!")
+    @actor = User.create!(email: "checkout-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
+                          password_confirmation: "Password1!")
     RecordingStudioBilling.configuration.feature_definitions = {}
     RecordingStudioBilling.configuration.tax_policy = {}
     RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
+    RecordingStudioBilling.configuration.billing_location_context_resolver = lambda do |**|
+      { host_country: verified_country("IT", :host) }
+    end
     RecordingStudioBilling.configuration.reset_registries!
   end
 
@@ -43,7 +48,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal "pending", italy.intent.attempts.first.state
     assert_equal italy.intent.financial_command_id, italy.intent.attempts.first.financial_command_id
     assert_includes italy.intent.financial_command.canonical_request.dig("authority", "commercial_manifest_digests"),
-            italy.intent.items.first.manifest_digest
+                    italy.intent.items.first.manifest_digest
   end
 
   test "executes a pending checkout once outside a transaction and projects the command attempt" do
@@ -62,22 +67,113 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal intent.financial_command.attempts.first.id, attempt.financial_command_attempt_id
   end
 
+  test "execution requotes conflicting verified provider terms before claiming a provider command" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "execution-requote").intent
+    frozen_item = intent.items.first
+
+    result = RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent,
+                                                            root_recording: graph[:customer_root],
+                                                            provider_country: verified_country("DE", :provider))
+
+    assert_equal "requires_requote", result.state
+    assert_equal "cancelled", intent.financial_command.reload.state
+    assert_equal "cancelled", intent.attempts.first.reload.state
+    assert_equal 0, graph[:adapter].calls
+    assert_equal graph[:italy_price].recording.id, frozen_item.reload.price_recording_id
+    assert_equal "EUR", frozen_item.currency_code
+  end
+
+  test "execution without trusted final location evidence fails closed into review" do
+    RecordingStudioBilling.configuration.billing_location_context_resolver = nil
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "execution-review").intent
+
+    result = RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent,
+                                                            root_recording: graph[:customer_root])
+
+    assert_equal "requires_review", result.state
+    assert_equal "cancelled", intent.financial_command.reload.state
+    assert_equal "cancelled", intent.attempts.first.reload.state
+    assert_equal 0, graph[:adapter].calls
+  end
+
+  test "account settings country preference cannot authorize or reprice checkout execution" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "settings-country").intent
+    frozen_item = intent.items.first
+    RecordingStudioBilling::UpdateAccountPreferences.call(
+      root_recording: graph[:customer_root], account_recording: graph[:account_recording],
+      attributes: { billing_country_code: "DE" }, actor: @actor
+    )
+    RecordingStudioBilling.configuration.billing_location_context_resolver = nil
+
+    result = RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent,
+                                                            root_recording: graph[:customer_root])
+
+    assert_equal "requires_review", result.state
+    assert_equal "cancelled", intent.financial_command.reload.state
+    assert_equal 0, graph[:adapter].calls
+    assert_equal graph[:italy_price].recording.id, frozen_item.reload.price_recording_id
+    assert_equal 1_000, frozen_item.commercial_manifest.dig("canonical_data", "price", "amount_minor")
+  end
+
+  test "trusted provider and host evidence authorize matching final checkout terms" do
+    graph = published_catalogue
+    provider_intent = create_intent(graph, country: "IT", key: "provider-final-terms").intent
+
+    RecordingStudioBilling.execute_checkout_intent(
+      checkout_intent: provider_intent, root_recording: graph[:customer_root],
+      provider_country: verified_country("IT", :provider)
+    )
+
+    host_intent = create_intent(graph, country: "IT", key: "host-final-terms").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: host_intent, root_recording: graph[:customer_root])
+
+    assert_equal 2, graph[:adapter].calls
+    assert_equal "awaiting_confirmation", provider_intent.reload.state
+    assert_equal "awaiting_confirmation", host_intent.reload.state
+  end
+
+  test "ambiguous final market evidence requires review without provider execution" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "ambiguous-final-market").intent
+    ambiguous_market = market("italy_duplicate", "IT", graph[:provider_recording], graph[:provider_root], graph[:admin].recording,
+                              "requote")
+    ambiguous_price = price("italy_duplicate", graph[:option].recording, ambiguous_market,
+                            1_000, graph[:provider_root])
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [ambiguous_price.id], actor: @actor)
+
+    result = RecordingStudioBilling.execute_checkout_intent(
+      checkout_intent: intent, root_recording: graph[:customer_root],
+      provider_country: verified_country("IT", :provider)
+    )
+
+    assert_equal "requires_review", result.state
+    assert_equal "cancelled", intent.financial_command.reload.state
+    assert_equal "cancelled", intent.attempts.first.reload.state
+    assert_equal 0, graph[:adapter].calls
+  end
+
   test "maps generic provider outcomes without completing uncertain or rejected checkout intents" do
     expectations = {
-      duplicate: ["awaiting_confirmation", "succeeded"],
-      invalid: ["failed", "failed"],
-      provider_rejection: ["failed", "failed"],
-      unsupported: ["requires_review", "failed"],
-      provider_unavailable: ["requires_review", "failed"],
-      pending: ["pending_provider", "unknown"],
-      unknown_provider_state: ["pending_provider", "unknown"]
+      duplicate: %w[awaiting_confirmation succeeded],
+      invalid: %w[failed failed],
+      provider_rejection: %w[failed failed],
+      unsupported: %w[requires_review failed],
+      provider_unavailable: %w[requires_review failed],
+      pending: %w[pending_provider unknown],
+      unknown_provider_state: %w[pending_provider unknown]
     }
 
     expectations.each do |outcome, (intent_state, attempt_state)|
       RecordingStudioBilling.configuration.reset_registries!
       graph = published_catalogue
       RecordingStudioBilling.configuration.reset_registries!
-      RecordingStudioBilling.register_provider("fake", RecordingStudioBilling::FakeFinancialAdapter.new(outcome:, capabilities: graph[:adapter].capabilities))
+      RecordingStudioBilling.register_provider("fake",
+                                               RecordingStudioBilling::FakeFinancialAdapter.new(outcome:,
+                                                                                                capabilities: graph[:adapter].capabilities))
       intent = create_intent(graph, country: "IT", key: "outcome-#{outcome}").intent
 
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
@@ -90,9 +186,10 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   test "timeout remains reconcilable and stores no raw provider data" do
     graph = published_catalogue
-    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success)
     RecordingStudioBilling.configuration.reset_registries!
-    RecordingStudioBilling.register_provider("fake", adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success, capabilities: graph[:adapter].capabilities))
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success,
+                                                               capabilities: graph[:adapter].capabilities)
+    RecordingStudioBilling.register_provider("fake", adapter)
     intent = create_intent(graph, country: "IT", key: "timeout").intent
 
     assert_raises(RecordingStudioBilling::FakeFinancialAdapter::TimeoutAfterPossibleSuccess) do
@@ -107,17 +204,20 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   test "recovery retains the provider mutation key and appends a correlated checkout attempt" do
     graph = published_catalogue
-    pending = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :pending)
     RecordingStudioBilling.configuration.reset_registries!
-    RecordingStudioBilling.register_provider("fake", pending = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :pending, capabilities: graph[:adapter].capabilities))
+    pending = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :pending,
+                                                               capabilities: graph[:adapter].capabilities)
+    RecordingStudioBilling.register_provider("fake", pending)
     intent = create_intent(graph, country: "IT", key: "recover").intent
     command = intent.financial_command
 
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    recovered = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate)
     RecordingStudioBilling.configuration.reset_registries!
-    RecordingStudioBilling.register_provider("fake", recovered = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate, capabilities: graph[:adapter].capabilities))
-    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root], recovery: true)
+    recovered = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :duplicate,
+                                                                 capabilities: graph[:adapter].capabilities)
+    RecordingStudioBilling.register_provider("fake", recovered)
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root],
+                                                   recovery: true)
 
     attempts = intent.reload.attempts.order(:attempt_number).to_a
     assert_equal [1, 2], attempts.map(&:attempt_number)
@@ -136,7 +236,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
         ActiveRecord::Base.connection_pool.with_connection do
           ready << true
           release.pop
-          RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent.id, root_recording: graph[:customer_root])
+          RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent.id,
+                                                         root_recording: graph[:customer_root])
         rescue ArgumentError, ActiveRecord::Deadlocked
           nil
         end
@@ -159,7 +260,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: other_root)
     end
     assert_raises(ArgumentError) do
-      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root], return_url: "https://invalid.test")
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root],
+                                                     return_url: "https://invalid.test")
     end
     intent.financial_command.update!(state: "cancelled")
     intent.update!(state: "cancelled")
@@ -204,7 +306,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue
     intent = create_intent(graph, country: "IT", key: "requote-execution").intent
     germany = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :verified_account)
-    RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent:, account_country: germany)
+    RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(
+      intent:, account_country: germany
+    )
 
     assert_raises(ArgumentError) do
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
@@ -232,7 +336,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
 
     verified_germany = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :verified_account)
-    updated = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent: created.intent, account_country: verified_germany)
+    updated = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(
+      intent: created.intent, account_country: verified_germany
+    )
 
     assert_equal "requires_requote", updated.state
     assert_equal "cancelled", updated.financial_command.reload.state
@@ -253,21 +359,52 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal 0, graph[:adapter].calls
   end
 
-  test "rejects multi-item checkout before persisting an unschedulable intent" do
+  test "creates a compatible multi-item hybrid checkout and binds every frozen manifest" do
     graph = published_catalogue
+    recurring, = published_option(graph, kind: "plan", recurrence: "recurring", interval: "month")
+    addon, = published_option(graph, kind: "addon", recurrence: "one_time", interval: nil)
+    RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.register_provider("fake", RecordingStudioBilling::FakeFinancialAdapter.new(
+                                                       outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+                                                         operations: ["checkout"], currencies: ["EUR"], markets: %w[IT DE], collection_methods: ["automatic"],
+                                                         checkout_modes: ["redirect"], quantities: ["fixed"], composition: %w[single mixed]
+                                                       )
+                                                     ))
+
+    result = RecordingStudioBilling.create_checkout_intent(
+      root_recording: graph[:customer_root], local_idempotency_key: "multiple-items", country_code: "IT",
+      items: [{ billing_option_recording_id: recurring.recording.id, quantity: 1 },
+              { billing_option_recording_id: addon.recording.id, quantity: 1 }]
+    )
+
+    assert result.created?
+    assert_equal 2, result.intent.items.count
+    assert_equal result.intent.items.map(&:manifest_digest).sort,
+                 result.intent.financial_command.canonical_request.dig("authority", "commercial_manifest_digests")
+  end
+
+  test "rejects a multi-item checkout with incompatible recurring intervals" do
+    graph = published_catalogue
+    monthly, = published_option(graph, kind: "plan", recurrence: "recurring", interval: "month")
+    annual, = published_option(graph, kind: "plan", recurrence: "recurring", interval: "year")
+    RecordingStudioBilling.configuration.reset_registries!
+    RecordingStudioBilling.register_provider("fake", RecordingStudioBilling::FakeFinancialAdapter.new(
+                                                       outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+                                                         operations: ["checkout"], currencies: ["EUR"], markets: %w[IT DE], collection_methods: ["automatic"],
+                                                         checkout_modes: ["redirect"], quantities: ["fixed"], composition: %w[single mixed]
+                                                       )
+                                                     ))
 
     error = assert_raises(ArgumentError) do
       RecordingStudioBilling.create_checkout_intent(
-        root_recording: graph[:customer_root], local_idempotency_key: "multiple-items", country_code: "IT",
-        items: [
-          { billing_option_recording_id: graph[:option].recording.id, quantity: 1 },
-          { billing_option_recording_id: graph[:option].recording.id, quantity: 1 }
-        ]
+        root_recording: graph[:customer_root], local_idempotency_key: "mixed-intervals", country_code: "IT",
+        items: [{ billing_option_recording_id: monthly.recording.id, quantity: 1 },
+                { billing_option_recording_id: annual.recording.id, quantity: 1 }]
       )
     end
 
-    assert_equal "unsupported_checkout_composition", error.message
-    assert_nil RecordingStudioBilling::CheckoutIntent.find_by(local_idempotency_key: "multiple-items")
+    assert_equal "mixed_recurring_intervals", error.message
+    assert_nil RecordingStudioBilling::CheckoutIntent.find_by(local_idempotency_key: "mixed-intervals")
   end
 
   test "final verification confirms unchanged complete terms and rejects unverified evidence" do
@@ -275,12 +412,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     created = create_intent(graph, country: "IT", key: "final-confirmed")
     verified_italy = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :verified_account)
 
-    confirmed = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent: created.intent, account_country: verified_italy)
+    confirmed = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(
+      intent: created.intent, account_country: verified_italy
+    )
 
     assert_equal "pending_provider", confirmed.state
     assert_equal created.intent.financial_command_id, confirmed.financial_command_id
     assert_equal 1, confirmed.attempts.count
-    unverified = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent: confirmed, account_country: "IT")
+    unverified = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(
+      intent: confirmed, account_country: "IT"
+    )
     assert_equal "requires_review", unverified.state
   end
 
@@ -290,11 +431,13 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     original_digest = created.intent.items.first.manifest_digest
     RecordingStudioBilling.configuration.reset_registries!
     RecordingStudioBilling.register_provider("fake", RecordingStudioBilling::FakeFinancialAdapter.new(
-      outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new
-    ))
+                                                       outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new
+                                                     ))
     verified_italy = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :verified_account)
 
-    reviewed = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(intent: created.intent, account_country: verified_italy)
+    reviewed = RecordingStudioBilling::CreateCheckoutIntent.new(root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []).verify_final_market!(
+      intent: created.intent, account_country: verified_italy
+    )
 
     assert_equal "requires_review", reviewed.state
     assert_equal original_digest, reviewed.items.first.manifest_digest
@@ -339,14 +482,19 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert_raises(ActiveRecord::StatementInvalid) do
       RecordingStudioBilling::CheckoutIntent.insert_all!([{
-        id: SecureRandom.uuid, root_recording_id: graph[:customer_root].id, account_recording_id: other_account.recording.id,
-        local_idempotency_key: "cross-root", request_fingerprint: "a" * 64, state: "draft", created_at: Time.current, updated_at: Time.current
-      }])
+                                                           id: SecureRandom.uuid, root_recording_id: graph[:customer_root].id, account_recording_id: other_account.recording.id,
+                                                           local_idempotency_key: "cross-root", request_fingerprint: "a" * 64, state: "draft", created_at: Time.current, updated_at: Time.current
+                                                         }])
     end
     assert_raises(ActiveRecord::StatementInvalid) { created.intent.items.first.update_column(:currency_code, "USD") }
     assert_raises(ActiveRecord::StatementInvalid) { created.intent.attempts.first.update_column(:state, "failed") }
     %w[requires_requote requires_review cancelled expired].each do |state|
-      intent = state == "requires_review" ? created.intent : create_intent(graph, country: "IT", key: "state-#{state}").intent
+      intent = if state == "requires_review"
+                 created.intent
+               else
+                 create_intent(graph, country: "IT",
+                                      key: "state-#{state}").intent
+               end
       assert_equal "pending_provider", intent.state
       assert_equal "pending", intent.financial_command.state
       assert_equal "pending", intent.attempts.first.state
@@ -396,13 +544,15 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       intent = create_intent(graph, country: "IT", key: "lifecycle-#{index}").intent
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
 
-      result = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+      result = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root])
 
       assert result.projected?
       assert_equal "completed", intent.reload.state
       if expected_mode.start_with?("one_off")
         assert_equal expected_mode, result.purchase.mode
-        assert_equal(expected_mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon", result.purchase.effects.sole.effect_kind)
+        assert_equal(expected_mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon",
+                     result.purchase.effects.sole.effect_kind)
       else
         assert_equal expected_mode, result.subscription.item_versions.sole.mode
         assert_equal(expected_mode == "trial_subscription" ? "trialing" : "active", result.subscription.state)
@@ -414,8 +564,10 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     intent = create_intent(graph, country: "IT", key: "project-idempotently").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    first = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    repeated = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    first = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                     root_recording: graph[:customer_root])
+    repeated = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root])
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
 
     assert first.projected?
@@ -431,19 +583,23 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   test "base plan variants replace one product line while recurring add-ons remain active" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
-    annual, = published_option(graph, product_recording: graph[:option].product_recording, kind: "plan", recurrence: "recurring", interval: "year")
+    annual, = published_option(graph, product_recording: graph[:option].product_recording, kind: "plan",
+                                      recurrence: "recurring", interval: "year")
     addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month",
-                      price_feature_values: { "projects" => 8, "seats" => 2 })
+                                     price_feature_values: { "projects" => 8, "seats" => 2 })
     plan_intent = create_intent(graph, country: "IT", key: "base-monthly").intent
     addon_intent = create_intent(graph, country: "IT", key: "recurring-addon", option: addon).intent
 
     [plan_intent, addon_intent].each do |intent|
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-      RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+      RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                               root_recording: graph[:customer_root])
     end
     replacement_intent = create_intent(graph, country: "IT", key: "base-annual", option: annual).intent
-    RecordingStudioBilling.execute_checkout_intent(checkout_intent: replacement_intent, root_recording: graph[:customer_root])
-    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: replacement_intent, root_recording: graph[:customer_root]).subscription
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: replacement_intent,
+                                                   root_recording: graph[:customer_root])
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: replacement_intent,
+                                                                            root_recording: graph[:customer_root]).subscription
 
     plan_versions = subscription.item_versions.where(product_recording_id: graph[:option].product_recording_id).order(:version_number)
     addon_versions = subscription.item_versions.where(billing_option_recording_id: addon.recording.id).order(:version_number)
@@ -462,12 +618,21 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month", trial_days: 7)
     intent = create_intent(graph, country: "IT", key: "lifecycle-transitions").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                            root_recording: graph[:customer_root]).subscription
 
-    assert_equal "active", RecordingStudioBilling::SubscriptionLifecycle.activate(subscription:, root_recording: graph[:customer_root]).state
-    assert_equal "paused", RecordingStudioBilling::SubscriptionLifecycle.pause(subscription:, root_recording: graph[:customer_root]).state
-    assert_equal "active", RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:, root_recording: graph[:customer_root]).state
-    assert_equal "cancelled", RecordingStudioBilling::SubscriptionLifecycle.cancel(subscription:, root_recording: graph[:customer_root]).state
+    assert_equal "active",
+                 RecordingStudioBilling::SubscriptionLifecycle.activate(subscription:,
+                                                                        root_recording: graph[:customer_root]).state
+    assert_equal "paused",
+                 RecordingStudioBilling::SubscriptionLifecycle.pause(subscription:,
+                                                                     root_recording: graph[:customer_root]).state
+    assert_equal "active",
+                 RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:,
+                                                                      root_recording: graph[:customer_root]).state
+    assert_equal "cancelled",
+                 RecordingStudioBilling::SubscriptionLifecycle.cancel(subscription:,
+                                                                      root_recording: graph[:customer_root]).state
     assert_raises(ArgumentError) { RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:, root_recording: graph[:customer_root]) }
   end
 
@@ -487,7 +652,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     intent = create_intent(graph, country: "IT", key: "entitlement-projection").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
+    subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                            root_recording: graph[:customer_root]).subscription
 
     first = RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
@@ -496,7 +662,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal 4, RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).count
     assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
     assert_equal 3, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
-    assert_equal "pro", RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "edition")
+    assert_equal "pro",
+                 RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "edition")
     assert_equal({ "edition" => "pro", "enabled" => true, "projects" => 3, "seats" => 5 },
                  RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root]))
 
@@ -524,7 +691,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     project_subscription!(addon_graph, key: "numeric-addon")
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
-    assert_equal 10, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
+    assert_equal 10,
+                 RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
     assert_equal 2, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "seats")
   end
 
@@ -552,13 +720,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
     intent = create_intent(graph, country: "IT", key: "credit-pack").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root]).purchase
 
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     entry = RecordingStudioBilling::CreditLedgerEntry.sole
 
-    assert_equal 5, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+    assert_equal 5,
+                 RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root],
+                                                       product_recording: purchase.product_recording_id)
     assert_equal 1, RecordingStudioBilling::CreditLedgerEntry.count
     assert_raises(ActiveRecord::StatementInvalid) { entry.update_column(:amount, 999) }
     assert_raises(ActiveRecord::StatementInvalid) do
@@ -575,20 +746,20 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     created = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
-                                                   idempotency_key: "usage-event", metadata: { "source" => "studio" })
+                                                  idempotency_key: "usage-event", metadata: { "source" => "studio" })
     existing = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
-                                                    idempotency_key: "usage-event")
+                                                   idempotency_key: "usage-event")
 
     assert created.created?
     assert existing.existing?
     assert_equal created.event.id, existing.event.id
     assert_equal 2, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
     exhausted = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 4,
-                             idempotency_key: "exhausted-usage")
+                                                    idempotency_key: "exhausted-usage")
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Unentitled #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Unentitled account")
     unentitled = RecordingStudioBilling.record_usage(root_recording: other_root, usage_key: "seats", quantity: 1,
-                              idempotency_key: "no-entitlement")
+                                                     idempotency_key: "no-entitlement")
 
     assert exhausted.denied?
     assert_equal :exhausted_allowance, exhausted.reason
@@ -629,7 +800,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     threads.each(&:join)
 
     assert_equal %i[created denied], 2.times.map { results.pop.status }.sort
-    assert_equal 2, RecordingStudioBilling::UsageEvent.where(root_recording: graph[:customer_root], usage_key: "seats").count
+    assert_equal 2,
+                 RecordingStudioBilling::UsageEvent.where(root_recording: graph[:customer_root],
+                                                          usage_key: "seats").count
     assert_equal 5, RecordingStudioBilling.usage_total(root_recording: graph[:customer_root], usage_key: "seats")
   end
 
@@ -658,7 +831,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection_pool.with_connection do
         first_finished.pop
         results << RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 3,
-                                                        idempotency_key: "earlier-timestamp", occurred_at: earlier_timestamp)
+                                                       idempotency_key: "earlier-timestamp", occurred_at: earlier_timestamp)
       end
     end
     [later_worker, earlier_worker].each(&:join)
@@ -674,19 +847,22 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
     intent = create_intent(graph, country: "IT", key: "consume-credits").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root]).purchase
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     created = RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
-                                                      amount: 3, usage_key: "seats", idempotency_key: "consume-once")
+                                                     amount: 3, usage_key: "seats", idempotency_key: "consume-once")
     existing = RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
-                                                       amount: 3, usage_key: "seats", idempotency_key: "consume-once")
+                                                      amount: 3, usage_key: "seats", idempotency_key: "consume-once")
 
     assert created.created?
     assert existing.existing?
     assert_equal created.entry.id, existing.entry.id
     assert_equal(-3, created.entry.amount)
-    assert_equal 2, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+    assert_equal 2,
+                 RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root],
+                                                       product_recording: purchase.product_recording_id)
     assert_raises(ActiveRecord::StatementInvalid) { created.entry.update_column(:amount, -4) }
     usage = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 1,
                                                 idempotency_key: "forged-oversized-debit").event
@@ -707,7 +883,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
     intent = create_intent(graph, country: "IT", key: "concurrent-credits").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).purchase
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root]).purchase
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     ready = Queue.new
     release = Queue.new
@@ -719,7 +896,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
           ready << true
           release.pop
           results << RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
-                                                             amount: 5, usage_key: "seats", idempotency_key: "last-credit-#{index}")
+                                                            amount: 5, usage_key: "seats", idempotency_key: "last-credit-#{index}")
         end
       end
     end
@@ -729,7 +906,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert_equal %i[created denied], 2.times.map { results.pop.status }.sort
     assert_equal 1, RecordingStudioBilling::CreditLedgerEntry.where(direction: "debit").count
-    assert_equal 0, RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id)
+    assert_equal 0,
+                 RecordingStudioBilling.credit_balance(root_recording: graph[:customer_root],
+                                                       product_recording: purchase.product_recording_id)
   end
 
   test "public entitlement APIs normalize an account child recording and fail closed across roots" do
@@ -737,7 +916,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     intent = create_intent(graph, country: "IT", key: "normalized-root").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root])
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     account_child = RecordingStudioBilling::Account.with_current_recording.find_by!(root_recording: graph[:customer_root]).recording
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
@@ -746,7 +926,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert RecordingStudioBilling.entitled?(root_recording: account_child, feature_key: "enabled")
     assert_equal 3, RecordingStudioBilling.feature_value(root_recording: account_child, feature_key: "projects")
     assert_equal "pro", RecordingStudioBilling.effective_entitlements(root_recording: account_child).fetch("edition")
-    assert_equal 0, RecordingStudioBilling.credit_balance(root_recording: account_child, product_recording: SecureRandom.uuid)
+    assert_equal 0,
+                 RecordingStudioBilling.credit_balance(root_recording: account_child,
+                                                       product_recording: SecureRandom.uuid)
     assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: other_root))
     refute RecordingStudioBilling.entitled?(root_recording: other_root, feature_key: "enabled")
     assert_nil RecordingStudioBilling.feature_value(root_recording: other_root, feature_key: "projects")
@@ -757,7 +939,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
     intent = create_intent(graph, country: "IT", key: "trigger-facts").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root])
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     grant = RecordingStudioBilling::EntitlementGrant.first
     entry = RecordingStudioBilling::CreditLedgerEntry.sole
@@ -775,12 +958,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.configuration.reset_registries!
     addon_graph = published_catalogue(kind: "addon", recurrence: "one_time", interval: nil)
     addon_intent = create_intent(addon_graph, country: "IT", key: "non-credit-effect").intent
-    RecordingStudioBilling.execute_checkout_intent(checkout_intent: addon_intent, root_recording: addon_graph[:customer_root])
-    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: addon_intent, root_recording: addon_graph[:customer_root]).purchase
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: addon_intent,
+                                                   root_recording: addon_graph[:customer_root])
+    purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: addon_intent,
+                                                                        root_recording: addon_graph[:customer_root]).purchase
     effect = purchase.effects.sole
     forged = entry.attributes.except("id", "created_at", "updated_at").merge("id" => SecureRandom.uuid,
-      "purchase_effect_id" => effect.id, "root_recording_id" => effect.root_recording_id, "account_recording_id" => effect.account_recording_id,
-      "product_recording_id" => purchase.product_recording_id, "manifest_digest" => effect.manifest_digest, "created_at" => Time.current, "updated_at" => Time.current)
+                                                                             "purchase_effect_id" => effect.id, "root_recording_id" => effect.root_recording_id, "account_recording_id" => effect.account_recording_id,
+                                                                             "product_recording_id" => purchase.product_recording_id, "manifest_digest" => effect.manifest_digest, "created_at" => Time.current, "updated_at" => Time.current)
     assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::CreditLedgerEntry.insert_all!([forged]) }
   end
 
@@ -789,7 +974,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "addon", recurrence: "one_time", interval: nil)
     intent = create_intent(graph, country: "IT", key: "one-off-addon").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root])
     RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
 
@@ -797,11 +983,15 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       RecordingStudioBilling.configuration.reset_registries!
       subscription_graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
       subscription_intent = create_intent(subscription_graph, country: "IT", key: "terminal-#{state}").intent
-      RecordingStudioBilling.execute_checkout_intent(checkout_intent: subscription_intent, root_recording: subscription_graph[:customer_root])
-      subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: subscription_intent, root_recording: subscription_graph[:customer_root]).subscription
-      RecordingStudioBilling::SubscriptionLifecycle.public_send(transition, subscription:, root_recording: subscription_graph[:customer_root])
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: subscription_intent,
+                                                     root_recording: subscription_graph[:customer_root])
+      subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: subscription_intent,
+                                                                              root_recording: subscription_graph[:customer_root]).subscription
+      RecordingStudioBilling::SubscriptionLifecycle.public_send(transition, subscription:,
+                                                                            root_recording: subscription_graph[:customer_root])
       RecordingStudioBilling.project_entitlements(root_recording: subscription_graph[:customer_root])
-      assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: subscription_graph[:customer_root]))
+      assert_equal({},
+                   RecordingStudioBilling.effective_entitlements(root_recording: subscription_graph[:customer_root]))
     end
   end
 
@@ -823,6 +1013,263 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
   end
 
+  test "subscription cancellation and resumption apply only after completed provider commands and preserve item history" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    subscription = project_subscription!(graph, key: "subscription-change-initial")
+    use_subscription_change_adapter!
+    item = subscription.items.sole
+    original_version = item.versions.sole
+
+    cancellation = create_subscription_change!(subscription, graph, key: "cancel", kind: "cancellation")
+    complete_subscription_change!(cancellation)
+    cancelled = RecordingStudioBilling::ApplySubscriptionChangeIntent.call(
+      subscription_change_intent: cancellation, root_recording: graph[:customer_root]
+    )
+
+    assert_equal "applied", cancelled.state
+    assert_equal "cancelled", subscription.reload.state
+    assert_equal "cancelled", item.reload.state
+    assert_predicate original_version.reload, :effective_ends_at?
+    assert_equal 1, item.versions.count
+
+    resumption = create_subscription_change!(subscription, graph, key: "resume", kind: "resumption")
+    assert_equal original_version.manifest_digest,
+                 resumption.frozen_terms.dig("current_items", item.line_key, "manifest_digest")
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: original_version.manifest_digest)
+    assert_equal manifest_envelope(manifest), resumption.frozen_terms.dig("current_items", item.line_key)
+    complete_subscription_change!(resumption)
+    resumed = RecordingStudioBilling::ApplySubscriptionChangeIntent.call(
+      subscription_change_intent: resumption, root_recording: graph[:customer_root]
+    )
+
+    active_version = item.reload.versions.order(:version_number).last
+    assert_equal "applied", resumed.state
+    assert_equal "active", subscription.reload.state
+    assert_equal "active", item.reload.state
+    assert_equal 2, item.versions.count
+    assert_equal 2, active_version.version_number
+    assert_nil active_version.effective_ends_at
+    assert_equal resumption.frozen_terms.fetch("current"), active_version.commercial_snapshot
+    assert_equal original_version.manifest_digest, active_version.manifest_digest
+    assert_equal resumed.id, RecordingStudioBilling::ApplySubscriptionChangeIntent.call(
+      subscription_change_intent: resumed, root_recording: graph[:customer_root]
+    ).id
+    assert_equal 2, item.reload.versions.count
+  end
+
+  test "unresolved, failed, and cross-root subscription changes do not mutate current terms" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    subscription = project_subscription!(graph, key: "subscription-change-unapplied")
+    use_subscription_change_adapter!
+    original_version = subscription.item_versions.sole
+    change = create_subscription_change!(subscription, graph, key: "failed", kind: "cancellation")
+
+    change.financial_command.update!(state: "failed", normalized_result: { "reason" => "provider_rejected" })
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::ApplySubscriptionChangeIntent.call(subscription_change_intent: change,
+                                                                 root_recording: graph[:customer_root])
+    end
+    assert_equal "active", subscription.reload.state
+    assert_nil original_version.reload.effective_ends_at
+    assert_equal "failed", change.reload.state
+
+    review = create_subscription_change!(subscription, graph, key: "review", kind: "cancellation")
+    review.financial_command.update!(state: "requires_reconciliation",
+                                     normalized_result: { "reason" => "provider_unknown" })
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::ApplySubscriptionChangeIntent.call(subscription_change_intent: review,
+                                                                 root_recording: graph[:customer_root])
+    end
+    assert_equal "requires_review", review.reload.state
+    assert_equal "active", subscription.reload.state
+    assert_nil original_version.reload.effective_ends_at
+
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
+    assert_raises(ActiveRecord::RecordNotFound) do
+      RecordingStudioBilling::ApplySubscriptionChangeIntent.call(subscription_change_intent: change,
+                                                                 root_recording: other_root)
+    end
+  end
+
+  test "plan updates build trusted changes and atomically hold every target when one provider command requires review" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    first_subscription = project_subscription!(graph, key: "plan-update-first")
+    second_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Second customer #{SecureRandom.hex(4)}"))
+    second_account = record_child(
+      RecordingStudioBilling::Account.new(root_recording: second_root, name: "Second customer account", billing_country_code: "IT"),
+      second_root, second_root
+    )
+    second_subscription = project_subscription!(graph.merge(customer_root: second_root, account_recording: second_account),
+                                                key: "plan-update-second")
+    use_subscription_change_adapter!
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.item_versions.sole.manifest_digest)
+    update = record_child(
+      RecordingStudioBilling::PlanUpdate.new(
+        billing_option_recording: graph[:option].recording, key: "update_#{SecureRandom.hex(4)}", allowance_policy: "preserve",
+        execution_state: "draft", replacement_manifest_digest: manifest.manifest_digest,
+        replacement_configuration: { "audience" => { "root_recording_ids" => [graph[:customer_root].id, second_root.id] } }
+      ), graph[:provider_root], graph[:admin].recording
+    ).recordable
+
+    preview = RecordingStudioBilling::ApplyPlanUpdate.call(plan_update: update, root_recording: graph[:provider_root],
+                                                           idempotency_key: "plan-update-run")
+    run = RecordingStudioBilling::ApplyPlanUpdate.call(
+      run: preview, root_recording: graph[:provider_root], idempotency_key: "plan-update-run", confirmation: { "approved_by" => "admin-1" }
+    )
+    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_id).to_a
+
+    assert_equal 2, applications.size
+    assert(applications.all? { |application| application.subscription_change_intent.change_set.empty? })
+    assert(applications.all? do |application|
+      application.subscription_change_intent.frozen_terms.dig("plan_update", "allowance_policy") == "preserve"
+    end)
+    assert(applications.all? { |application| application.subscription_change_intent.financial_command.present? })
+    refute_match(/unsupported input/, run.reconciliation.to_s)
+
+    RecordingStudioBilling::FinancialCommandExecutor.execute(
+      command: applications.first.subscription_change_intent.financial_command, provider_key: "fake"
+    )
+    RecordingStudioBilling::ApplyPlanUpdate.call(run:, root_recording: graph[:provider_root],
+                                                 idempotency_key: run.idempotency_key)
+
+    assert_equal "requires_review", run.reload.state
+    [first_subscription, second_subscription].each do |subscription|
+      assert_equal 1, subscription.reload.item_versions.count
+      assert_nil subscription.item_versions.sole.effective_ends_at
+    end
+  end
+
+  test "plan updates atomically append one trusted version for every ready target" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    first_subscription = project_subscription!(graph, key: "plan-update-success-first")
+    second_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Second customer #{SecureRandom.hex(4)}"))
+    second_account = record_child(
+      RecordingStudioBilling::Account.new(root_recording: second_root, name: "Second customer account", billing_country_code: "IT"),
+      second_root, second_root
+    )
+    second_subscription = project_subscription!(graph.merge(customer_root: second_root, account_recording: second_account),
+                                                key: "plan-update-success-second")
+    use_subscription_change_adapter!
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.item_versions.sole.manifest_digest)
+    update = record_child(
+      RecordingStudioBilling::PlanUpdate.new(
+        billing_option_recording: graph[:option].recording, key: "update_#{SecureRandom.hex(4)}", allowance_policy: "preserve",
+        execution_state: "draft", replacement_manifest_digest: manifest.manifest_digest,
+        replacement_configuration: { "audience" => { "root_recording_ids" => [graph[:customer_root].id, second_root.id] } }
+      ), graph[:provider_root], graph[:admin].recording
+    ).recordable
+    prior_versions = [first_subscription, second_subscription].to_h do |subscription|
+      [subscription.id, subscription.item_versions.sole]
+    end
+
+    preview = RecordingStudioBilling::ApplyPlanUpdate.call(plan_update: update, root_recording: graph[:provider_root],
+                                                           idempotency_key: "plan-update-success")
+    run = RecordingStudioBilling::ApplyPlanUpdate.call(
+      run: preview, root_recording: graph[:provider_root], idempotency_key: "plan-update-success", confirmation: { "approved_by" => "admin-1" }
+    )
+    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_id).to_a
+    applications.each do |application|
+      RecordingStudioBilling::FinancialCommandExecutor.execute(
+        command: application.subscription_change_intent.financial_command, provider_key: "fake"
+      )
+    end
+
+    applied = RecordingStudioBilling::ApplyPlanUpdate.call(run:, root_recording: graph[:provider_root],
+                                                           idempotency_key: run.idempotency_key)
+
+    assert_equal "applied", applied.state
+    assert(applications.all? { |application| application.reload.state == "applied" })
+    [first_subscription, second_subscription].each do |subscription|
+      versions = subscription.reload.item_versions.order(:version_number).to_a
+      prior = prior_versions.fetch(subscription.id).reload
+      current = versions.last
+
+      assert_equal 2, versions.size
+      assert_predicate prior, :effective_ends_at?
+      assert_predicate prior, :superseded_at?
+      assert_nil current.effective_ends_at
+      assert_equal "subscription_change", current.source_type
+      application = applications.find { |entry| entry.subscription_id == subscription.id }
+      assert_equal application.subscription_change_intent_id, current.source_id
+      assert_equal "preserve",
+                   application.subscription_change_intent.frozen_terms.dig("plan_update", "allowance_policy")
+    end
+
+    replayed = RecordingStudioBilling::ApplyPlanUpdate.call(run:, root_recording: graph[:provider_root],
+                                                            idempotency_key: run.idempotency_key)
+
+    assert_equal applied.id, replayed.id
+    assert_equal 4,
+                 RecordingStudioBilling::SubscriptionItemVersion.where(subscription_id: [first_subscription.id,
+                                                                                         second_subscription.id]).count
+  end
+
+  test "direct subscription changes reject incompatible proposed manifests before creating commands" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    subscription = project_subscription!(graph, key: "proposal-boundary")
+    use_subscription_change_adapter!
+    current_manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: subscription.item_versions.sole.manifest_digest)
+    option_id = graph[:option].recording.id
+    command_count = RecordingStudioBilling::FinancialCommand.where(root_recording: graph[:customer_root]).count
+
+    compatible = RecordingStudioBilling::CreateSubscriptionChangeIntent.call(
+      subscription:, root_recording: graph[:customer_root], local_idempotency_key: "compatible", change_kind: "interval",
+      change_set: { billing_option_recording_id: option_id, quantity: 1 }, proposed_manifest: current_manifest
+    ).intent
+    assert_equal "fake", compatible.provider_decision.fetch("adapter_key")
+    assert_equal subscription.currency_code,
+                 compatible.frozen_terms.dig("proposed", "canonical_data", "price", "currency_code")
+    assert_equal subscription.market_recording_id,
+                 compatible.frozen_terms.dig("proposed", "canonical_data", "trusted_context", "market_recording_id")
+    assert_equal command_count + 1,
+                 RecordingStudioBilling::FinancialCommand.where(root_recording: graph[:customer_root]).count
+
+    incompatible_manifests = {
+      currency: forged_manifest(current_manifest) { |terms| terms.fetch("price")["currency_code"] = "USD" },
+      collection_method: forged_manifest(current_manifest) do |terms|
+        terms.fetch("billing_option")["collection_method"] = "invoice"
+      end,
+      payment_terms: forged_manifest(current_manifest) do |terms|
+        terms.fetch("billing_option")["payment_terms_days"] = 30
+      end,
+      market: forged_manifest(current_manifest) do |terms|
+        terms.fetch("trusted_context")["market_recording_id"] = SecureRandom.uuid
+      end,
+      interval: forged_manifest(current_manifest) do |terms|
+        terms.fetch("billing_option").merge!("interval" => "year", "interval_count" => 1)
+      end
+    }
+    incompatible_manifests.each do |name, manifest|
+      assert_rejects_proposed_manifest(subscription, graph, manifest, key: "incompatible-#{name}", option_id:)
+    end
+
+    other_provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Other provider #{SecureRandom.hex(4)}"))
+    other_admin = RecordingStudioBilling.ensure_billing_admin(root_recording: other_provider_root,
+                                                              key: "billing_#{SecureRandom.hex(4)}")
+    other_provider = record_child(
+      RecordingStudioBilling::ProviderAccount.new(billing_admin_recording: other_admin.recording, key: "provider_#{SecureRandom.hex(4)}",
+                                                  adapter_key: "fake", name: "Other", environment: "test", configuration: {}, capabilities: [], supported_markets: ["IT"], supported_currencies: ["EUR"]),
+      other_provider_root, other_admin.recording
+    )
+    foreign_provider_manifest = forged_manifest(current_manifest, root_recording_id: other_provider_root.id) do |terms|
+      terms.fetch("usage_settlement")["provider_account_recording_id"] = other_provider.id
+    end
+    assert_rejects_proposed_manifest(subscription, graph, foreign_provider_manifest, key: "foreign-provider",
+                                                                                     option_id:)
+
+    rule = record_child(
+      RecordingStudioBilling::ProductRule.new(product_recording: graph[:option].product_recording, target_product_recording: graph[:option].product_recording,
+                                              key: "self_excludes_#{SecureRandom.hex(4)}", rule_type: "excludes", conditions: { "country_code" => "IT" }),
+      graph[:provider_root], graph[:admin].recording
+    )
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [graph[:italy_price].recording.id], actor: @actor)
+    rule_manifest = RecordingStudioBilling::CommercialManifest.where(root_recording: graph[:provider_root]).order(created_at: :desc).find do |manifest|
+      manifest.canonical_data.fetch("product_rules").any? { |entry| entry["key"] == rule.recordable.key }
+    end
+    assert_rejects_proposed_manifest(subscription, graph, rule_manifest, key: "rule-conflict", option_id:)
+  end
+
   private
 
   def create_intent(graph, country:, key:, option: graph[:option])
@@ -835,12 +1282,66 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   def project_subscription!(graph, key:)
     intent = create_intent(graph, country: "IT", key:).intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root]).subscription
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root]).subscription
   end
 
-  def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000)
+  def create_subscription_change!(subscription, graph, key:, kind:)
+    RecordingStudioBilling::CreateSubscriptionChangeIntent.call(
+      subscription:, root_recording: graph[:customer_root], local_idempotency_key: key, change_kind: kind
+    ).intent
+  end
+
+  def complete_subscription_change!(intent)
+    RecordingStudioBilling::FinancialCommandExecutor.execute(command: intent.financial_command, provider_key: "fake")
+    assert_equal "succeeded", intent.financial_command.reload.state
+  end
+
+  def use_subscription_change_adapter!
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider("fake",
+                                             RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success))
+  end
+
+  def assert_rejects_proposed_manifest(subscription, graph, manifest, key:, option_id:)
+    before = RecordingStudioBilling::FinancialCommand.where(root_recording: graph[:customer_root]).count
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::CreateSubscriptionChangeIntent.call(
+        subscription:, root_recording: graph[:customer_root], local_idempotency_key: key, change_kind: "quantity",
+        change_set: { billing_option_recording_id: option_id, quantity: 1 }, proposed_manifest: manifest
+      )
+    end
+    assert_equal before, RecordingStudioBilling::FinancialCommand.where(root_recording: graph[:customer_root]).count
+  end
+
+  def forged_manifest(source, root_recording_id: source.root_recording_id)
+    canonical_data = source.canonical_data.deep_dup
+    yield canonical_data
+    envelope = {
+      "schema_version" => source.schema_version, "resolver_version" => source.resolver_version, "root_recording_id" => root_recording_id,
+      "canonical_data" => canonical_data, "recording_snapshots" => source.recording_snapshots, "snapshot_references" => source.snapshot_references
+    }
+    RecordingStudioBilling::CommercialManifest.create!(root_recording_id:, schema_version: source.schema_version,
+                                                       resolver_version: source.resolver_version, canonical_data:,
+                                                       recording_snapshots: source.recording_snapshots,
+                                                       snapshot_references: source.snapshot_references,
+                                                       manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope), used_at: Time.current)
+  end
+
+  def manifest_envelope(manifest)
+    {
+      "manifest_digest" => manifest.manifest_digest, "schema_version" => manifest.schema_version,
+      "resolver_version" => manifest.resolver_version, "root_recording_id" => manifest.root_recording_id,
+      "canonical_data" => manifest.canonical_data, "recording_snapshots" => manifest.recording_snapshots,
+      "snapshot_references" => manifest.snapshot_references
+    }
+  end
+
+  def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000,
+                          account_country: "IT")
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
-    admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root, key: "billing_#{SecureRandom.hex(4)}")
+    admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root,
+                                                        key: "billing_#{SecureRandom.hex(4)}")
     provider_recording = record_child(
       RecordingStudioBilling::ProviderAccount.new(billing_admin_recording: admin.recording, key: "provider_#{SecureRandom.hex(4)}",
                                                   adapter_key: "fake", name: "Fake", environment: "test", configuration: {}, capabilities: [], supported_markets: %w[IT DE], supported_currencies: ["EUR"]),
@@ -849,23 +1350,48 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     italy_market = market("italy", "IT", provider_recording, provider_root, admin.recording, "requote")
     germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording, "requote")
     graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
-    option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:, trial_days:, amount:)
-    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success, capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"], markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
+    option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:,
+                                                                                     trial_days:, amount:)
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success,
+                                                               capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"],
+                                                                                                                              markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
     RecordingStudioBilling.register_provider("fake", adapter)
     customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Customer #{SecureRandom.hex(4)}"))
-    RecordingStudioBilling.ensure_account(root_recording: customer_root, name: "Customer account")
-    graph.merge(customer_root:, option:, italy_price: published_italy_price, germany_price: published_germany_price, adapter:)
+    account_recording = record_child(
+      RecordingStudioBilling::Account.new(root_recording: customer_root, name: "Customer account",
+                                          billing_country_code: account_country),
+      customer_root, customer_root
+    )
+    graph.merge(customer_root:, account_recording:, option:, italy_price: published_italy_price, germany_price: published_germany_price,
+                adapter:)
   end
 
-  def published_option(graph, product_recording: nil, kind:, recurrence:, interval:, trial_days: 0, amount: 1_000, option_feature_values: {}, price_feature_values: {})
-    product_recording ||= record_child(RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording], key: "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording)
-    option_recording = record_child(RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}", recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording)
+  def verified_country(country_code, source)
+    RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new(country_code, source)
+  end
+
+  def published_option(graph, kind:, recurrence:, interval:, product_recording: nil, trial_days: 0, amount: 1_000,
+                       option_feature_values: {}, price_feature_values: {})
+    product_recording ||= record_child(
+      RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording],
+                                          key: "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording
+    )
+    option_recording = record_child(
+      RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}",
+                                                recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording
+    )
     RecordingStudioBilling.configuration.feature_definitions.each do |key, definition|
-      record_child(RecordingStudioBilling::Feature.new(product_recording:, key:, kind: definition.fetch("type"), definition: {}), graph[:provider_root], product_recording)
+      record_child(
+        RecordingStudioBilling::Feature.new(product_recording:, key:, kind: definition.fetch("type"),
+                                            definition: {}), graph[:provider_root], product_recording
+      )
     end
-    italy_price = price("italy", option_recording, graph[:italy_market], amount, graph[:provider_root], price_feature_values)
-    germany_price = price("germany", option_recording, graph[:germany_market], amount + 200, graph[:provider_root], price_feature_values)
-    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root], price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
+    italy_price = price("italy", option_recording, graph[:italy_market], amount, graph[:provider_root],
+                        price_feature_values)
+    germany_price = price("germany", option_recording, graph[:germany_market], amount + 200, graph[:provider_root],
+                          price_feature_values)
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
     [
       RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_recording.recordable.key),
       RecordingStudioBilling::Price.with_current_recording.find_by!(key: italy_price.recordable.key),
@@ -874,26 +1400,26 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   def market(key, country, provider, root, parent, verification_policy)
-    record_child(RecordingStudioBilling::Market.new(provider_account_recording: provider, key: "#{key}_market", country_codes: [country], country_groups: {}, allowed_currency_codes: ["EUR"], default_currency_code: "EUR", priority: 10, specificity: 1, fallback: false, ppa_policy: "standard", rounding_policy: "half_up", tax_presentation_policy: "exclusive", verification_policy:), root, parent)
+    record_child(
+      RecordingStudioBilling::Market.new(provider_account_recording: provider, key: "#{key}_market",
+                                         country_codes: [country], country_groups: {}, regional_country_codes: [], global_fallback: false, allowed_currency_codes: ["EUR"], default_currency_code: "EUR", priority: 10, specificity: 1, ppa_policy: "standard", rounding_policy: "half_up", tax_presentation_policy: "exclusive", verification_policy:), root, parent
+    )
   end
 
   def price(key, option, market, amount, root, feature_values = {})
-    record_child(RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "#{key}_price", amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values:), root, option)
+    record_child(
+      RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "#{key}_price",
+                                        amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values:), root, option
+    )
   end
 
   def record_child(recordable, root, parent)
-    RecordingStudio::Recording.unscoped.find(RecordingStudio.record!(action: "created", recordable:, root_recording: root, parent_recording: parent).recording.id)
+    RecordingStudio::Recording.unscoped.find(RecordingStudio.record!(action: "created", recordable:,
+                                                                     root_recording: root, parent_recording: parent).recording.id)
   end
 
   def clear_data!
-    connection = ActiveRecord::Base.connection
-    tables = [RecordingStudioBilling::UsageEvent, RecordingStudioBilling::EntitlementGrant, RecordingStudioBilling::CreditLedgerEntry, RecordingStudioBilling::PurchaseEffect, RecordingStudioBilling::Purchase, RecordingStudioBilling::SubscriptionItemVersion, RecordingStudioBilling::Subscription, RecordingStudioBilling::CheckoutAttempt, RecordingStudioBilling::CheckoutIntentItem, RecordingStudioBilling::CheckoutIntent, RecordingStudioBilling::FinancialCommand, RecordingStudioBilling::CommercialPublicationCandidate, RecordingStudioBilling::CommercialManifest, *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize)].map(&:table_name)
-    connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
-    RecordingStudio::Event.unscoped.delete_all
-    RecordingStudio::Recording.unscoped.delete_all
-    Workspace.delete_all
-    AdminRoot.delete_all
-    User.delete_all
+    BillingTestDatabaseCleanup.clear!
   end
 
   def insert_grant!(grant, changes)
@@ -912,10 +1438,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def entitlement_features
     {
-      "enabled" => { source: "catalogue", merge_rule: "replace", default: true, type: "boolean", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 1, validation: {} },
-      "projects" => { source: "catalogue", merge_rule: "replace", default: 3, type: "limit", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 2, validation: { "minimum" => 0 } },
-      "seats" => { source: "catalogue", merge_rule: "replace", default: 5, type: "allowance", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 3, validation: { "minimum" => 0 } },
-      "edition" => { source: "catalogue", merge_rule: "replace", default: "pro", type: "variant", meter_key: nil, usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 4, validation: {} }
+      "enabled" => { source: "catalogue", merge_rule: "replace", default: true, type: "boolean", meter_key: nil,
+                     usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 1, validation: {} },
+      "projects" => { source: "catalogue", merge_rule: "replace", default: 3, type: "limit", meter_key: nil,
+                      usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 2, validation: { "minimum" => 0 } },
+      "seats" => { source: "catalogue", merge_rule: "replace", default: 5, type: "allowance", meter_key: nil,
+                   usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 3, validation: { "minimum" => 0 } },
+      "edition" => { source: "catalogue", merge_rule: "replace", default: "pro", type: "variant", meter_key: nil,
+                     usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 4, validation: {} }
     }
   end
 end

@@ -20,8 +20,8 @@ module RecordingStudioBilling
 
     def safe_snapshot
       SafeFinancialPayload.validate!(commercial_snapshot)
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:commercial_snapshot, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:commercial_snapshot, e.message)
     end
   end
 end

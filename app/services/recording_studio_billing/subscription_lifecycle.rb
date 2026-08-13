@@ -7,7 +7,7 @@ module RecordingStudioBilling
       "active" => %w[past_due paused cancelled expired],
       "past_due" => %w[active paused cancelled expired],
       "paused" => %w[active cancelled expired],
-      "cancelled" => [],
+      "cancelled" => %w[active],
       "expired" => []
     }.freeze
 
@@ -22,7 +22,11 @@ module RecordingStudioBilling
         record = Subscription.lock.find(subscription.respond_to?(:id) ? subscription.id : subscription)
         root = RecordingStudio.root_recording_or_self(root_recording || record.root_recording)
         raise ActiveRecord::RecordNotFound, "subscription not found" unless record.root_recording_id == root.id
-        raise ArgumentError, "subscription lifecycle transition is invalid" unless TRANSITIONS.fetch(record.state).include?(to)
+
+        unless TRANSITIONS.fetch(record.state).include?(to)
+          raise ArgumentError,
+                "subscription lifecycle transition is invalid"
+        end
 
         record.update!(state: to)
         record

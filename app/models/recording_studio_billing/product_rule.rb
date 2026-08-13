@@ -17,8 +17,22 @@ module RecordingStudioBilling
     commercial_reference :target_product_recording, type: "RecordingStudioBilling::Product"
 
     validates :rule_type, inclusion: { in: RULE_TYPES }
+    validate :target_product_is_present
     validate :conditions_are_supported
     validate :published_rule_is_immutable, on: :update
+
+    def self.valid_conditions?(conditions)
+      conditions.is_a?(Hash) &&
+        (conditions.keys.map(&:to_s) - CONDITION_KEYS).empty? &&
+        conditions.all? { |key, value| valid_condition_value?(key.to_s, value) }
+    end
+
+    def self.valid_condition_value?(key, value)
+      values = Array(value)
+      return false if values.empty? || values.any? { |item| !item.is_a?(String) || item.empty? }
+
+      key != "country_code" || values.all? { |country| country.match?(/\A[A-Z]{2}\z/) }
+    end
 
     private
 
@@ -29,23 +43,15 @@ module RecordingStudioBilling
     end
 
     def conditions_are_supported
-      unless supported_condition_keys?
-        errors.add(:conditions, "contains unsupported conditions")
-        return
-      end
-
-      return if conditions.values.all? { |value| supported_condition_value?(value) }
-
-      errors.add(:conditions, "values must be scalar values or arrays")
+      errors.add(:conditions, "are malformed") unless self.class.valid_conditions?(conditions)
     end
 
-    def supported_condition_keys?
-      conditions.is_a?(Hash) && (conditions.keys.map(&:to_s) - CONDITION_KEYS).empty?
-    end
+    def target_product_is_present
+      target = target_product_recording&.recordable
+      source_root_id = product_recording&.root_recording_id
+      return if target.is_a?(Product) && source_root_id && target.recording.root_recording_id == source_root_id
 
-    def supported_condition_value?(value)
-      value.is_a?(String) || value.is_a?(Integer) ||
-        (value.is_a?(Array) && value.all? { |item| item.is_a?(String) })
+      errors.add(:target_product_recording, "must reference a Product in the same catalogue root")
     end
   end
 end

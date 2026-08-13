@@ -7,6 +7,7 @@ require "rails/test_help"
 
 class ProviderTaxContractTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  parallelize(workers: 1)
 
   class BlockingTaxCalculator < RecordingStudioBilling::FakeTaxCalculator
     attr_reader :entered_calls
@@ -24,6 +25,27 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
       @release.pop
       super
     end
+  end
+
+  class NativeCheckoutAdapter
+    attr_reader :capabilities
+
+    def initialize(result)
+      @result = result
+      @capabilities = RecordingStudioBilling::ProviderCapabilities.new(
+        operations: %w[checkout], currencies: %w[USD], collection_methods: %w[automatic],
+        checkout_modes: %w[embedded], tax_modes: %w[provider], quantities: %w[fixed], composition: %w[single]
+      )
+    end
+
+    def call(**)
+      RecordingStudioBilling::AdapterResponse.new(
+        status: "success", provider_reference: "cs_native_tax_123", result: @result,
+        metadata: { "adapter" => "native_checkout" }, allow_authoritative_totals: true
+      )
+    end
+
+    def provider_reference_type(**) = "checkout.session"
   end
 
   setup do
@@ -135,20 +157,20 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     attributes = tax_request(root:, account:, manifest:)
 
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(client_payload: { tax_total: 1 }))
+      RecordingStudioBilling::TaxRequest.new(**attributes, client_payload: { tax_total: 1 })
     end
     assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(client_payload: { note: { token: "secret" } }))
+      RecordingStudioBilling::TaxRequest.new(**attributes, client_payload: { note: { token: "secret" } })
     end
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(subtotal_minor: 1_000.0))
+      RecordingStudioBilling::TaxRequest.new(**attributes, subtotal_minor: 1_000.0)
     end
     other_root, other_account, other_manifest = tax_authority
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(account_recording: other_account.recording))
+      RecordingStudioBilling::TaxRequest.new(**attributes, account_recording: other_account.recording)
     end
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(manifest: other_manifest))
+      RecordingStudioBilling::TaxRequest.new(**attributes, manifest: other_manifest)
     end
     refute_equal root.id, other_root.id
   end
@@ -159,16 +181,16 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
       currency: "USD", calculator_reference: "safe-reference", calculated_at: Time.current,
       request_fingerprint: "a" * 64
     }
-    exclusive = RecordingStudioBilling::TaxResponse.new(**common.merge(behavior: :exclusive, total_minor: 990))
-    inclusive = RecordingStudioBilling::TaxResponse.new(**common.merge(behavior: :inclusive, total_minor: 900))
+    exclusive = RecordingStudioBilling::TaxResponse.new(**common, behavior: :exclusive, total_minor: 990)
+    inclusive = RecordingStudioBilling::TaxResponse.new(**common, behavior: :inclusive, total_minor: 900)
 
     assert_equal 990, exclusive.total_minor
     assert_equal 900, inclusive.total_minor
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxResponse.new(**common.merge(behavior: :exclusive, total_minor: 900))
+      RecordingStudioBilling::TaxResponse.new(**common, behavior: :exclusive, total_minor: 900)
     end
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxResponse.new(**common.merge(behavior: :exclusive, total_minor: 990.0))
+      RecordingStudioBilling::TaxResponse.new(**common, behavior: :exclusive, total_minor: 990.0)
     end
   end
 
@@ -230,6 +252,121 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "PostgreSQL permits one verified native Checkout tax record and rejects forged terms" do
+    root, account, customer_manifest = tax_authority
+    provider = provider_authority(adapter_key: "native_checkout")
+    manifest = provider_manifest(provider)
+    calculated_at = Time.current.change(usec: 0)
+    result = {
+      "subtotal_minor" => 1_000, "discount_minor" => 0, "tax_minor" => 90, "total_minor" => 1_090,
+      "currency" => "USD", "payment_state" => "paid", "behavior" => "exclusive",
+      "breakdown" => [{ "category" => "provider", "amount_minor" => 90 }],
+      "calculator_reference" => "cs_native_tax_123", "calculated_at" => calculated_at.iso8601(6),
+      "lines" => [{ "checkout_intent_item_id" => "checkout-item", "manifest_digest" => manifest.manifest_digest,
+                    "currency" => "USD", "quantity" => 1, "unit_amount_minor" => 1_000,
+                    "subtotal_minor" => 1_000, "discount_minor" => 0, "tax_minor" => 90, "total_minor" => 1_090 }]
+    }
+    intent = RecordingStudioBilling::CheckoutIntent.create!(
+      root_recording: root, account_recording: account.recording, local_idempotency_key: SecureRandom.uuid,
+      request_fingerprint: "a" * 64, state: "pending_provider"
+    )
+    command = RecordingStudioBilling.create_financial_command(
+      root_recording: root, account_recording: account.recording,
+      command_type: "checkout", provider_account_recording: provider,
+      provider_adapter_key: "native_checkout",
+      local_idempotency_key: SecureRandom.uuid, commercial_manifest_digests: [manifest.manifest_digest],
+      request: { "checkout_intent_id" => intent.id, "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
+                 "tax" => { "enabled" => true, "mode" => "provider_native", "calculator_key" => "stripe_tax",
+                            "behavior" => "exclusive", "semantic_categories" => ["standard"],
+                            "location_requirements" => [] }, "checkout_items" => {} }
+    ).command
+    intent.update!(financial_command: command)
+    claim = RecordingStudioBilling::FinancialCommandClaim.call(command:, now: calculated_at)
+    attempt = claim.attempt
+    RecordingStudioBilling::FinancialCommand.transaction do
+      attempt.update!(state: "succeeded", completed_at: calculated_at,
+                      safe_metadata: { "adapter" => "native_checkout" })
+      command.update!(state: "succeeded", provider_reference: "cs_native_tax_123",
+                      normalized_result: result.merge("authority" => "verified_webhook"), claim_token: nil,
+                      claimed_at: nil, lease_expires_at: nil)
+    end
+    attributes = {
+      financial_command: command, root_recording: root, account_recording: account.recording,
+      commercial_manifest: manifest, supersedes: nil, revision_number: 1, calculator_key: "stripe_tax",
+      calculator_mode: "provider_calculation", manifest_digest: manifest.manifest_digest, transaction_type: "sale",
+      operation_reference: command.operation_id, request_fingerprint: command.request_fingerprint,
+      idempotency_key: command.provider_idempotency_key, subtotal_minor: 1_000, discount_minor: 0, tax_minor: 90,
+      total_minor: 1_090, currency: "USD", behavior: "exclusive", status: "success", breakdown: result.fetch("breakdown"),
+      calculator_reference: "cs_native_tax_123", calculated_at:, safe_metadata: command.attempts.sole.safe_metadata
+    }
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::TaxCalculation.create!(**attributes.merge(commercial_manifest: customer_manifest,
+                                                                         manifest_digest: customer_manifest.manifest_digest))
+    end
+    other_provider_manifest = provider_manifest(provider_authority(adapter_key: "native_checkout"))
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::TaxCalculation.create!(**attributes.merge(commercial_manifest: other_provider_manifest,
+                                                                         manifest_digest: other_provider_manifest.manifest_digest))
+    end
+
+    calculation = RecordingStudioBilling::TaxCalculation.create!(**attributes)
+
+    assert_equal "provider_calculation", calculation.calculator_mode
+    assert_equal calculation,
+                 RecordingStudioBilling::TaxCalculation.find_by(financial_command: command, revision_number: 1)
+    assert_raises(ActiveRecord::RecordNotUnique) { RecordingStudioBilling::TaxCalculation.create!(**attributes) }
+    assert_raises(ActiveRecord::StatementInvalid) do
+      forged = attributes.except(:financial_command, :root_recording, :account_recording, :commercial_manifest, :supersedes).merge(
+        id: SecureRandom.uuid, financial_command_id: command.id, root_recording_id: root.id,
+        account_recording_id: account.recording.id, commercial_manifest_id: manifest.id,
+        supersedes_id: nil, tax_minor: 0, created_at: Time.current, updated_at: Time.current
+      )
+      RecordingStudioBilling::TaxCalculation.insert_all!([forged])
+    end
+  end
+
+  test "Stripe provider tax persists only normalized minor units and mismatches require reconciliation" do
+    root, account, manifest = tax_authority
+    captured = nil
+    calculations = Object.new
+    calculations.define_singleton_method(:create) do |params, _options|
+      captured = params
+      { "id" => "taxcalc_123", "created" => 1_700_000_000, "tax_amount_exclusive" => 90,
+        "amount_total" => 990, "tax_breakdown" => [{ "amount" => 90 }] }
+    end
+    client = Struct.new(:v1).new(Struct.new(:tax).new(Struct.new(:calculations).new(calculations)))
+    calculator = RecordingStudioBilling::StripeAdapter::TaxCalculator.new(
+      credential_resolver: -> { "sk_test" }, tax_code_resolver: ->(category) { "txcd_#{category}" },
+      client_factory: ->(_secret) { client }
+    )
+    enable_calculator(:stripe_tax, calculator)
+
+    result = RecordingStudioBilling.calculate_tax(calculator_key: :stripe_tax,
+                                                  **tax_request(root:, account:, manifest:))
+    calculation = result.calculation
+
+    assert result.final?
+    assert_equal "external_calculation", calculation.calculator_mode
+    assert_equal 90, calculation.tax_minor
+    assert_equal 990, calculation.total_minor
+    assert_equal 900, captured.fetch("line_items").sole.fetch("amount")
+    refute_match(/sk_test|tax_amount_exclusive|amount_total/, calculation.safe_metadata.to_s)
+
+    calculations.define_singleton_method(:create) do |_params, _options|
+      { "id" => "taxcalc_mismatch", "created" => 1_700_000_000, "tax_amount_exclusive" => 90,
+        "amount_total" => 1_000, "tax_breakdown" => [{ "amount" => 90 }] }
+    end
+    mismatch = RecordingStudioBilling.calculate_tax(
+      calculator_key: :stripe_tax, **tax_request(root:, account:, manifest:).merge(idempotency_key: SecureRandom.uuid)
+    )
+
+    assert_equal :unsupported_tax_calculation, mismatch.status
+    assert_nil mismatch.calculation
+    assert_equal "requires_reconciliation", RecordingStudioBilling::FinancialCommand.order(:created_at).last.state
+    assert_equal 1, RecordingStudioBilling::TaxCalculation.count
+  end
+
   test "mismatched calculator results remain uncertain and are never tax history" do
     root, account, manifest = tax_authority
 
@@ -278,7 +415,7 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     assert_equal 0, beta.calls
     assert_raises(ArgumentError) do
       RecordingStudioBilling.create_financial_command(
-        **attributes.merge(local_idempotency_key: SecureRandom.uuid, provider_adapter_key: "beta")
+        **attributes, local_idempotency_key: SecureRandom.uuid, provider_adapter_key: "beta"
       )
     end
 
@@ -357,7 +494,7 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     root, account, manifest = tax_authority
     attributes = tax_request(root:, account:, manifest:)
     assert_raises(ArgumentError) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(tax_categories: %i[reduced standard]))
+      RecordingStudioBilling::TaxRequest.new(**attributes, tax_categories: %i[reduced standard])
     end
 
     fixed_time = Time.zone.parse("2026-08-11 12:00:00 UTC")
@@ -381,7 +518,7 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
       end
     end
     assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
-      RecordingStudioBilling::TaxRequest.new(**attributes.merge(operation_reference: "https://example.test/raw"))
+      RecordingStudioBilling::TaxRequest.new(**attributes, operation_reference: "https://example.test/raw")
     end
 
     calculator = RecordingStudioBilling::FakeTaxCalculator.new(outcome: :exclusive)
@@ -444,6 +581,22 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     [root, account, manifest]
   end
 
+  def provider_manifest(provider_recording)
+    root = provider_recording.root_recording
+    data = { "approved_amount_minor" => 1_000 }
+    snapshots = [{ "recording_id" => provider_recording.id }]
+    references = { "provider" => { "recording_id" => provider_recording.id } }
+    envelope = {
+      "schema_version" => "v1", "resolver_version" => "v1", "root_recording_id" => root.id,
+      "canonical_data" => data, "recording_snapshots" => snapshots, "snapshot_references" => references
+    }
+    RecordingStudioBilling::CommercialManifest.create!(
+      root_recording_id: root.id, schema_version: "v1", resolver_version: "v1", canonical_data: data,
+      recording_snapshots: snapshots, snapshot_references: references,
+      manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope), used_at: Time.current
+    )
+  end
+
   def tax_request(root:, account:, manifest:)
     {
       root_recording: root, account_recording: account.recording, manifest:, transaction_type: :sale,
@@ -462,19 +615,6 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
   end
 
   def clear_data!
-    connection = ActiveRecord::Base.connection
-    tables = [
-      RecordingStudioBilling::TaxCalculation.table_name,
-      RecordingStudioBilling::FinancialCommand.table_name,
-      RecordingStudioBilling::CommercialManifest.table_name
-    ]
-    connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
-    RecordingStudio::Event.unscoped.delete_all
-    RecordingStudioBilling::ProviderAccount.delete_all
-    RecordingStudioBilling::BillingAdmin.delete_all
-    RecordingStudioBilling::Account.delete_all
-    RecordingStudio::Recording.unscoped.delete_all
-    Workspace.delete_all
-    AdminRoot.delete_all
+    BillingTestDatabaseCleanup.clear!
   end
 end

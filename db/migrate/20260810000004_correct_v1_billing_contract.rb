@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/ClassLength
 class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
   COMMERCIAL_TABLES = %i[
     recording_studio_billing_provider_accounts
@@ -30,7 +29,6 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
     correct_rates
     correct_recording_hierarchy
   end
-  # rubocop:enable Metrics/ClassLength
 
   def down
     raise ActiveRecord::IrreversibleMigration,
@@ -41,7 +39,6 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
 
   # The migration is intentionally explicit so each destructive V1 correction
   # and its upgrade data transformation is auditable.
-  # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
   def correct_provider_accounts
     rename_column :recording_studio_billing_provider_accounts, :provider, :adapter_key
     add_column :recording_studio_billing_provider_accounts, :name, :string
@@ -263,5 +260,4 @@ class CorrectV1BillingContract < ActiveRecord::Migration[8.1]
       execute "UPDATE #{table} SET #{column} = #{connection.quote(to)} WHERE #{column} = #{connection.quote(from)}"
     end
   end
-  # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 end

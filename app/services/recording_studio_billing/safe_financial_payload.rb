@@ -9,7 +9,7 @@ module RecordingStudioBilling
     UNSAFE_PROVIDER_KEY = /provider[_-]?(url|uri|id|identifier|account[_-]?id|customer[_-]?id|response|payload|body)|raw[_-]?(provider|response|payload|body)/i
     TAX_PII_KEY = /(?:\A|[_-])(?:tax|vat)[_-]?(?:id|identifier|number)\z|(?:\A|[_-])(?:email|phone|address|postal[_-]?code|ip[_-]?address)\z/i
     URL_KEY = /(?:\A|[_-])(?:url|uri)\z/i
-    URL_VALUE = /\A\s*(?:https?|ftp):\/\//i
+    URL_VALUE = %r{\A\s*(?:https?|ftp)://}i
     UNTRUSTED_TOTAL_KEY = /\A(?!(?:approved|authorized)_)(?:client[_-]?)?(?:grand[_-]?)?(?:sub)?total(?:_amount)?(?:_minor)?\z/i
 
     class << self
@@ -43,12 +43,12 @@ module RecordingStudioBilling
         case value
         when Hash
           value.each do |key, nested|
-            if [SENSITIVE_KEY, PAYMENT_CREDENTIAL_KEY, UNSAFE_PROVIDER_KEY, TAX_PII_KEY, URL_KEY].any? { |pattern| key.match?(pattern) }
+            if [SENSITIVE_KEY, PAYMENT_CREDENTIAL_KEY, UNSAFE_PROVIDER_KEY, TAX_PII_KEY, URL_KEY].any? do |pattern|
+              key.match?(pattern)
+            end
               raise UnsafeValue, "must not contain credentials, signatures, or raw provider data"
             end
-            if !allow_authoritative_totals && key.match?(UNTRUSTED_TOTAL_KEY)
-              raise UnsafeValue, "must not contain untrusted financial totals"
-            end
+            raise UnsafeValue, "must not contain untrusted financial totals" if !allow_authoritative_totals && key.match?(UNTRUSTED_TOTAL_KEY)
 
             reject_sensitive_keys!(nested, allow_authoritative_totals:)
           end

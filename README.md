@@ -1,11 +1,81 @@
 # RecordingStudioBilling
 
-`recording_studio_billing` is a Rails mountable engine that establishes the
-provider-neutral billing graph for Recording Studio. No provider is selected by
-default, and this release deliberately contains no provider SDK, checkout,
-charges, invoices, subscriptions, webhooks, or other payment behavior.
+`recording_studio_billing` is a Rails mountable, provider-neutral billing engine
+for Recording Studio. It owns the commercial catalogue, durable financial
+commands, checkout intents, subscription and entitlement projections, usage
+rating, tax calculations, and a mounted customer billing surface. Stripe is the
+built-in provider key; hosts keep provider credentials in their own credentials
+or secret manager.
 
-## Phase 1 foundation
+## Customer billing surface
+
+Mount the engine in the host application and include Root Switchable controller
+support in the host application controller:
+
+```ruby
+mount RecordingStudioBilling::Engine, at: "/billing"
+```
+
+The customer area provides Overview, Plan, Addons, Usage & Credits, Invoices,
+Payments, and Billing Settings routes. Every request uses the selected root;
+an explicit mismatched root ID and an inaccessible root both return `404`.
+Checkout return pages show the durable intent state only. They never fulfil an
+intent: completion remains provider-webhook and reconciliation work.
+
+### Customer checkout authority
+
+The browser may submit commercial billing-option identifiers, quantities, a
+country preference, a currency preference, and a checkout presentation
+preference. The engine resolves the catalogue, Market, money, tax treatment,
+provider operation, and final terms on the server. A client must never set or
+be trusted for prices or other money values, tax, provider references or URLs,
+Markets, discounts, or totals.
+
+The mounted checkout-selection endpoint is `POST /billing/billing/checkout`.
+It accepts an opaque `checkout_request_key`, optional `country_code`,
+`currency_code`, and `presentation`, plus one or more items containing only
+`billing_option_recording_id` and optional `quantity`. Invalid or
+client-authoritative fields are rejected. Checkout completion is never inferred
+from a browser return; it is projected only after provider-authoritative
+reconciliation.
+
+Invoice downloads are root scoped and set `Cache-Control: private, no-store`.
+Applications must supply a trusted invoice document stream or a short-lived
+provider redirect through their adapter integration; never expose provider
+credentials or long-lived invoice URLs to the browser.
+
+### Billing UI extension contracts
+
+The customer UI uses namespaced ViewComponents and presenters for overview,
+plans, add-ons, usage, invoices, payments, checkout, and navigation. Hosts can
+replace a page presenter, add navigation items or page content, customize copy,
+set a support link, and replace a provider-specific component without changing
+engine templates:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.billing_presenter_override(:usage, HostBilling::UsagePresenter)
+  config.billing_provider_component(:checkout, HostBilling::CheckoutComponent)
+  config.billing_copy = { usage_title: "Metering", support_label: "Contact support" }
+  config.support_url = "https://support.example.test/billing"
+
+  config.hooks.billing_navigation(priority: 150) do |presenter|
+    { label: "Receipts", href: presenter.root_recording.receipts_path, icon: :document }
+  end
+  config.hooks.billing_page_content(:usage) do |presenter|
+    HostBilling::UsageNoticeComponent.new(presenter:)
+  end
+end
+```
+
+Navigation hooks return `{ label:, href:, icon: }` hashes and page-content
+hooks return a renderable ViewComponent or safe view content. Lower priorities
+run first. Provider components receive `presenter:`. Presenter overrides may be
+classes or callables that receive the default presenter class and return a
+replacement class. Hooks run only during rendering; they must not make billing
+state changes.
+
+## Recording Studio integration
 
 - `Workspace` is a Recording Studio root that includes
   `RecordingStudioBilling::Billable`, enabling `:billing`.
@@ -15,7 +85,9 @@ charges, invoices, subscriptions, webhooks, or other payment behavior.
 - `RecordingStudioBilling::BillingAdmin` is the `:billing_admin` child
   recordable.
 - The admin support concern uses the public
-  `RecordingStudioAdmin::AllowsAdminSections` API to register `:billing`.
+  `RecordingStudioAdmin::AllowsAdminSections` API to register the site-scoped
+  `:billing_commercial`, `:billing_financial`, and `:billing_operations`
+  sections.
 
 The capability metadata uses Recording Studio's public
 `register_capability`, `enable_capability`, and `recording_studio_recordable`
@@ -25,8 +97,8 @@ billing-admin-enabled root.
 
 ## V1 commercial catalogue contract
 
-This engine publishes validated, versioned commercial catalogue manifests only;
-it does not create provider objects or process payments. `ProviderAccount`, `Market`,
+This engine publishes validated, versioned commercial catalogue manifests and
+uses them to create durable provider commands. `ProviderAccount`, `Market`,
 `Product`, `ProductRule`, `PlanUpdate`, `UsageUnit`, `Meter`, `RateCard`, and
 `CostCard` are direct `BillingAdmin` recording children. Their semantic links
 (for example, a product's provider account) remain stable
@@ -142,6 +214,15 @@ returns a supported flag, stable reason, safe explanation, and constraints.
 Pass the same requirements as `capability_requirements:` to the financial
 executor to reject unsupported work before adapter invocation.
 
+Hosts must select an adapter whose declared capabilities support each requested
+operation. In particular, the built-in Stripe adapter supports checkout,
+subscription changes, refunds, and adjustments, but does **not** support
+`usage_settlement` or `usage_correction`: both capability evaluation and
+adapter execution return an unsupported result without sending a Stripe
+request. Hosts that need provider usage settlement or corrections must register
+an adapter that supports those operations, or safely handle the normalized
+unsupported outcome and use a supported billing process.
+
 Tax calculators declare `TaxCalculatorCapabilities`, including
 `external_calculation` or `provider_calculation` mode, transactions, currencies,
 Markets, inclusive/exclusive/provider-default behavior, data capabilities, and
@@ -184,6 +265,11 @@ kind, and monetary rate fields. Logical price identities and versions are
 validated against current Recording Studio revisions while immutable physical
 snapshots remain available as commercial history.
 
+This pre-release repository supports clean installations for current schema
+work. In particular, webhook receipt scoping is consolidated into the owning
+create migrations and does not provide an upgrade path from intermediate
+development schemas.
+
 ## Installation
 
 Add the gem and its Recording Studio dependencies, then run:
@@ -207,12 +293,92 @@ bin/rails db:schema:dump
 Stripe is the default provider key and its built-in adapter auto-registers at
 boot. Configure host credentials before executing real Stripe work; without
 them, execution returns the normalized provider-neutral `provider_unavailable`
-result. No checkout, subscriptions, invoices, webhooks, payment credential
-handling, or raw card data processing is provided by this foundation.
+result. The built-in adapter supports embedded and redirect Checkout,
+provider-priced subscription changes, refunds, invoice credit-note adjustments,
+provider-state retrieval for reconciliation, Customer Portal sessions, invoice
+retrieval, and the existing Stripe Tax calculator contract. It does not support
+meter-event usage settlement or usage correction. Every mutation uses the
+durable command idempotency key and stores only opaque provider references.
+
+The adapter intentionally does not infer Stripe product, price, subscription,
+payment-intent, or invoice identities from local records. Hosts supply those
+opaque provider references in the approved server-side command/change-set.
+Unsupported shapes return `invalid` or `unsupported`; unrecognized remote
+states remain `unknown` and require reconciliation.
+
+Raw card data never reaches Rails; browser callbacks never fulfil an Intent.
+Embedded Checkout requires `https://js.stripe.com`, Stripe API connections, and
+Stripe checkout frames, which the engine adds to Rails CSP. Customer Portal
+return URLs must have a host-configured trusted origin. Invoice PDFs are fetched
+only from Stripe hosts, reject redirects/non-PDF responses, use bounded
+timeouts, and stream with a 10 MiB running limit. Portal configuration must be
+restricted to payment method, address/tax-ID, and invoice-history workflows;
+the portal is not an authority for plans, quantities, promotions, cancellation,
+or resumption changes.
+
+### Provider portal integration
+
+The engine's `POST /billing/billing/portal` route uses the host's
+`billing_portal_context_resolver`. Configure it to return only provider-
+authoritative adapter and customer context. The resolver is called with
+`root_recording:`, `account_recording:`, and the account's `subscriptions:`;
+it must return `adapter_key:` and `customer_reference:`, with optional
+provider-specific `options:`. The controller discards all other values and
+requires the selected adapter to implement `portal_session`.
+
+Do not derive portal customer identifiers from browser input or local guesses.
+For Stripe, resolve the authoritative Stripe customer reference and configure a
+trusted return origin; a Stripe portal configuration ID may be supplied through
+the resolver options. Restrict the provider portal to payment methods,
+address/tax-ID collection, and invoice history. Keep product, quantity,
+discount, cancellation, resumption, and other commercial changes in host-owned
+billing workflows.
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.stripe_trusted_origins = ["https://app.example.test"]
+  config.billing_portal_context_resolver = lambda do |root_recording:, account_recording:, subscriptions:|
+    {
+      adapter_key: :stripe,
+      customer_reference: HostBilling.customer_reference_for(account_recording),
+      options: { configuration_id: Rails.application.credentials.dig(:billing, :stripe_portal_configuration_id) }
+    }
+  end
+end
+```
+
+### Webhook integration boundary
+
+`RecordingStudioWebhooks` owns the public HTTP webhook boundary: receiving the
+request, verifying the provider signature while the raw body is available,
+persisting the receipt, deduplicating it, and dispatching verified context.
+Billing registers the `recording_studio_billing.provider_event.v1` action and
+consumes that verified dispatch context. Billing then verifies the normalized
+provider object identity, reconciles provider-authoritative command state, and
+projects a completed checkout only when reconciliation succeeds.
+
+Configure the Webhooks endpoint with the provider name and these non-secret
+endpoint identity fields:
+
+```ruby
+{
+  "billing_provider_adapter_key" => "stripe",
+  "billing_provider_account_recording_id" => "<provider-account-recording-uuid>",
+  "billing_environment" => "production"
+}
+```
+
+The endpoint provider name must match `billing_provider_adapter_key`. Keep
+signature credentials and other secrets in the host's credential or secret
+manager configuration; do not place them in endpoint identity, provider-account
+metadata, or engine records. Applications must not call Billing's webhook
+reconciliation service from a browser callback or fabricate a receipt.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
   config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
+  config.support_url = "https://support.example.test/billing"
+  config.billing_copy = { settings_notice: "Contact support to change payment methods." }
 end
 ```
 
@@ -250,8 +416,21 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 ## Dummy app
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
-Codespaces, and idempotent seeds. It creates exactly one Workspace root, one
-AdminRoot, one billing Account, and one BillingAdmin record.
+Codespaces, and idempotent seeds. Its credential-free demonstration catalogue
+includes fake-provider checkout prices across US, UK, Italy, Germany, and a
+global fallback, plus a metered API-call product with rates, costs, and US
+overage pricing. It does not contact Stripe or any other network provider.
+
+The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage &
+Credits, Invoices, Payments, Billing Settings, and Checkout presentation.
+Subscription cancellation and resumption routes provide integration points, but
+they are not documentation of a complete host customer-subscription-change
+workflow. Admin-action, tax-demo, and lifecycle flows are likewise
+host-extensible integration points unless the host implements and authorizes
+them. Recording Studio Admin registers the site-scoped Commercial Catalogue,
+Financial Records, and Billing Operations areas. Hosts must apply their own
+Accessible authorization policy for customer and site operations before
+rendering or executing actions.
 
 ```bash
 cd test/dummy
@@ -263,8 +442,17 @@ Sign in with `admin@admin.com` / `Password`.
 
 ## Validation
 
-Run the complete commercial and dummy-app suite from the repository root:
+Run validation from the repository root:
 
 ```bash
+bundle exec rake test
 bundle exec rake test:all
 ```
+
+`bundle exec rake test` prepares the dummy app's isolated `app_test` database
+and runs the root engine suite. `bundle exec rake test:all` also rebuilds the
+dummy test database, applies migrations, dumps the schema, loads the idempotent
+seed data, and runs the dummy app integration coverage plus the commercial
+contract tests. The dummy application requires PostgreSQL and UUID support; its
+credential-free fake-provider examples intentionally do not contact Stripe or
+another network provider.

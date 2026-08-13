@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
   class MarketResolver
@@ -84,22 +84,20 @@ module RecordingStudioBilling
     end
 
     def score(market, country)
-      return [3, market.specificity, market.priority] if Array(market.country_codes).include?(country)
+      return [4, market.specificity, market.priority] if Array(market.country_codes).include?(country)
 
-      group_sizes = market.country_groups.to_h.values.filter_map do |countries|
-        Array(countries).include?(country) ? Array(countries).size : nil
+      return [3, market.specificity, market.priority] if market.country_groups.to_h.values.any? do |countries|
+        Array(countries).include?(country)
       end
-      return [2, market.specificity, -group_sizes.min, market.priority] if group_sizes.any?
-      return [1, market.specificity, market.priority] if market.fallback?
+      return [2, market.specificity, market.priority] if Array(market.regional_country_codes).include?(country)
+      return [1, market.specificity, market.priority] if market.global_fallback
 
       nil
     end
 
     def select_currency(market, explicit, account, billing_option)
       permitted = Array(market.allowed_currency_codes)
-      if explicit.present? && !permitted.include?(explicit.to_s.upcase)
-        raise ArgumentError, "explicit currency is not permitted by market #{market.key}"
-      end
+      raise ArgumentError, "explicit currency is not permitted by market #{market.key}" if explicit.present? && !permitted.include?(explicit.to_s.upcase)
 
       [explicit, account, market.default_currency_code,
        billing_option].compact.map(&:to_s).map(&:upcase).find do |currency|

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Metrics/AbcSize, Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
   class CommercialManifestResolver
@@ -102,9 +102,7 @@ module RecordingStudioBilling
         raise ArgumentError,
               "billing option is not owned by product"
       end
-      unless billing_option.pricing_model == price.pricing_model
-        raise ArgumentError, "billing option and price pricing models do not agree"
-      end
+      raise ArgumentError, "billing option and price pricing models do not agree" unless billing_option.pricing_model == price.pricing_model
 
       validate_quantity!
       overage_prices.each do |overage_price|
@@ -126,12 +124,8 @@ module RecordingStudioBilling
         raise ArgumentError,
               "quantity must be a positive integer"
       end
-      if billing_option.quantity_mode == "fixed" && quantity.to_i != billing_option.default_quantity.to_i
-        raise ArgumentError, "fixed quantity billing options require the default quantity"
-      end
-      if billing_option.minimum_quantity && quantity.to_i < billing_option.minimum_quantity
-        raise ArgumentError, "quantity is below the billing option minimum"
-      end
+      raise ArgumentError, "fixed quantity billing options require the default quantity" if billing_option.quantity_mode == "fixed" && quantity.to_i != billing_option.default_quantity.to_i
+      raise ArgumentError, "quantity is below the billing option minimum" if billing_option.minimum_quantity && quantity.to_i < billing_option.minimum_quantity
       return unless billing_option.maximum_quantity && quantity.to_i > billing_option.maximum_quantity
 
       raise ArgumentError, "quantity exceeds the billing option maximum"
@@ -148,19 +142,23 @@ module RecordingStudioBilling
          trusted_context["market_recording_id"] != market.recording.id
         raise ArgumentError, "trusted market does not match selected market"
       end
-      if trusted_context["currency_code"].present? && trusted_context["currency_code"] != currency_code
-        raise ArgumentError, "trusted currency does not match selected currency"
-      end
+      raise ArgumentError, "trusted currency does not match selected currency" if trusted_context["currency_code"].present? && trusted_context["currency_code"] != currency_code
       return unless trusted_context["quantity"].present? && trusted_context["quantity"].to_i != quantity.to_i
 
       raise ArgumentError, "trusted quantity does not match selected quantity"
     end
 
     def market_covers?(country)
+      market_coverage_tier(country).present?
+    end
+
+    def market_coverage_tier(country)
       normalized = country.to_s.upcase
-      Array(market.country_codes).include?(normalized) ||
-        market.country_groups.to_h.values.any? { |countries| Array(countries).include?(normalized) } ||
-        market.fallback?
+      return "exact" if Array(market.country_codes).include?(normalized)
+      return "group" if market.country_groups.to_h.values.any? { |countries| Array(countries).include?(normalized) }
+      return "regional" if Array(market.regional_country_codes).include?(normalized)
+
+      "global" if market.global_fallback?
     end
 
     def manifest_body
@@ -178,8 +176,8 @@ module RecordingStudioBilling
                                     checkout_policy tax_policy
                                   ]),
         "market" => terms(market, %w[
-                            key country_codes country_groups allowed_currency_codes default_currency_code priority
-                            specificity fallback
+                            key country_codes country_groups regional_country_codes global_fallback
+                            allowed_currency_codes default_currency_code priority specificity
                             ppa_policy rounding_policy tax_presentation_policy verification_policy
                           ]),
         "price" => terms(price, %w[
@@ -196,20 +194,22 @@ module RecordingStudioBilling
           terms(overage_price, %w[
                   key amount_minor currency_code currency_exponent pricing_model package_size version scope
                   usage_unit_recording_id
-                ])
+                ]).merge("consumption_policy" => overage_consumption_policy(overage_price))
         end,
         "usage_rating" => usage_rating_terms,
         "usage_settlement" => {
           "provider_account_recording_id" => product.provider_account_recording_id,
           "provider_adapter_key" => product.provider_account_recording.recordable.adapter_key,
           "market_recording_id" => market.recording.id,
-          "market_country_codes" => market.country_codes,
+          "resolved_country_code" => trusted_context["country_code"],
+          "resolution_tier" => market_coverage_tier(trusted_context["country_code"]),
+          "market_geography" => terms(market, %w[country_codes country_groups regional_country_codes global_fallback]),
           "collection_method" => billing_option.collection_method,
           "operation" => "collect_usage"
         },
         "tax_policy" => tax_policy_snapshot,
-        "discount_policy" => { "enabled" => false, "source" => "none" },
-        "rounding" => { "policy" => market.rounding_policy },
+        "discount_policy" => discount_policy_snapshot,
+        "rounding" => { "policy_version" => "v1", "policy" => market.rounding_policy },
         "consumption_policy" => consumption_policy,
         "trusted_context" => trusted_context.slice("country_code", "market_recording_id", "currency_code", "quantity")
       }
@@ -257,7 +257,7 @@ module RecordingStudioBilling
     def validate_injected_plan_updates!(plan_updates)
       return if plan_updates.all? do |plan_update|
         plan_update.is_a?(PlanUpdate) &&
-          plan_update.billing_option_recording_id == billing_option.recording.id
+        plan_update.billing_option_recording_id == billing_option.recording.id
       end
 
       raise ArgumentError, "injected plan updates must belong to the selected billing option"
@@ -267,6 +267,7 @@ module RecordingStudioBilling
       policy = RecordingStudioBilling.configuration.tax_policy
       unless policy.fetch(:enabled)
         return {
+          "policy_version" => "v1",
           "enabled" => false,
           "calculator_key" => nil,
           "presentation" => "provider_default",
@@ -277,6 +278,7 @@ module RecordingStudioBilling
       raise ArgumentError, "an enabled tax policy requires a calculator key" if policy.fetch(:calculator_key).blank?
 
       {
+        "policy_version" => "v1",
         "enabled" => true,
         "calculator_key" => policy.fetch(:calculator_key),
         "presentation" => policy.fetch(:presentation),
@@ -285,35 +287,108 @@ module RecordingStudioBilling
       }
     end
 
+    def discount_policy_snapshot
+      RecordingStudioBilling.configuration.discount_policy.stringify_keys
+    end
+
     def consumption_policy
       {
-        "pricing_model" => price.pricing_model,
+        "policy_version" => "v1",
         "overage_enabled" => overage_prices.present?,
-        "overage_usage_unit_recording_ids" => overage_prices.map(&:usage_unit_recording_id)
+        "overage_policies" => overage_prices.to_h do |overage_price|
+          [overage_price.usage_unit_recording_id, overage_consumption_policy(overage_price)]
+        end
+      }
+    end
+
+    def overage_consumption_policy(overage_price)
+      {
+        "policy_version" => "v1",
+        "usage_unit_recording_id" => overage_price.usage_unit_recording_id,
+        "pricing_model" => overage_price.pricing_model,
+        "unit_size" => overage_price.package_size || 1,
+        "quantity_behavior" => overage_price.pricing_model == "package" ? "round_up" : "proportional",
+        "minimum_billing_increment" => overage_price.package_size || 1
       }
     end
 
     def usage_rating_terms
-      records = usage_rating_records
+      selections = rating_selections
       {
-        "meters" => records.grep(Meter).to_h do |meter|
+        "policy_version" => "v1",
+        "selections" => selections.to_h do |selection|
+          [selection.fetch(:overage).recording.id, {
+            "usage_unit_recording_id" => selection.fetch(:overage).usage_unit_recording_id,
+            "market_recording_id" => market.recording.id,
+            "currency_code" => currency_code,
+            "scope" => Price::V1_SCOPE,
+            "meter_recording_id" => selection.fetch(:meter).recording.id,
+            "rate_recording_id" => selection.fetch(:rate).recording.id,
+            "cost_rate_recording_id" => selection[:cost_rate]&.recording&.id,
+            "customer_price_recording_id" => selection.fetch(:overage).recording.id
+          }]
+        end,
+        "meters" => selections.to_h do |selection|
+          meter = selection.fetch(:meter)
           [meter.recording.id, terms(meter, %w[key aggregation usage_unit_recording_id]).merge(
             "meter_recording_id" => meter.recording.id,
             "usage_key" => meter.key
           )]
         end,
-        "rate_cards" => records.grep(RateCard).to_h { |card| [card.recording.id, terms(card, %w[key])] },
-        "rates" => records.grep(Rate).to_h do |rate|
-          [rate.recording.id, terms(rate, %w[key rate_card_recording_id usage_unit_recording_id conversion_numerator conversion_denominator conversion_decimal]).merge("rate_recording_id" => rate.recording.id)]
+        "rate_cards" => selections.map do |selection|
+          selection.fetch(:rate).rate_card_recording.recordable
+        end.uniq.to_h { |card| [card.recording.id, terms(card, %w[key])] },
+        "rates" => selections.to_h do |selection|
+          rate = selection.fetch(:rate)
+          [rate.recording.id,
+           terms(rate,
+                 %w[key rate_card_recording_id usage_unit_recording_id conversion_numerator conversion_denominator
+                    conversion_decimal]).merge("rate_recording_id" => rate.recording.id)]
         end,
-        "cost_cards" => records.grep(CostCard).to_h { |card| [card.recording.id, terms(card, %w[key])] },
-        "cost_rates" => records.grep(CostRate).to_h do |rate|
-          [rate.recording.id, terms(rate, %w[key cost_card_recording_id usage_unit_recording_id amount_minor currency_code currency_exponent]).merge("cost_rate_recording_id" => rate.recording.id)]
+        "cost_cards" => selections.filter_map do |selection|
+          selection[:cost_rate]&.cost_card_recording&.recordable
+        end.uniq.to_h do |card|
+          [card.recording.id,
+           terms(card, %w[key])]
+        end,
+        "cost_rates" => selections.filter_map { |selection| selection[:cost_rate] }.to_h do |rate|
+          [rate.recording.id,
+           terms(rate,
+                 %w[key cost_card_recording_id usage_unit_recording_id amount_minor currency_code
+                    currency_exponent]).merge("cost_rate_recording_id" => rate.recording.id)]
         end,
         "customer_rates" => overage_prices.to_h do |price|
-          [price.recording.id, terms(price, %w[key usage_unit_recording_id amount_minor currency_code currency_exponent pricing_model package_size version scope]).merge("customer_price_recording_id" => price.recording.id)]
+          [price.recording.id,
+           terms(price,
+                 %w[key usage_unit_recording_id amount_minor currency_code currency_exponent pricing_model package_size version
+                    scope]).merge("customer_price_recording_id" => price.recording.id)]
         end
       }
+    end
+
+    def rating_selections
+      @rating_selections ||= overage_prices.map do |overage|
+        unit_id = overage.usage_unit_recording_id
+        meters = applicable_rating_records(Meter, unit_id)
+        rates = applicable_rating_records(Rate, unit_id).select do |rate|
+          rate.rate_card_recording.recordable.provider_account_recording_id == product.provider_account_recording_id
+        end
+        costs = applicable_rating_records(CostRate, unit_id).select do |rate|
+          rate.currency_code == currency_code &&
+            rate.cost_card_recording.recordable.provider_account_recording_id == product.provider_account_recording_id
+        end
+        raise ArgumentError, "exactly one applicable meter is required" unless meters.one?
+        raise ArgumentError, "exactly one applicable conversion rate is required" unless rates.one?
+        raise ArgumentError, "ambiguous applicable cost rate" if costs.many?
+
+        { overage:, meter: meters.first, rate: rates.first, cost_rate: costs.first }
+      end
+    end
+
+    def applicable_rating_records(klass, usage_unit_id)
+      scope = klass.with_current_recording.where(usage_unit_recording_id: usage_unit_id)
+      scope = publication_candidate ? scope.where.not(state: "retired") : scope.where(state: "published")
+      scope.order(:id).to_a
     end
 
     def terms(record, keys)
@@ -374,18 +449,12 @@ module RecordingStudioBilling
     end
 
     def usage_rating_records
-      @usage_rating_records ||= begin
-        unit_ids = overage_prices.map(&:usage_unit_recording_id).compact.uniq
-        state = publication_candidate ? Meter.with_current_recording.where.not(state: "retired") : Meter.with_current_recording.where(state: "published")
-        meters = state.where(usage_unit_recording_id: unit_ids).order(:id).to_a
-        rates_scope = publication_candidate ? Rate.with_current_recording.where.not(state: "retired") : Rate.with_current_recording.where(state: "published")
-        rates = rates_scope.where(usage_unit_recording_id: unit_ids).order(:id).to_a
-        cost_rates_scope = publication_candidate ? CostRate.with_current_recording.where.not(state: "retired") : CostRate.with_current_recording.where(state: "published")
-        cost_rates = cost_rates_scope.where(usage_unit_recording_id: unit_ids).order(:id).to_a
-        rate_cards = RateCard.with_current_recording.where(recording_studio_recordings: { id: rates.map(&:rate_card_recording_id) }).order(:id).to_a
-        cost_cards = CostCard.with_current_recording.where(recording_studio_recordings: { id: cost_rates.map(&:cost_card_recording_id) }).order(:id).to_a
-        meters + rates + cost_rates + rate_cards + cost_cards
-      end
+      @usage_rating_records ||= rating_selections.flat_map do |selection|
+        rate = selection.fetch(:rate)
+        cost_rate = selection[:cost_rate]
+        [selection.fetch(:meter), rate, rate.rate_card_recording.recordable,
+         cost_rate, cost_rate&.cost_card_recording&.recordable]
+      end.compact.uniq
     end
 
     def validate_catalogue_roots!

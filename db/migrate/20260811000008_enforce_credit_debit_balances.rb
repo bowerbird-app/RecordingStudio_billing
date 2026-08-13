@@ -13,20 +13,20 @@ class EnforceCreditDebitBalances < ActiveRecord::Migration[8.1]
 
   def credit_ledger_trigger(include_balance_check:)
     balance_check = if include_balance_check
-      <<~SQL
-        PERFORM pg_advisory_xact_lock(hashtextextended(
-          'recording-studio-billing:credits:' || NEW.root_recording_id::text || ':' || NEW.account_recording_id::text || ':' || NEW.product_recording_id::text,
-          0
-        ));
-        IF COALESCE((
-          SELECT SUM(amount) FROM recording_studio_billing_credit_ledger_entries
-          WHERE root_recording_id = NEW.root_recording_id AND account_recording_id = NEW.account_recording_id
-            AND product_recording_id = NEW.product_recording_id
-        ), 0) + NEW.amount < 0 THEN
-          RAISE EXCEPTION 'credit debit would make the balance negative';
-        END IF;
-      SQL
-    end
+                      <<~SQL
+                        PERFORM pg_advisory_xact_lock(hashtextextended(
+                          'recording-studio-billing:credits:' || NEW.root_recording_id::text || ':' || NEW.account_recording_id::text || ':' || NEW.product_recording_id::text,
+                          0
+                        ));
+                        IF COALESCE((
+                          SELECT SUM(amount) FROM recording_studio_billing_credit_ledger_entries
+                          WHERE root_recording_id = NEW.root_recording_id AND account_recording_id = NEW.account_recording_id
+                            AND product_recording_id = NEW.product_recording_id
+                        ), 0) + NEW.amount < 0 THEN
+                          RAISE EXCEPTION 'credit debit would make the balance negative';
+                        END IF;
+                      SQL
+                    end
 
     <<~SQL
       CREATE OR REPLACE FUNCTION rs_billing_protect_credit_ledger_entry() RETURNS trigger AS $$

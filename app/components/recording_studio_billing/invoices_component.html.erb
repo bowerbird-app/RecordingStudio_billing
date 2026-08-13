@@ -1,0 +1,14 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("invoices_title", "Invoices"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :invoices) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.invoices.each do |invoice| %><li><%= link_to invoice.id, helpers.invoice_path(invoice, root_recording_id: @presenter.root_recording.id) %>: <%= invoice.state %></li><% end %>
+<% end %>
+<% if @presenter.adjustments.present? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.adjustments.each do |adjustment| %><li><%= adjustment.kind %>: <%= adjustment.amount_minor %> <%= adjustment.currency_code %></li><% end %>
+  <% end %>
+<% end %>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:invoices).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

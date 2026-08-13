@@ -21,7 +21,7 @@ module RecordingStudioBilling
         SafeFinancialPayload.validate!(
           value,
           allow_authoritative_totals: attribute == :normalized_result &&
-            financial_command&.command_type == "tax_calculation"
+            financial_command&.command_type.in?(%w[tax_calculation checkout])
         )
       rescue SafeFinancialPayload::UnsafeValue => e
         errors.add(attribute, e.message)

@@ -17,8 +17,8 @@ module RecordingStudioBilling
 
     def safe_metadata_payload
       SafeFinancialPayload.validate!(safe_metadata)
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:safe_metadata, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:safe_metadata, e.message)
     end
   end
 end

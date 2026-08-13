@@ -25,9 +25,7 @@ module RecordingStudioBilling
           currency: payload.fetch("currency"), request_fingerprint: CommercialManifestCanonicalizer.digest(payload)
         }
         mismatched = expected.any? { |attribute, value| response.public_send(attribute) != value }
-        if payload.fetch("behavior") != "provider_default"
-          mismatched ||= response.behavior != payload.fetch("behavior")
-        end
+        mismatched ||= response.behavior != payload.fetch("behavior") if payload.fetch("behavior") != "provider_default"
         raise ArgumentError, "tax calculator response does not match the authoritative request" if mismatched
 
         response
@@ -42,8 +40,9 @@ module RecordingStudioBilling
       new(**attributes).call
     end
 
-    def initialize(calculator_key:, **request_attributes)
+    def initialize(calculator_key:, tax_policy: RecordingStudioBilling.configuration.tax_policy, **request_attributes)
       @calculator_key = calculator_key.to_s
+      @tax_policy = tax_policy.respond_to?(:to_h) ? tax_policy.to_h.stringify_keys : {}
       @request_attributes = request_attributes
     end
 
@@ -72,17 +71,16 @@ module RecordingStudioBilling
         calculation = PersistTaxCalculation.call(command:)
         Result.new(status: calculation.status.to_sym, calculation:, response: command.normalized_result)
       end
-    rescue ArgumentError => error
-      unsupported(error.message.include?("unknown tax calculator") ? "unknown_calculator" : "invalid")
+    rescue ArgumentError => e
+      unsupported(e.message.include?("unknown tax calculator") ? "unknown_calculator" : "invalid")
     end
 
     private
 
-    attr_reader :calculator_key, :request_attributes
+    attr_reader :calculator_key, :request_attributes, :tax_policy
 
     def approved_policy?
-      policy = RecordingStudioBilling.configuration.tax_policy
-      policy.fetch(:enabled) && policy.fetch(:calculator_key).to_s == calculator_key
+      tax_policy.fetch("enabled", false) == true && tax_policy.fetch("calculator_key", "").to_s == calculator_key
     end
 
     def registry
@@ -105,7 +103,7 @@ module RecordingStudioBilling
     def unsupported(reason)
       response = AdapterResponse.new(
         status: "unsupported_tax_calculation", result: { "reason" => reason,
-          "explanation" => "Tax calculation is disabled or unsupported." }
+                                                         "explanation" => "Tax calculation is disabled or unsupported." }
       )
       Result.new(status: :unsupported_tax_calculation, calculation: nil, response: response.result)
     end

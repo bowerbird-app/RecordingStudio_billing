@@ -37,7 +37,7 @@ module RecordingStudioBilling
 
       payload = request.fetch("request")
       status = { pending: "pending", provider_unavailable: "provider_unavailable", unknown: "provider_state" }
-           .fetch(outcome, "success")
+               .fetch(outcome, "success")
       behavior = { inclusive: "inclusive", exclusive: "exclusive" }.fetch(outcome, payload.fetch("behavior"))
       tax = 100
       subtotal = payload.fetch("subtotal_minor") + (outcome == :mismatched_subtotal ? 1 : 0)

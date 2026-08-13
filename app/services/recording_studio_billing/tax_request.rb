@@ -25,7 +25,10 @@ module RecordingStudioBilling
       @verified_location = normalize_location(verified_location)
       supplied_categories = Array(tax_categories).map { |value| normalize_key(value, "tax category") }.uniq.sort
       derived_categories = @lines.map { |line| line.fetch("tax_category") }.uniq.sort
-      raise ArgumentError, "tax categories must exactly match normalized line categories" unless supplied_categories == derived_categories
+      unless supplied_categories == derived_categories
+        raise ArgumentError,
+              "tax categories must exactly match normalized line categories"
+      end
 
       @tax_categories = derived_categories.freeze
       @behavior = behavior.to_s
@@ -90,7 +93,8 @@ module RecordingStudioBilling
 
     def normalize_location(value)
       location = value.respond_to?(:to_h) ? value.to_h.transform_keys(&:to_s) : {}
-      raise ArgumentError, "verified location must contain only country and region" if (location.keys - %w[country region]).any?
+      raise ArgumentError, "verified location must contain only country and region" if (location.keys - %w[country
+                                                                                                           region]).any?
 
       location.transform_values { |item| item.to_s.upcase }.freeze
     end
@@ -105,14 +109,18 @@ module RecordingStudioBilling
 
     def validate!
       raise ArgumentError, "tax lines are required" if lines.empty?
-      raise ArgumentError, "tax subtotal must equal approved lines" unless lines.sum { |line| line.fetch("amount_minor") } == subtotal_minor
+      raise ArgumentError, "tax subtotal must equal approved lines" unless lines.sum do |line|
+        line.fetch("amount_minor")
+      end == subtotal_minor
       raise ArgumentError, "tax discount is invalid" unless discount_minor.between?(0, subtotal_minor)
       raise ArgumentError, "tax currency is invalid" unless currency.match?(/\A[A-Z]{3}\z/)
-      raise ArgumentError, "verified tax country is required" unless verified_location.fetch("country", "").match?(/\A[A-Z]{2}\z/)
+      raise ArgumentError, "verified tax country is required" unless verified_location.fetch("country",
+                                                                                             "").match?(/\A[A-Z]{2}\z/)
       raise ArgumentError, "tax behavior is invalid" unless BEHAVIORS.include?(behavior)
       raise ArgumentError, "tax effective time is required" unless effective_at
       raise ArgumentError, "tax operation reference is required" if operation_reference.empty?
       raise ArgumentError, "tax idempotency key is required" if idempotency_key.empty?
+
       SafeFinancialPayload.normalize_reference(operation_reference, label: "tax operation reference")
       SafeFinancialPayload.normalize_reference(idempotency_key, label: "tax idempotency key")
       lines.each do |line|

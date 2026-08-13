@@ -20,7 +20,7 @@ class CreateEntitlementProjection < ActiveRecord::Migration[8.1]
     end
     add_index :recording_studio_billing_entitlement_grants,
               %i[root_recording_id source_type source_id feature_key], unique: true,
-              name: "idx_rs_billing_entitlement_grant_source_feature"
+                                                                       name: "idx_rs_billing_entitlement_grant_source_feature"
     add_index :recording_studio_billing_entitlement_grants, %i[root_recording_id account_recording_id feature_key],
               name: "idx_rs_billing_entitlement_grants_access"
     add_check_constraint :recording_studio_billing_entitlement_grants,
@@ -30,8 +30,8 @@ class CreateEntitlementProjection < ActiveRecord::Migration[8.1]
                          "feature_kind IN (#{quoted(FEATURE_KINDS)})",
                          name: "rs_billing_entitlement_grant_feature_kind"
     add_check_constraint :recording_studio_billing_entitlement_grants,
-               "merge_rule IN ('replace', 'minimum', 'maximum', 'merge', 'append')",
-               name: "rs_billing_entitlement_grant_merge_rule"
+                         "merge_rule IN ('replace', 'minimum', 'maximum', 'merge', 'append')",
+                         name: "rs_billing_entitlement_grant_merge_rule"
     add_check_constraint :recording_studio_billing_entitlement_grants,
                          "manifest_digest ~ '^[0-9a-f]{64}$'",
                          name: "rs_billing_entitlement_grant_digest"
@@ -42,7 +42,8 @@ class CreateEntitlementProjection < ActiveRecord::Migration[8.1]
     create_table :recording_studio_billing_credit_ledger_entries, id: :uuid do |t|
       t.references :root_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
-      t.references :purchase_effect, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_purchase_effects }
+      t.references :purchase_effect, null: false, type: :uuid,
+                                     foreign_key: { to_table: :recording_studio_billing_purchase_effects }
       t.uuid :product_recording_id, null: false
       t.string :manifest_digest, null: false
       t.string :credit_key, null: false
@@ -51,14 +52,14 @@ class CreateEntitlementProjection < ActiveRecord::Migration[8.1]
       t.timestamps
     end
     add_index :recording_studio_billing_credit_ledger_entries, %i[purchase_effect_id credit_key], unique: true,
-              name: "idx_rs_billing_credit_ledger_effect_key"
+                                                                                                  name: "idx_rs_billing_credit_ledger_effect_key"
     add_index :recording_studio_billing_credit_ledger_entries, %i[root_recording_id account_recording_id credit_key],
               name: "idx_rs_billing_credit_ledger_balance"
     add_check_constraint :recording_studio_billing_credit_ledger_entries,
                          "manifest_digest ~ '^[0-9a-f]{64}$'",
                          name: "rs_billing_credit_ledger_digest"
     add_check_constraint :recording_studio_billing_credit_ledger_entries, "amount > 0",
-               name: "rs_billing_credit_ledger_amount"
+                         name: "rs_billing_credit_ledger_amount"
 
     reversible do |direction|
       direction.up do

@@ -50,9 +50,9 @@ module RecordingStudioBilling
 
     def capabilities_are_safe
       values = capabilities
-      unless values.is_a?(Array) && values.all? { |value| value.is_a?(String) && value.match?(CommercialRecordable::KEY_FORMAT) }
-        errors.add(:capabilities, "must be an array of capability keys")
-      end
+      return if values.is_a?(Array) && values.all? { |value| value.is_a?(String) && value.match?(CommercialRecordable::KEY_FORMAT) }
+
+      errors.add(:capabilities, "must be an array of capability keys")
     end
 
     def supported_codes

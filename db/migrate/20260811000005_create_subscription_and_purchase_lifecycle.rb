@@ -14,15 +14,20 @@ class CreateSubscriptionAndPurchaseLifecycle < ActiveRecord::Migration[8.1]
       t.string :provider_reference
       t.timestamps
     end
-    add_index :recording_studio_billing_subscriptions, :identifier, unique: true, name: "idx_rs_billing_subscriptions_identifier"
-    add_index :recording_studio_billing_subscriptions, %i[root_recording_id account_recording_id], unique: true, name: "idx_rs_billing_subscription_account"
-    add_check_constraint :recording_studio_billing_subscriptions, "state IN (#{quoted(SUBSCRIPTION_STATES)})", name: "rs_billing_subscriptions_state"
+    add_index :recording_studio_billing_subscriptions, :identifier, unique: true,
+                                                                    name: "idx_rs_billing_subscriptions_identifier"
+    add_index :recording_studio_billing_subscriptions, %i[root_recording_id account_recording_id], unique: true,
+                                                                                                   name: "idx_rs_billing_subscription_account"
+    add_check_constraint :recording_studio_billing_subscriptions, "state IN (#{quoted(SUBSCRIPTION_STATES)})",
+                         name: "rs_billing_subscriptions_state"
 
     create_table :recording_studio_billing_subscription_item_versions, id: :uuid do |t|
-      t.references :subscription, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_subscriptions }
+      t.references :subscription, null: false, type: :uuid,
+                                  foreign_key: { to_table: :recording_studio_billing_subscriptions }
       t.references :root_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
-      t.references :checkout_intent, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_checkout_intents }
+      t.references :checkout_intent, null: false, type: :uuid,
+                                     foreign_key: { to_table: :recording_studio_billing_checkout_intents }
       t.uuid :checkout_intent_item_id, null: false
       t.string :line_key, null: false
       t.integer :version_number, null: false
@@ -44,20 +49,30 @@ class CreateSubscriptionAndPurchaseLifecycle < ActiveRecord::Migration[8.1]
       t.datetime :superseded_at
       t.timestamps
     end
-    add_index :recording_studio_billing_subscription_item_versions, %i[subscription_id line_key version_number], unique: true, name: "idx_rs_billing_subscription_item_line_version"
-    add_index :recording_studio_billing_subscription_item_versions, :checkout_intent_item_id, unique: true, name: "idx_rs_billing_subscription_item_checkout_item"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "mode IN (#{quoted(ITEM_MODES)})", name: "rs_billing_subscription_item_modes"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "line_key ~ '^[0-9a-f-]{36}(:[0-9a-f-]{36})?$'", name: "rs_billing_subscription_item_line_key"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "currency_code ~ '^[A-Z]{3}$'", name: "rs_billing_subscription_item_currency"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "amount_minor >= 0 AND quantity > 0", name: "rs_billing_subscription_item_amount_quantity"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "manifest_digest ~ '^[0-9a-f]{64}$'", name: "rs_billing_subscription_item_digest"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "jsonb_typeof(commercial_snapshot) = 'object'", name: "rs_billing_subscription_item_snapshot_object"
-    add_check_constraint :recording_studio_billing_subscription_item_versions, "effective_ends_at IS NULL OR effective_ends_at >= effective_starts_at", name: "rs_billing_subscription_item_dates"
+    add_index :recording_studio_billing_subscription_item_versions, %i[subscription_id line_key version_number],
+              unique: true, name: "idx_rs_billing_subscription_item_line_version"
+    add_index :recording_studio_billing_subscription_item_versions, :checkout_intent_item_id, unique: true,
+                                                                                              name: "idx_rs_billing_subscription_item_checkout_item"
+    add_check_constraint :recording_studio_billing_subscription_item_versions, "mode IN (#{quoted(ITEM_MODES)})",
+                         name: "rs_billing_subscription_item_modes"
+    add_check_constraint :recording_studio_billing_subscription_item_versions,
+                         "line_key ~ '^[0-9a-f-]{36}(:[0-9a-f-]{36})?$'", name: "rs_billing_subscription_item_line_key"
+    add_check_constraint :recording_studio_billing_subscription_item_versions, "currency_code ~ '^[A-Z]{3}$'",
+                         name: "rs_billing_subscription_item_currency"
+    add_check_constraint :recording_studio_billing_subscription_item_versions, "amount_minor >= 0 AND quantity > 0",
+                         name: "rs_billing_subscription_item_amount_quantity"
+    add_check_constraint :recording_studio_billing_subscription_item_versions, "manifest_digest ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_subscription_item_digest"
+    add_check_constraint :recording_studio_billing_subscription_item_versions,
+                         "jsonb_typeof(commercial_snapshot) = 'object'", name: "rs_billing_subscription_item_snapshot_object"
+    add_check_constraint :recording_studio_billing_subscription_item_versions,
+                         "effective_ends_at IS NULL OR effective_ends_at >= effective_starts_at", name: "rs_billing_subscription_item_dates"
 
     create_table :recording_studio_billing_purchases, id: :uuid do |t|
       t.references :root_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
-      t.references :checkout_intent, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_checkout_intents }
+      t.references :checkout_intent, null: false, type: :uuid,
+                                     foreign_key: { to_table: :recording_studio_billing_checkout_intents }
       t.uuid :checkout_intent_item_id, null: false
       t.uuid :product_recording_id, null: false
       t.uuid :billing_option_recording_id, null: false
@@ -73,12 +88,18 @@ class CreateSubscriptionAndPurchaseLifecycle < ActiveRecord::Migration[8.1]
       t.datetime :completed_at, null: false
       t.timestamps
     end
-    add_index :recording_studio_billing_purchases, :checkout_intent_item_id, unique: true, name: "idx_rs_billing_purchase_checkout_item"
-    add_check_constraint :recording_studio_billing_purchases, "mode IN (#{quoted(PURCHASE_MODES)})", name: "rs_billing_purchase_modes"
-    add_check_constraint :recording_studio_billing_purchases, "currency_code ~ '^[A-Z]{3}$'", name: "rs_billing_purchase_currency"
-    add_check_constraint :recording_studio_billing_purchases, "amount_minor >= 0 AND quantity > 0", name: "rs_billing_purchase_amount_quantity"
-    add_check_constraint :recording_studio_billing_purchases, "manifest_digest ~ '^[0-9a-f]{64}$'", name: "rs_billing_purchase_digest"
-    add_check_constraint :recording_studio_billing_purchases, "jsonb_typeof(commercial_snapshot) = 'object'", name: "rs_billing_purchase_snapshot_object"
+    add_index :recording_studio_billing_purchases, :checkout_intent_item_id, unique: true,
+                                                                             name: "idx_rs_billing_purchase_checkout_item"
+    add_check_constraint :recording_studio_billing_purchases, "mode IN (#{quoted(PURCHASE_MODES)})",
+                         name: "rs_billing_purchase_modes"
+    add_check_constraint :recording_studio_billing_purchases, "currency_code ~ '^[A-Z]{3}$'",
+                         name: "rs_billing_purchase_currency"
+    add_check_constraint :recording_studio_billing_purchases, "amount_minor >= 0 AND quantity > 0",
+                         name: "rs_billing_purchase_amount_quantity"
+    add_check_constraint :recording_studio_billing_purchases, "manifest_digest ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_purchase_digest"
+    add_check_constraint :recording_studio_billing_purchases, "jsonb_typeof(commercial_snapshot) = 'object'",
+                         name: "rs_billing_purchase_snapshot_object"
 
     create_table :recording_studio_billing_purchase_effects, id: :uuid do |t|
       t.references :purchase, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_purchases }
@@ -91,15 +112,20 @@ class CreateSubscriptionAndPurchaseLifecycle < ActiveRecord::Migration[8.1]
       t.datetime :effective_at, null: false
       t.timestamps
     end
-    add_index :recording_studio_billing_purchase_effects, %i[root_recording_id idempotency_key], unique: true, name: "idx_rs_billing_purchase_effect_idempotency"
-    add_check_constraint :recording_studio_billing_purchase_effects, "effect_kind IN ('one_off_addon', 'credit_pack')", name: "rs_billing_purchase_effect_kind"
-    add_check_constraint :recording_studio_billing_purchase_effects, "manifest_digest ~ '^[0-9a-f]{64}$'", name: "rs_billing_purchase_effect_digest"
-    add_check_constraint :recording_studio_billing_purchase_effects, "jsonb_typeof(safe_metadata) = 'object'", name: "rs_billing_purchase_effect_metadata_object"
+    add_index :recording_studio_billing_purchase_effects, %i[root_recording_id idempotency_key], unique: true,
+                                                                                                 name: "idx_rs_billing_purchase_effect_idempotency"
+    add_check_constraint :recording_studio_billing_purchase_effects, "effect_kind IN ('one_off_addon', 'credit_pack')",
+                         name: "rs_billing_purchase_effect_kind"
+    add_check_constraint :recording_studio_billing_purchase_effects, "manifest_digest ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_purchase_effect_digest"
+    add_check_constraint :recording_studio_billing_purchase_effects, "jsonb_typeof(safe_metadata) = 'object'",
+                         name: "rs_billing_purchase_effect_metadata_object"
 
     reversible do |direction|
       direction.up { create_lifecycle_functions }
       direction.down do
-        %w[rs_billing_subscription_lifecycle rs_billing_protect_subscription_item_version rs_billing_validate_lifecycle_projection rs_billing_protect_purchase rs_billing_protect_purchase_effect].each do |name|
+        %w[rs_billing_subscription_lifecycle rs_billing_protect_subscription_item_version
+           rs_billing_validate_lifecycle_projection rs_billing_protect_purchase rs_billing_protect_purchase_effect].each do |name|
           execute "DROP FUNCTION IF EXISTS #{name}() CASCADE"
         end
       end

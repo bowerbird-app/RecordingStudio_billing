@@ -27,9 +27,10 @@ class CreateMeterAggregationsAndRatedUsage < ActiveRecord::Migration[8.1]
                          name: "rs_billing_meter_aggregation_mode"
     add_check_constraint :recording_studio_billing_meter_aggregations, "window_ends_at > window_starts_at",
                          name: "rs_billing_meter_aggregation_window"
-    add_check_constraint :recording_studio_billing_meter_aggregations, "event_count > 0", name: "rs_billing_meter_aggregation_events"
+    add_check_constraint :recording_studio_billing_meter_aggregations, "event_count > 0",
+                         name: "rs_billing_meter_aggregation_events"
     add_check_constraint :recording_studio_billing_meter_aggregations, "cardinality(usage_event_ids) = event_count",
-               name: "rs_billing_meter_aggregation_event_ids"
+                         name: "rs_billing_meter_aggregation_event_ids"
     add_check_constraint :recording_studio_billing_meter_aggregations, "jsonb_typeof(input_snapshot) = 'object'",
                          name: "rs_billing_meter_aggregation_input_object"
     add_check_constraint :recording_studio_billing_meter_aggregations, "jsonb_typeof(safe_metadata) = 'object'",
@@ -39,7 +40,7 @@ class CreateMeterAggregationsAndRatedUsage < ActiveRecord::Migration[8.1]
       t.references :root_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :account_recording, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_recordings }
       t.references :meter_aggregation, null: false, type: :uuid,
-                               foreign_key: { to_table: :recording_studio_billing_meter_aggregations }
+                                       foreign_key: { to_table: :recording_studio_billing_meter_aggregations }
       t.string :manifest_digest, null: false
       t.uuid :rate_recording_id, null: false
       t.uuid :customer_price_recording_id, null: false
@@ -62,10 +63,11 @@ class CreateMeterAggregationsAndRatedUsage < ActiveRecord::Migration[8.1]
       t.timestamps
     end
     add_index :recording_studio_billing_rated_usages, :meter_aggregation_id, unique: true,
-              name: "idx_rs_billing_rated_usage_aggregation"
+                                                                             name: "idx_rs_billing_rated_usage_aggregation"
     add_check_constraint :recording_studio_billing_rated_usages, "window_ends_at > window_starts_at",
                          name: "rs_billing_rated_usage_window"
-    add_check_constraint :recording_studio_billing_rated_usages, "quantity >= 0", name: "rs_billing_rated_usage_quantity"
+    add_check_constraint :recording_studio_billing_rated_usages, "quantity >= 0",
+                         name: "rs_billing_rated_usage_quantity"
     add_check_constraint :recording_studio_billing_rated_usages,
                          "(customer_amount_minor IS NULL AND customer_currency_code IS NULL AND customer_currency_exponent IS NULL) OR (customer_amount_minor >= 0 AND customer_currency_code ~ '^[A-Z]{3}$' AND customer_currency_exponent BETWEEN 0 AND 3)",
                          name: "rs_billing_rated_usage_customer_money"

@@ -86,6 +86,18 @@ module RecordingStudioBilling
       register(:around_service, handler, priority: priority, &)
     end
 
+    # Register an item for the customer billing navigation. Handlers receive
+    # the navigation presenter and return a hash with label, href, and icon.
+    def billing_navigation(handler = nil, priority: DEFAULT_PRIORITY, &)
+      register(:billing_navigation, handler, priority: priority, &)
+    end
+
+    # Register content for a customer billing page. Handlers receive the page
+    # presenter and return a renderable ViewComponent or safe view content.
+    def billing_page_content(page, handler = nil, priority: DEFAULT_PRIORITY, &)
+      register(:"billing_page_content.#{page}", handler, priority: priority, &)
+    end
+
     # Register a custom event hook
     #
     # @param event_name [Symbol] The event name to listen for
@@ -181,6 +193,14 @@ module RecordingStudioBilling
     # @return [Boolean] True if hooks exist
     def registered?(event_name)
       @registry[event_name].any?
+    end
+
+    def billing_navigation_items(presenter)
+      run(:billing_navigation, presenter).flatten.compact
+    end
+
+    def billing_page_contents(page, presenter)
+      run(:"billing_page_content.#{page}", presenter).flatten.compact
     end
 
     # Clear all hooks (useful for testing)

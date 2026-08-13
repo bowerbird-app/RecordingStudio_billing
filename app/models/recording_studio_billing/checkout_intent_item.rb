@@ -20,8 +20,8 @@ module RecordingStudioBilling
 
     def safe_manifest
       SafeFinancialPayload.validate!(commercial_manifest)
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:commercial_manifest, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:commercial_manifest, e.message)
     end
   end
 end

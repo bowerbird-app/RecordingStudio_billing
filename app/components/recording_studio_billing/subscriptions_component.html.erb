@@ -1,0 +1,27 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_title", "Plan"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :subscriptions) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.subscriptions.each do |subscription| %>
+    <li>
+      <%= subscription.identifier %>: <%= subscription.state %>
+      <% subscription.item_versions.where(effective_ends_at: nil).each do |version| %>
+        <%= version.mode %> x <%= version.quantity %> (<%= version.amount_minor %> <%= version.currency_code %>)
+      <% end %>
+    </li>
+  <% end %>
+<% end %>
+<% if @presenter.eligible_options.present? %>
+  <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("choose_plan_title", "Choose a plan"), variant: :h2) %>
+  <% @presenter.eligible_options.each do |option| %>
+    <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
+      <p><%= option.key %></p>
+      <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
+      <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
+      <% if option.quantity_mode == "adjustable" %>
+        <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity %>
+      <% end %>
+      <%= render FlatPack::Button::Component.new(text: @presenter.copy("choose_plan_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
+    <% end %>
+  <% end %>
+<% end %>
+<% @presenter.page_contents(:subscriptions).each { |content| %><%= render_extension(content) %><% } %>

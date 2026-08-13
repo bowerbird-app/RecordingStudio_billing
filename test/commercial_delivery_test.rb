@@ -8,6 +8,7 @@ require "rails/test_help"
 
 class CommercialDeliveryTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  parallelize(workers: 1)
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
@@ -308,7 +309,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       price_recording_ids: [graph[:italy_price].recording.id], actor: publication_actor
     )
     RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { false }
-    publisher = RecordingStudioBilling::CommercialPublisher.new(candidate:, actor: publication_actor, now: 2.minutes.from_now)
+    publisher = RecordingStudioBilling::CommercialPublisher.new(candidate:, actor: publication_actor,
+                                                                now: 2.minutes.from_now)
     error = assert_raises(ArgumentError) { publisher.send(:activate_candidate!, candidate) }
     assert_match(/authorized/, error.message)
     assert_not_predicate candidate.reload, :activated?
@@ -328,8 +330,9 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
           "SET LOCAL recording_studio_billing.authorized_publication = 'on'"
         )
         RecordingStudioBilling::Price.insert_all!([
-          attributes.merge("id" => SecureRandom.uuid, "key" => "spoofed_direct_insert")
-        ])
+                                                    attributes.merge("id" => SecureRandom.uuid,
+                                                                     "key" => "spoofed_direct_insert")
+                                                  ])
         ActiveRecord::Base.connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
       end
     end
@@ -397,7 +400,9 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_equal %w[published published published published], [provider, market, product, option].map(&:state)
     assert [provider, market, product, option].all?(&:valid?)
 
-    additional_price = price("additional", option.recording, market.recording, 1_100, graph[:root], scope: "additional")
+    additional_price = price(
+      "additional", option.recording, graph[:germany_market].recording, 1_100, graph[:root], version: 2
+    )
     candidate = RecordingStudioBilling::CommercialPublisher.publish!(
       root_recording: graph[:root],
       price_recording_ids: [additional_price.id],
@@ -604,6 +609,28 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       graph[:root],
       graph[:admin_recording]
     )
+    record_child(
+      RecordingStudioBilling::Meter.new(
+        usage_unit_recording: usage_unit, key: "api_calls", aggregation: "count"
+      ),
+      graph[:root],
+      graph[:admin_recording]
+    )
+    rate_card = record_child(
+      RecordingStudioBilling::RateCard.new(
+        provider_account_recording: graph[:provider].recording, key: "api_rate_card"
+      ),
+      graph[:root],
+      graph[:admin_recording]
+    )
+    record_child(
+      RecordingStudioBilling::Rate.new(
+        rate_card_recording: rate_card, usage_unit_recording: usage_unit, key: "api_conversion",
+        conversion_numerator: 1, conversion_denominator: 1
+      ),
+      graph[:root],
+      rate_card
+    )
     prior_recording = record_child(
       RecordingStudioBilling::OveragePrice.new(
         billing_option_recording: graph[:option].recording,
@@ -709,7 +736,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
         target_product_recording: target,
         key: unique_name("exclusion").tr(" ", "_"),
         rule_type: "excludes",
-        conditions: {}
+        conditions: { "country_code" => "IT" }
       ),
       graph[:root],
       graph[:admin_recording]
@@ -955,8 +982,8 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
             actor: publication_actor, now: 2.minutes.from_now
           ).map(&:id)
         end
-      rescue StandardError => error
-        results << error
+      rescue StandardError => e
+        results << e
       end
     end
     2.times { start << true }
@@ -1055,6 +1082,60 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     ).resolve(**resolver_arguments).market
   end
 
+  test "market resolution orders exact group regional and true global fallbacks" do
+    exact = resolver_market("exact", country_codes: ["IT"])
+    group = resolver_market("group", country_groups: { "eu" => %w[IT DE] })
+    regional = resolver_market("regional", regional_country_codes: %w[IT DE FR])
+    global = resolver_market("global", global_fallback: true)
+    resolver = eligible_resolver([global, regional, group, exact])
+
+    assert_equal exact, resolver.resolve(stage: :display, declaration_country: "IT").market
+    assert_equal group,
+                 eligible_resolver([global, regional, group]).resolve(stage: :display, declaration_country: "IT").market
+    assert_equal regional,
+                 eligible_resolver([global, regional]).resolve(stage: :display, declaration_country: "IT").market
+    assert_equal global, eligible_resolver([global]).resolve(stage: :display, declaration_country: "IT").market
+    assert_empty global.country_codes
+    assert_empty global.country_groups
+    assert_empty global.regional_country_codes
+  end
+
+  test "market resolution rejects equal tier ambiguity and unsupported currencies" do
+    %i[exact group regional global].each do |tier|
+      markets = 2.times.map { |index| resolver_market("#{tier}_#{index}", **resolver_tier(tier)) }
+      assert_raises(ArgumentError) do
+        eligible_resolver(markets).resolve(stage: :display, declaration_country: "IT")
+      end
+    end
+
+    resolver = eligible_resolver([resolver_market("usd", country_codes: ["IT"], currencies: ["USD"],
+                                                         default_currency: "USD")])
+    assert_raises(ArgumentError) do
+      resolver.resolve(stage: :display, declaration_country: "IT", explicit_currency: "EUR")
+    end
+  end
+
+  test "market finalization returns every configured outcome" do
+    previous = RecordingStudioBilling::MarketResolver::Resolution.new(resolver_market("old", country_codes: ["IT"]),
+                                                                      "EUR", "IT", :display, :declaration, :resolved, nil)
+    %w[none review reject restart].each do |policy|
+      market = resolver_market(policy, country_codes: ["DE"], verification_policy: policy)
+      result = eligible_resolver([market]).resolve(
+        stage: :final_charge,
+        account_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("DE", :verified_account),
+        previous:
+      )
+      assert_equal(policy == "none" ? :requote : policy.to_sym, result.outcome)
+    end
+    confirmed = resolver_market("confirmed", country_codes: ["IT"])
+    assert_equal :confirmed, eligible_resolver([confirmed]).resolve(
+      stage: :final_charge,
+      account_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :verified_account),
+      previous: RecordingStudioBilling::MarketResolver::Resolution.new(confirmed, "EUR", "IT", :display, :declaration,
+                                                                       :resolved, nil)
+    ).outcome
+  end
+
   test "product rule conditions skip violations and transitions until they match" do
     source = Struct.new(:recording).new(Struct.new(:id).new("source"))
     target = Struct.new(:recording).new(Struct.new(:id).new("target"))
@@ -1094,10 +1175,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     ).new("requires_target", "requires", "target", { "selected_product_recording_ids" => "target" })
     non_transition = Struct.new(
       :key, :rule_type, :target_product_recording_id, :conditions
-    ).new("requires_current", "requires", "target", {})
+    ).new("requires_current", "requires", "target", { "selected_product_recording_ids" => "target" })
     transition = Struct.new(
       :key, :rule_type, :target_product_recording_id, :conditions
-    ).new("upgrade_current", "upgrade_from", "target", {})
+    ).new("upgrade_current", "upgrade_from", "target", { "selected_product_recording_ids" => "target" })
 
     result = RecordingStudioBilling::ProductRuleEvaluator.new(
       product: source,
@@ -1108,6 +1189,50 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
 
     assert result.eligible
     assert_equal "upgrade_from", result.transition
+  end
+
+  test "unconditional product rules apply to eligibility and transitions" do
+    source = Struct.new(:recording).new(Struct.new(:id).new("source"))
+    target = Struct.new(:recording).new(Struct.new(:id).new("target"))
+    requirement = Struct.new(:key, :rule_type, :target_product_recording_id, :conditions).new(
+      "requires_target", "requires", "target", {}
+    )
+    transition = Struct.new(:key, :rule_type, :target_product_recording_id, :conditions).new(
+      "replacement", "replaces", "target", {}
+    )
+
+    result = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source, selected_products: [], current_product: target, rules: [requirement, transition]
+    ).evaluate
+
+    assert_not result.eligible
+    assert_includes result.violations, "requires_target"
+    assert_equal "replaces", result.transition
+    assert RecordingStudioBilling::ProductRule.valid_conditions?({})
+  end
+
+  test "all product rule types have separate eligibility and transition semantics" do
+    source = Struct.new(:recording).new(Struct.new(:id).new("source"))
+    target = Struct.new(:recording).new(Struct.new(:id).new("target"))
+    rule = lambda { |key, type|
+      Struct.new(:key, :rule_type, :target_product_recording_id, :conditions).new(key, type, "target", {})
+    }
+
+    eligibility = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source, selected_products: [target], rules: [
+        rule.call("requires", "requires"), rule.call("available", "available_with"), rule.call("excludes", "excludes")
+      ]
+    ).evaluate
+    refute eligibility.eligible
+    assert_equal ["excludes"], eligibility.violations
+
+    %w[replaces upgrade_from downgrade_from same_family].each do |type|
+      result = RecordingStudioBilling::ProductRuleEvaluator.new(
+        product: source, selected_products: [], current_product: target, rules: [rule.call(type, type)]
+      ).evaluate
+      assert_equal type, result.transition
+      assert result.eligible
+    end
   end
 
   test "commercial manifest resolver rejects injected rules and plan updates from another owner" do
@@ -1154,6 +1279,39 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
                  RecordingStudioBilling::ProductRule::RULE_TYPES
     assert_equal false, RecordingStudioBilling.configuration.tax_policy.fetch(:enabled)
     assert_equal "provider_default", RecordingStudioBilling.configuration.tax_policy.fetch(:presentation)
+  end
+
+  test "V1 prices reject deferred scopes while preserving zero-value prices" do
+    price = RecordingStudioBilling::Price.new(scope: "account", amount_minor: 0)
+    overage = RecordingStudioBilling::OveragePrice.new(scope: "contract", amount_minor: 0)
+
+    assert_not price.valid?
+    assert_includes price.errors[:scope], "is not included in the list"
+    assert_not overage.valid?
+    assert_includes overage.errors[:scope], "is not included in the list"
+    assert_equal 0, RecordingStudioBilling::Price.new(scope: "default", amount_minor: 0).amount_minor
+  end
+
+  test "product rules fail closed and require every selected condition" do
+    source = Struct.new(:recording).new(Struct.new(:id).new("source"))
+    target = Struct.new(:recording).new(Struct.new(:id).new("target"))
+    rule = Struct.new(:key, :rule_type, :target_product_recording_id, :conditions).new(
+      "requires_both", "requires", "target", { "selected_product_recording_ids" => %w[target companion] }
+    )
+
+    result = RecordingStudioBilling::ProductRuleEvaluator.new(
+      product: source, selected_products: [target], rules: [rule]
+    ).evaluate
+    assert_predicate result, :eligible
+    assert_empty result.violations
+
+    malformed = rule.dup
+    malformed.conditions = { "unsupported" => "value" }
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling::ProductRuleEvaluator.new(
+        product: source, selected_products: [target], rules: [malformed]
+      ).evaluate
+    end
   end
 
   test "publication rejects a feature whose kind differs from its registered definition" do
@@ -1231,18 +1389,41 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       RecordingStudioBilling::Market.new(
         provider_account_recording: provider, key: "#{name}_market", country_codes: [country],
         country_groups: {}, allowed_currency_codes: ["EUR"], default_currency_code: "EUR", priority: 10,
-        specificity: 1, fallback: false, ppa_policy: "standard", rounding_policy: "half_up",
+        specificity: 1, regional_country_codes: [], global_fallback: false,
+        ppa_policy: "standard", rounding_policy: "half_up",
         tax_presentation_policy: "exclusive", verification_policy: "none"
       ), root, parent
     )
   end
 
-  def price(name, option, market, amount, root, scope: "default")
+  def resolver_market(key, country_codes: [], country_groups: {}, regional_country_codes: [], global_fallback: false,
+                      currencies: ["EUR"], default_currency: "EUR", verification_policy: "none")
+    Struct.new(:key, :country_codes, :country_groups, :regional_country_codes, :global_fallback,
+               :specificity, :priority, :allowed_currency_codes, :default_currency_code, :verification_policy).new(
+                 key, country_codes, country_groups, regional_country_codes, global_fallback, 1, 10, currencies, default_currency,
+                 verification_policy
+               )
+  end
+
+  def resolver_tier(tier)
+    case tier
+    when :exact then { country_codes: ["IT"] }
+    when :group then { country_groups: { "eu" => %w[IT DE] } }
+    when :regional then { regional_country_codes: %w[IT DE] }
+    when :global then { global_fallback: true }
+    end
+  end
+
+  def eligible_resolver(markets)
+    RecordingStudioBilling::MarketResolver.new(markets:).tap { |resolver| resolver.define_singleton_method(:eligible?) { |_| true } }
+  end
+
+  def price(name, option, market, amount, root, scope: "default", version: 1)
     record_child(
       RecordingStudioBilling::Price.new(
         billing_option_recording: option, market_recording: market, key: "#{name}_eur_price",
         amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat",
-        version: 1, scope: scope
+        version: version, scope: scope
       ), root, option
     )
   end
@@ -1255,19 +1436,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
   end
 
   def clear_data!
-    RecordingStudio::Event.unscoped.delete_all
-    tables = [
-      RecordingStudioBilling::CommercialPublicationCandidate.table_name,
-      RecordingStudioBilling::CommercialManifest.table_name,
-      *RecordingStudioBilling::RECORDABLE_TYPES.map(&:constantize).map(&:table_name)
-    ]
-    connection = ActiveRecord::Base.connection
-    quoted_tables = tables.map { |table| connection.quote_table_name(table) }.join(", ")
-    connection.execute("TRUNCATE TABLE #{quoted_tables} RESTART IDENTITY CASCADE")
-    RecordingStudio::Recording.unscoped.delete_all
-    Workspace.delete_all
-    AdminRoot.delete_all
-    User.delete_all
+    BillingTestDatabaseCleanup.clear!
   end
 
   def reset_publication_test_data!
@@ -1291,17 +1460,19 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
   def with_publication_failure(stage)
     function = "rs_billing_test_fail_#{stage}"
     table, timing, event, condition = case stage
-                              when :candidate
-                                [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "AFTER", "INSERT", "TRUE"]
-                              when :revision
-                                [RecordingStudioBilling::Price.table_name, "BEFORE", "INSERT", "NEW.state = 'published'"]
-                              when :activation
-                                [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "BEFORE", "UPDATE",
-                                 "NEW.activated_at IS NOT NULL"]
-                              when :event
-                                [RecordingStudio::Event.table_name, "BEFORE", "INSERT",
-                                 "NEW.action = 'commercial_published'"]
-                              end
+                                      when :candidate
+                                        [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "AFTER", "INSERT",
+                                         "TRUE"]
+                                      when :revision
+                                        [RecordingStudioBilling::Price.table_name, "BEFORE", "INSERT",
+                                         "NEW.state = 'published'"]
+                                      when :activation
+                                        [RecordingStudioBilling::CommercialPublicationCandidate.table_name, "BEFORE", "UPDATE",
+                                         "NEW.activated_at IS NOT NULL"]
+                                      when :event
+                                        [RecordingStudio::Event.table_name, "BEFORE", "INSERT",
+                                         "NEW.action = 'commercial_published'"]
+                                      end
     connection = ActiveRecord::Base.connection
     connection.execute(<<~SQL)
       CREATE FUNCTION #{function}() RETURNS trigger AS $$

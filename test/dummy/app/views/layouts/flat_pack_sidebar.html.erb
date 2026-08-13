@@ -19,7 +19,7 @@
     <%= stylesheet_link_tag "flat_pack/variables", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "flat_pack/rich_text", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+    <%= javascript_importmap_tags if respond_to?(:javascript_importmap_tags) %>
   </head>
 
   <body>
@@ -33,7 +33,7 @@
       <% end %>
 
       <% layout.main do %>
-        <main>
+        <main class="p-4 md:p-6">
           <%= yield %>
         </main>
       <% end %>

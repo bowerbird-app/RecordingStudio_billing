@@ -1,0 +1,21 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("addons_title", "Addons"), variant: :h1) %>
+<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :addons) %>
+<% if @presenter.purchases.any? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.purchases.each do |purchase| %><li><%= purchase.mode.humanize %>: <%= purchase.quantity %></li><% end %>
+  <% end %>
+<% else %>
+  <p><%= @presenter.copy("no_addons", "No addons have been purchased.") %></p>
+<% end %>
+<% @presenter.eligible_options.to_a.each do |option| %>
+  <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
+    <p><%= option.key %></p>
+    <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
+    <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
+    <% if option.quantity_mode == "adjustable" %>
+      <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity %>
+    <% end %>
+    <%= render FlatPack::Button::Component.new(text: @presenter.copy("addons_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
+  <% end %>
+<% end %>
+<% @presenter.page_contents(:addons).each { |content| %><%= render_extension(content) %><% } %>

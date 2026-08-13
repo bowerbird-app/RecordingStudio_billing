@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 class CreateCheckoutIntents < ActiveRecord::Migration[8.1]
-  INTENT_STATES = %w[draft validated awaiting_confirmation pending_provider requires_requote completed failed cancelled expired requires_review].freeze
+  INTENT_STATES = %w[draft validated awaiting_confirmation pending_provider requires_requote completed failed cancelled
+                     expired requires_review].freeze
   ATTEMPT_STATES = %w[pending processing succeeded failed cancelled unknown].freeze
 
   def change
@@ -14,15 +15,20 @@ class CreateCheckoutIntents < ActiveRecord::Migration[8.1]
       t.string :advisory_country_code
       t.string :advisory_currency_code
       t.string :presentation_preference
-      t.references :financial_command, type: :uuid, foreign_key: { to_table: :recording_studio_billing_financial_commands }
+      t.references :financial_command, type: :uuid,
+                                       foreign_key: { to_table: :recording_studio_billing_financial_commands }
       t.timestamps
     end
-    add_index :recording_studio_billing_checkout_intents, %i[root_recording_id local_idempotency_key], unique: true, name: "idx_rs_billing_checkout_intent_idempotency"
-    add_check_constraint :recording_studio_billing_checkout_intents, "state IN (#{quoted(INTENT_STATES)})", name: "rs_billing_checkout_intents_state"
-    add_check_constraint :recording_studio_billing_checkout_intents, "request_fingerprint ~ '^[0-9a-f]{64}$'", name: "rs_billing_checkout_intents_fingerprint"
+    add_index :recording_studio_billing_checkout_intents, %i[root_recording_id local_idempotency_key], unique: true,
+                                                                                                       name: "idx_rs_billing_checkout_intent_idempotency"
+    add_check_constraint :recording_studio_billing_checkout_intents, "state IN (#{quoted(INTENT_STATES)})",
+                         name: "rs_billing_checkout_intents_state"
+    add_check_constraint :recording_studio_billing_checkout_intents, "request_fingerprint ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_checkout_intents_fingerprint"
 
     create_table :recording_studio_billing_checkout_intent_items, id: :uuid do |t|
-      t.references :checkout_intent, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_checkout_intents }
+      t.references :checkout_intent, null: false, type: :uuid,
+                                     foreign_key: { to_table: :recording_studio_billing_checkout_intents }
       t.uuid :product_recording_id, null: false
       t.uuid :billing_option_recording_id, null: false
       t.uuid :price_recording_id, null: false
@@ -40,16 +46,24 @@ class CreateCheckoutIntents < ActiveRecord::Migration[8.1]
       t.string :manifest_digest, null: false
       t.timestamps
     end
-    add_index :recording_studio_billing_checkout_intent_items, %i[checkout_intent_id billing_option_recording_id], unique: true, name: "idx_rs_billing_checkout_items_option"
-    add_check_constraint :recording_studio_billing_checkout_intent_items, "quantity > 0", name: "rs_billing_checkout_items_quantity"
-    add_check_constraint :recording_studio_billing_checkout_intent_items, "currency_code ~ '^[A-Z]{3}$'", name: "rs_billing_checkout_items_currency"
-    add_check_constraint :recording_studio_billing_checkout_intent_items, "presentation IN ('embedded', 'redirect', 'payment_link', 'invoice', 'no_charge')", name: "rs_billing_checkout_items_presentation"
-    add_check_constraint :recording_studio_billing_checkout_intent_items, "manifest_digest ~ '^[0-9a-f]{64}$'", name: "rs_billing_checkout_items_digest"
-    add_check_constraint :recording_studio_billing_checkout_intent_items, "jsonb_typeof(commercial_manifest) = 'object'", name: "rs_billing_checkout_items_manifest_object"
+    add_index :recording_studio_billing_checkout_intent_items, %i[checkout_intent_id billing_option_recording_id],
+              unique: true, name: "idx_rs_billing_checkout_items_option"
+    add_check_constraint :recording_studio_billing_checkout_intent_items, "quantity > 0",
+                         name: "rs_billing_checkout_items_quantity"
+    add_check_constraint :recording_studio_billing_checkout_intent_items, "currency_code ~ '^[A-Z]{3}$'",
+                         name: "rs_billing_checkout_items_currency"
+    add_check_constraint :recording_studio_billing_checkout_intent_items,
+                         "presentation IN ('embedded', 'redirect', 'payment_link', 'invoice', 'no_charge')", name: "rs_billing_checkout_items_presentation"
+    add_check_constraint :recording_studio_billing_checkout_intent_items, "manifest_digest ~ '^[0-9a-f]{64}$'",
+                         name: "rs_billing_checkout_items_digest"
+    add_check_constraint :recording_studio_billing_checkout_intent_items,
+                         "jsonb_typeof(commercial_manifest) = 'object'", name: "rs_billing_checkout_items_manifest_object"
 
     create_table :recording_studio_billing_checkout_attempts, id: :uuid do |t|
-      t.references :checkout_intent, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_checkout_intents }
-      t.references :financial_command, null: false, type: :uuid, foreign_key: { to_table: :recording_studio_billing_financial_commands }
+      t.references :checkout_intent, null: false, type: :uuid,
+                                     foreign_key: { to_table: :recording_studio_billing_checkout_intents }
+      t.references :financial_command, null: false, type: :uuid,
+                                       foreign_key: { to_table: :recording_studio_billing_financial_commands }
       t.integer :attempt_number, null: false
       t.string :state, null: false
       t.jsonb :safe_result, null: false, default: {}
@@ -57,12 +71,18 @@ class CreateCheckoutIntents < ActiveRecord::Migration[8.1]
       t.datetime :completed_at
       t.timestamps
     end
-    add_index :recording_studio_billing_checkout_attempts, %i[checkout_intent_id attempt_number], unique: true, name: "idx_rs_billing_checkout_attempt_number"
-    add_check_constraint :recording_studio_billing_checkout_attempts, "attempt_number > 0", name: "rs_billing_checkout_attempts_number"
-    add_check_constraint :recording_studio_billing_checkout_attempts, "state IN (#{quoted(ATTEMPT_STATES)})", name: "rs_billing_checkout_attempts_state"
-    add_check_constraint :recording_studio_billing_checkout_attempts, "jsonb_typeof(safe_result) = 'object'", name: "rs_billing_checkout_attempts_result_object"
-    add_check_constraint :recording_studio_billing_checkout_attempts, "jsonb_typeof(safe_error_details) = 'object'", name: "rs_billing_checkout_attempts_error_object"
-    add_check_constraint :recording_studio_billing_checkout_attempts, "(state IN ('pending', 'processing') AND completed_at IS NULL) OR (state IN ('succeeded', 'failed', 'cancelled', 'unknown') AND completed_at IS NOT NULL)", name: "rs_billing_checkout_attempts_lifecycle"
+    add_index :recording_studio_billing_checkout_attempts, %i[checkout_intent_id attempt_number], unique: true,
+                                                                                                  name: "idx_rs_billing_checkout_attempt_number"
+    add_check_constraint :recording_studio_billing_checkout_attempts, "attempt_number > 0",
+                         name: "rs_billing_checkout_attempts_number"
+    add_check_constraint :recording_studio_billing_checkout_attempts, "state IN (#{quoted(ATTEMPT_STATES)})",
+                         name: "rs_billing_checkout_attempts_state"
+    add_check_constraint :recording_studio_billing_checkout_attempts, "jsonb_typeof(safe_result) = 'object'",
+                         name: "rs_billing_checkout_attempts_result_object"
+    add_check_constraint :recording_studio_billing_checkout_attempts, "jsonb_typeof(safe_error_details) = 'object'",
+                         name: "rs_billing_checkout_attempts_error_object"
+    add_check_constraint :recording_studio_billing_checkout_attempts,
+                         "(state IN ('pending', 'processing') AND completed_at IS NULL) OR (state IN ('succeeded', 'failed', 'cancelled', 'unknown') AND completed_at IS NOT NULL)", name: "rs_billing_checkout_attempts_lifecycle"
 
     reversible do |direction|
       direction.up do

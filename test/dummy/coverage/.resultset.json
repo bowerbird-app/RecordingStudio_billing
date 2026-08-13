@@ -1,6 +1,61 @@
 {
   "Unit Tests": {
-    "coverage": {},
-    "timestamp": 1777949145
+    "coverage": {
+      "/workspace/test/dummy/app/models/application_record.rb": {
+        "lines": [
+          1,
+          1,
+          null
+        ],
+        "branches": {}
+      },
+      "/workspace/test/dummy/app/models/admin_root.rb": {
+        "lines": [
+          null,
+          null,
+          1,
+          1,
+          1,
+          null,
+          1,
+          null,
+          1,
+          null
+        ],
+        "branches": {}
+      },
+      "/workspace/test/dummy/app/models/workspace.rb": {
+        "lines": [
+          1,
+          1,
+          null,
+          1,
+          null,
+          1,
+          null
+        ],
+        "branches": {}
+      },
+      "/workspace/test/dummy/app/models/user.rb": {
+        "lines": [
+          1,
+          null,
+          null,
+          1,
+          null,
+          null
+        ],
+        "branches": {}
+      },
+      "/workspace/test/dummy/app/models/current.rb": {
+        "lines": [
+          1,
+          1,
+          null
+        ],
+        "branches": {}
+      }
+    },
+    "timestamp": 1786600251
   }
 }

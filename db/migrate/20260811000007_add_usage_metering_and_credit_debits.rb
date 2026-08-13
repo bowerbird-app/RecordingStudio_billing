@@ -15,7 +15,7 @@ class AddUsageMeteringAndCreditDebits < ActiveRecord::Migration[8.1]
       t.timestamps
     end
     add_index :recording_studio_billing_usage_events, %i[root_recording_id idempotency_key], unique: true,
-              name: "idx_rs_billing_usage_event_idempotency"
+                                                                                             name: "idx_rs_billing_usage_event_idempotency"
     add_index :recording_studio_billing_usage_events, %i[root_recording_id account_recording_id usage_key occurred_at],
               name: "idx_rs_billing_usage_event_total"
     add_check_constraint :recording_studio_billing_usage_events, "quantity > 0",
@@ -26,7 +26,7 @@ class AddUsageMeteringAndCreditDebits < ActiveRecord::Migration[8.1]
     change_column_null :recording_studio_billing_credit_ledger_entries, :purchase_effect_id, true
     add_column :recording_studio_billing_credit_ledger_entries, :direction, :string, null: false, default: "credit"
     add_reference :recording_studio_billing_credit_ledger_entries, :usage_event, type: :uuid,
-                  foreign_key: { to_table: :recording_studio_billing_usage_events }
+                                                                                 foreign_key: { to_table: :recording_studio_billing_usage_events }
     add_column :recording_studio_billing_credit_ledger_entries, :idempotency_key, :string
     add_column :recording_studio_billing_credit_ledger_entries, :safe_metadata, :jsonb, null: false, default: {}
     remove_check_constraint :recording_studio_billing_credit_ledger_entries, name: "rs_billing_credit_ledger_amount"
@@ -38,9 +38,9 @@ class AddUsageMeteringAndCreditDebits < ActiveRecord::Migration[8.1]
     add_check_constraint :recording_studio_billing_credit_ledger_entries, "jsonb_typeof(safe_metadata) = 'object'",
                          name: "rs_billing_credit_ledger_metadata_object"
     add_index :recording_studio_billing_credit_ledger_entries, :usage_event_id, unique: true,
-              name: "idx_rs_billing_credit_ledger_usage_event"
+                                                                                name: "idx_rs_billing_credit_ledger_usage_event"
     add_index :recording_studio_billing_credit_ledger_entries, %i[root_recording_id idempotency_key], unique: true,
-              where: "direction = 'debit'", name: "idx_rs_billing_credit_debit_idempotency"
+                                                                                                      where: "direction = 'debit'", name: "idx_rs_billing_credit_debit_idempotency"
 
     execute <<~SQL
       CREATE FUNCTION rs_billing_protect_usage_event() RETURNS trigger AS $$
@@ -99,10 +99,13 @@ class AddUsageMeteringAndCreditDebits < ActiveRecord::Migration[8.1]
     execute "DROP FUNCTION IF EXISTS rs_billing_protect_usage_event() CASCADE"
     remove_index :recording_studio_billing_credit_ledger_entries, name: "idx_rs_billing_credit_debit_idempotency"
     remove_index :recording_studio_billing_credit_ledger_entries, name: "idx_rs_billing_credit_ledger_usage_event"
-    remove_check_constraint :recording_studio_billing_credit_ledger_entries, name: "rs_billing_credit_ledger_metadata_object"
+    remove_check_constraint :recording_studio_billing_credit_ledger_entries,
+                            name: "rs_billing_credit_ledger_metadata_object"
     remove_check_constraint :recording_studio_billing_credit_ledger_entries, name: "rs_billing_credit_ledger_direction"
-    remove_check_constraint :recording_studio_billing_credit_ledger_entries, name: "rs_billing_credit_ledger_direction_amount"
-    add_check_constraint :recording_studio_billing_credit_ledger_entries, "amount > 0", name: "rs_billing_credit_ledger_amount"
+    remove_check_constraint :recording_studio_billing_credit_ledger_entries,
+                            name: "rs_billing_credit_ledger_direction_amount"
+    add_check_constraint :recording_studio_billing_credit_ledger_entries, "amount > 0",
+                         name: "rs_billing_credit_ledger_amount"
     remove_column :recording_studio_billing_credit_ledger_entries, :safe_metadata
     remove_column :recording_studio_billing_credit_ledger_entries, :idempotency_key
     remove_reference :recording_studio_billing_credit_ledger_entries, :usage_event

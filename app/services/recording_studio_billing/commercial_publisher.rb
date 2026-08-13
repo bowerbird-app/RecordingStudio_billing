@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
 
 require "json"
 
@@ -85,7 +85,8 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor, :now
+    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor,
+                :now
 
     def canonical_root!
       root = RecordingStudio.root_recording_or_self(root_recording)
@@ -109,9 +110,7 @@ module RecordingStudioBilling
 
     def selected_prices(root)
       scope = Price.with_current_recording.where(recording_studio_recordings: { root_recording_id: root.id })
-      if resolved_price_recording_ids.any?
-        return scope.where(recording_studio_recordings: { id: resolved_price_recording_ids }).order(:id).to_a
-      end
+      return scope.where(recording_studio_recordings: { id: resolved_price_recording_ids }).order(:id).to_a if resolved_price_recording_ids.any?
 
       drafts = scope.where(state: "draft").order(:id).to_a
       unless drafts.one?
@@ -288,7 +287,10 @@ module RecordingStudioBilling
     def validate_market!(market, records)
       provider = records.fetch(market.provider_account_recording_id)
       raise ArgumentError, "market provider is missing" unless provider.is_a?(ProviderAccount)
-      unless Array(market.country_codes).all? do |code|
+
+      market_countries = Array(market.country_codes) + Array(market.regional_country_codes) +
+                         market.country_groups.to_h.values.flatten
+      unless market_countries.uniq.all? do |code|
         provider.supported_markets.blank? || provider.supported_markets.include?(code)
       end
         raise ArgumentError, "market country is unsupported by provider"
@@ -613,7 +615,7 @@ module RecordingStudioBilling
 
       unless envelope["schema_version"] == SUPPORTED_MANIFEST_SCHEMA &&
              envelope["resolver_version"] == SUPPORTED_RESOLVER_VERSION
-          raise InvalidCandidateError,
+        raise InvalidCandidateError,
               "unsupported publication candidate version"
       end
       unless envelope["root_recording_id"] == publication.root_recording_id &&
@@ -622,11 +624,11 @@ module RecordingStudioBilling
       end
 
       unless CommercialManifestCanonicalizer.digest(envelope) == publication.candidate_digest
-          raise InvalidCandidateError,
+        raise InvalidCandidateError,
               "publication candidate digest mismatch"
       end
       unless publication.recording_snapshots == envelope["recordings"]
-          raise InvalidCandidateError,
+        raise InvalidCandidateError,
               "publication candidate snapshots differ from envelope"
       end
 
@@ -647,7 +649,7 @@ module RecordingStudioBilling
 
         unless manifest.schema_version == SUPPORTED_MANIFEST_SCHEMA &&
                manifest.resolver_version == SUPPORTED_RESOLVER_VERSION
-              raise InvalidCandidateError,
+          raise InvalidCandidateError,
                 "unsupported commercial manifest version"
         end
 
@@ -662,14 +664,12 @@ module RecordingStudioBilling
         next if CommercialManifestCanonicalizer.digest(actual) == manifest.manifest_digest &&
                 expected.except("manifest_digest") == actual.except("root_recording_id")
 
-          raise InvalidCandidateError,
+        raise InvalidCandidateError,
               "commercial manifest envelope mismatch"
       end
 
       snapshots = envelope.fetch("recordings")
-      unless snapshots.values.all? { |snapshot| snapshot["root_recording_id"] == publication.root_recording_id }
-        raise InvalidCandidateError, "publication candidate snapshots cross roots"
-      end
+      raise InvalidCandidateError, "publication candidate snapshots cross roots" unless snapshots.values.all? { |snapshot| snapshot["root_recording_id"] == publication.root_recording_id }
 
       recordings = RecordingStudio::Recording.unscoped.where(id: snapshots.keys).order(:id).lock.to_a
       recordings.group_by(&:recordable_type).each do |type, rows|

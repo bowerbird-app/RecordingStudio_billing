@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 require "recording_studio_billing/version"
+require "uri"
 require "recording_studio_billing/hooks"
+require "recording_studio_billing/access_actions"
 require "recording_studio_billing/configuration"
 require "recording_studio_billing/billable"
 require "recording_studio_billing/billing_admin_support"
+require "recording_studio_billing/billing_operations_section"
 require "recording_studio_billing/engine"
 
 module RecordingStudioBilling
@@ -62,6 +65,38 @@ module RecordingStudioBilling
       ProjectCompletedCheckoutIntent.call(...)
     end
 
+    def project_checkout_financial_records(...)
+      ProjectCheckoutFinancialRecords.call(...)
+    end
+
+    def create_subscription_change_intent(...)
+      CreateSubscriptionChangeIntent.call(...)
+    end
+
+    def apply_subscription_change_intent(...)
+      ApplySubscriptionChangeIntent.call(...)
+    end
+
+    def create_refund_intent(...)
+      CreateRefundIntent.call(...)
+    end
+
+    def create_adjustment_intent(...)
+      CreateAdjustmentIntent.call(...)
+    end
+
+    def project_refund_intent(...)
+      ProjectRefundIntent.call(...)
+    end
+
+    def project_adjustment_intent(...)
+      ProjectAdjustmentIntent.call(...)
+    end
+
+    def apply_plan_update(...)
+      ApplyPlanUpdate.call(...)
+    end
+
     def project_entitlements(...)
       ProjectEntitlements.call(...)
     end
@@ -107,6 +142,34 @@ module RecordingStudioBilling
       CreateRatedUsageSettlement.call(...)
     end
 
+    def allocate_rated_usage(...)
+      AllocateRatedUsage.call(...)
+    end
+
+    def expire_usage_credits(...)
+      ExpireUsageCredits.call(...)
+    end
+
+    def calculate_overage(...)
+      CalculateOverage.call(...)
+    end
+
+    def create_usage_correction(...)
+      CreateUsageCorrection.call(...)
+    end
+
+    def apply_provider_webhook(...)
+      ApplyProviderWebhook.call(...)
+    end
+
+    def apply_verified_provider_webhook(...)
+      ApplyVerifiedProviderWebhook.call(...)
+    end
+
+    def reconcile_provider_command(...)
+      ReconcileProviderCommand.call(...)
+    end
+
     def execute_financial_command(...)
       FinancialCommandExecutor.call(...)
     end
@@ -125,6 +188,18 @@ module RecordingStudioBilling
 
     def register_builtin_providers!
       configuration.register_builtin_providers!
+    end
+
+    def register_webhook_actions!
+      return unless defined?(RecordingStudioWebhooks)
+      return if RecordingStudioWebhooks.actions.fetch(ApplyVerifiedProviderWebhook::ACTION_NAME)
+
+      RecordingStudioWebhooks.register_action(
+        ApplyVerifiedProviderWebhook::ACTION_NAME,
+        ApplyVerifiedProviderWebhook,
+        event: "*",
+        source: "recording_studio_billing"
+      )
     end
 
     def provider_adapter(key)
@@ -159,7 +234,6 @@ module RecordingStudioBilling
       ) == true
     end
 
-    # rubocop:disable Metrics/MethodLength
     def register_capabilities!
       return unless defined?(RecordingStudio)
 
@@ -174,6 +248,5 @@ module RecordingStudioBilling
         child_recordables: "RecordingStudioBilling::BillingAdmin"
       )
     end
-    # rubocop:enable Metrics/MethodLength
   end
 end

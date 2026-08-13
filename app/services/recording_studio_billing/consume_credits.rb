@@ -20,7 +20,8 @@ module RecordingStudioBilling
     end
 
     def call
-      recorder = RecordUsage.new(root_recording: root_recording_input, usage_key:, quantity: amount, idempotency_key:, metadata:)
+      recorder = RecordUsage.new(root_recording: root_recording_input, usage_key:, quantity: amount, idempotency_key:,
+                                 metadata:)
       root, account = recorder.authority!
       product_id = product_recording.respond_to?(:id) ? product_recording.id : product_recording
       amount = Integer(@amount)
@@ -43,14 +44,15 @@ module RecordingStudioBilling
           next
         end
 
-        lock_balance!(root, account, product_id)
+        lock_balance!(root, account, product_id, usage_key)
         credit = CreditLedgerEntry.where(root_recording: root, account_recording: account, product_recording_id: product_id,
                                          credit_key: usage_key, direction: "credit").order(:effective_at, :id).first
         unless credit
           result = Result.new(status: :denied, entry: nil, usage_event: nil, reason: :insufficient_credit_balance)
           raise ActiveRecord::Rollback
         end
-        balance = CreditLedgerEntry.where(root_recording: root, account_recording: account, product_recording_id: product_id)
+        balance = CreditLedgerEntry.where(root_recording: root, account_recording: account,
+                                          product_recording_id: product_id, credit_key: usage_key)
                                    .where(effective_at: ..Time.current).sum(:amount)
         if balance < amount
           result = Result.new(status: :denied, entry: nil, usage_event: nil, reason: :insufficient_credit_balance)
@@ -73,8 +75,8 @@ module RecordingStudioBilling
 
     attr_reader :amount, :idempotency_key, :metadata, :product_recording, :root_recording_input, :usage_key
 
-    def lock_balance!(root, account, product_id)
-      key = "recording-studio-billing:credits:#{root.id}:#{account.id}:#{product_id}"
+    def lock_balance!(root, account, product_id, credit_key)
+      key = "recording-studio-billing:credits:#{root.id}:#{account.id}:#{product_id}:#{credit_key}"
       quoted_key = CreditLedgerEntry.connection.quote(key)
       CreditLedgerEntry.connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(#{quoted_key}, 0))")
     end

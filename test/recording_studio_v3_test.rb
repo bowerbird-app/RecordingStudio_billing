@@ -6,9 +6,9 @@ require_relative "dummy/config/environment"
 
 require "rails/test_help"
 
-# rubocop:disable Metrics/BlockLength
 class RecordingStudioV3Test < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  parallelize(workers: 1)
 
   COMMERCIAL_RECORDABLES = [
     RecordingStudioBilling::CostRate,
@@ -147,7 +147,6 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       rescue StandardError => e
         results << e
       end
-      # rubocop:enable Metrics/BlockLength
     end
     2.times { start << true }
     threads.each(&:join)
@@ -158,7 +157,6 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_equal 1, RecordingStudioBilling::Account.where(root_recording: concurrent_root).count
   end
 
-  # rubocop:disable Metrics/BlockLength
   test "root ownership survives revisions and ensure services return current snapshots" do
     workspace_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
     admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
@@ -193,8 +191,6 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_equal 2, RecordingStudioBilling::Account.where(root_recording_id: workspace_root.id).count
     assert_equal 2, RecordingStudioBilling::BillingAdmin.where(root_recording_id: admin_root.id).count
   end
-  # rubocop:enable Metrics/BlockLength
-
   # rubocop:disable Metrics/BlockLength
   test "V1 billing models validate the corrected contract and price versioning" do
     admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
@@ -223,7 +219,8 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
         allowed_currency_codes: %w[USD CAD],
         priority: 10,
         specificity: 2,
-        fallback: false,
+        regional_country_codes: [],
+        global_fallback: false,
         ppa_policy: "standard",
         rounding_policy: "half_up",
         tax_presentation_policy: "exclusive",
@@ -274,7 +271,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       currency_exponent: 2,
       pricing_model: "flat",
       version: 1,
-      scope: "standard"
+      scope: "default"
     )
     assert_predicate price, :valid?
     record_child(price, admin_root, option_recording)
@@ -422,30 +419,38 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
   end
   # rubocop:enable Metrics/BlockLength
 
+  test "database cleanup clears published historical and financial recording dependencies repeatedly" do
+    2.times do
+      graph = build_cleanup_dependency_graph!
+
+      assert_operator RecordingStudioBilling::Product.where(provider_account_recording: graph.fetch(:provider)).count,
+                      :>=, 2
+      assert_predicate graph.fetch(:manifest), :persisted?
+      assert_predicate graph.fetch(:command), :persisted?
+
+      BillingTestDatabaseCleanup.clear!
+
+      assert_empty RecordingStudioBilling::Account.all
+      assert_empty RecordingStudioBilling::BillingAdmin.all
+      assert_empty RecordingStudioBilling::ProviderAccount.all
+      assert_empty RecordingStudioBilling::Product.all
+      assert_empty RecordingStudioBilling::BillingOption.all
+      assert_empty RecordingStudioBilling::Market.all
+      assert_empty RecordingStudioBilling::Price.all
+      assert_empty RecordingStudioBilling::CommercialManifest.all
+      assert_empty RecordingStudioBilling::FinancialCommand.all
+      assert_empty RecordingStudio::Event.unscoped
+      assert_empty RecordingStudio::Recording.unscoped
+      assert_empty Workspace.all
+      assert_empty AdminRoot.all
+      assert_empty RecordingStudioRootSwitchable::Selection.all if defined?(RecordingStudioRootSwitchable::Selection)
+    end
+  end
+
   private
 
   def clear_billing_test_data!
-    connection = ActiveRecord::Base.connection
-    models = [
-      RecordingStudioBilling::PurchaseEffect,
-      RecordingStudioBilling::Purchase,
-      RecordingStudioBilling::SubscriptionItemVersion,
-      RecordingStudioBilling::Subscription,
-      RecordingStudioBilling::CheckoutAttempt,
-      RecordingStudioBilling::CheckoutIntentItem,
-      RecordingStudioBilling::CheckoutIntent,
-      RecordingStudioBilling::FinancialCommand,
-      RecordingStudioBilling::CommercialPublicationCandidate,
-      RecordingStudioBilling::CommercialManifest,
-      *COMMERCIAL_RECORDABLES
-    ]
-    tables = models.map(&:table_name).map { |table| connection.quote_table_name(table) }.join(", ")
-    connection.execute("TRUNCATE TABLE #{tables} RESTART IDENTITY CASCADE")
-    RecordingStudioRootSwitchable::Selection.delete_all if defined?(RecordingStudioRootSwitchable::Selection)
-    RecordingStudio::Event.unscoped.delete_all
-    RecordingStudio::Recording.unscoped.delete_all
-    Workspace.delete_all
-    AdminRoot.delete_all
+    BillingTestDatabaseCleanup.clear!
   end
 
   def record_child(recordable, root_recording, parent_recording = root_recording)
@@ -457,7 +462,126 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     ).recording
   end
 
+  def build_cleanup_dependency_graph!
+    actor = User.create!(
+      email: "cleanup-#{SecureRandom.hex(4)}@example.com",
+      password: "Password1!",
+      password_confirmation: "Password1!"
+    )
+    customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
+    account = RecordingStudioBilling.ensure_account(root_recording: customer_root, name: unique_name("Account"))
+    catalogue_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
+    billing_admin = RecordingStudioBilling.ensure_billing_admin(root_recording: catalogue_root,
+                                                                key: unique_key("billing"))
+    provider = record_child(
+      RecordingStudioBilling::ProviderAccount.new(
+        billing_admin_recording: billing_admin.recording,
+        key: unique_key("provider"),
+        adapter_key: "fake",
+        name: "Cleanup provider",
+        environment: "test",
+        configuration: {},
+        capabilities: ["catalogue"],
+        supported_markets: ["US"],
+        supported_currencies: ["USD"]
+      ),
+      catalogue_root,
+      billing_admin.recording
+    )
+    market = record_child(
+      RecordingStudioBilling::Market.new(
+        provider_account_recording: provider,
+        key: unique_key("market"),
+        country_codes: ["US"],
+        country_groups: {},
+        regional_country_codes: [],
+        global_fallback: false,
+        allowed_currency_codes: ["USD"],
+        default_currency_code: "USD",
+        priority: 1,
+        specificity: 1,
+        ppa_policy: "standard",
+        rounding_policy: "half_up",
+        tax_presentation_policy: "exclusive",
+        verification_policy: "none"
+      ),
+      catalogue_root,
+      billing_admin.recording
+    )
+    product = record_child(
+      RecordingStudioBilling::Product.new(
+        provider_account_recording: provider,
+        key: unique_key("product"),
+        kind: "plan",
+        feature_values: {}
+      ),
+      catalogue_root,
+      billing_admin.recording
+    )
+    option = record_child(
+      RecordingStudioBilling::BillingOption.new(
+        product_recording: product,
+        key: unique_key("option"),
+        recurrence: "one_time",
+        quantity_mode: "fixed",
+        default_quantity: 1,
+        pricing_model: "flat",
+        collection_method: "automatic",
+        payment_terms_days: 0,
+        trial_days: 0,
+        proration_policy: "none",
+        lifecycle_policy: "immediate",
+        checkout_policy: "allowed",
+        tax_policy: "exclusive"
+      ),
+      catalogue_root,
+      product
+    )
+    price = record_child(
+      RecordingStudioBilling::Price.new(
+        billing_option_recording: option,
+        market_recording: market,
+        key: unique_key("price"),
+        amount_minor: 1_000,
+        currency_code: "USD",
+        currency_exponent: 2,
+        pricing_model: "flat",
+        version: 1,
+        scope: "default"
+      ),
+      catalogue_root,
+      option
+    )
+
+    RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: catalogue_root,
+      price_recording_ids: [price.id],
+      actor:
+    )
+    catalogue_root.revise(product) { |revision| revision.key = unique_key("revised_product") }
+    command = RecordingStudioBilling.create_financial_command(
+      root_recording: customer_root,
+      account_recording: account.recording,
+      command_type: "capture_funds",
+      local_idempotency_key: SecureRandom.uuid,
+      provider_account_recording: provider,
+      provider_adapter_key: "fake",
+      request: { approved_amount_minor: 1_000 }
+    ).command
+
+    {
+      provider:,
+      manifest: RecordingStudioBilling::CommercialManifest.order(:created_at).last!,
+      command:
+    }
+  end
+
   def unique_name(prefix)
     "#{prefix} #{SecureRandom.hex(4)}"
+  end
+
+  def unique_key(prefix)
+    "#{prefix}_#{SecureRandom.hex(4)}"
   end
 end

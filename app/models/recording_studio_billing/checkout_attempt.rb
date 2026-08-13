@@ -16,8 +16,8 @@ module RecordingStudioBilling
     def safe_result
       SafeFinancialPayload.validate!(self[:safe_result])
       SafeFinancialPayload.validate!(self[:safe_error_details])
-    rescue SafeFinancialPayload::UnsafeValue => error
-      errors.add(:safe_result, error.message)
+    rescue SafeFinancialPayload::UnsafeValue => e
+      errors.add(:safe_result, e.message)
     end
   end
 end

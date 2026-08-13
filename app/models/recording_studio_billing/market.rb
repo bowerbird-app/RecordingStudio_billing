@@ -16,6 +16,8 @@ module RecordingStudioBilling
     validate :country_codes_are_iso_codes
     validate :allowed_currency_codes_are_iso_codes
     validate :country_groups_are_iso_codes
+    validate :regional_country_codes_are_iso_codes
+    validate :global_fallback_has_no_geographic_scope
     validate :default_currency_is_allowed
 
     private
@@ -30,7 +32,7 @@ module RecordingStudioBilling
 
     def validate_code_set(attribute, format, description)
       values = public_send(attribute)
-      return if values.is_a?(Array) && values.present? &&
+      return if values.is_a?(Array) &&
                 values.all? { |value| value.is_a?(String) && value.match?(format) }
 
       errors.add(attribute, "must be an array of #{description}")
@@ -51,6 +53,17 @@ module RecordingStudioBilling
       name.to_s.match?(CommercialRecordable::KEY_FORMAT) &&
         countries.is_a?(Array) && countries.present? &&
         countries.all? { |country| country.is_a?(String) && country.match?(/\A[A-Z]{2}\z/) }
+    end
+
+    def regional_country_codes_are_iso_codes
+      validate_code_set(:regional_country_codes, /\A[A-Z]{2}\z/, "ISO 3166-1 alpha-2 country codes")
+    end
+
+    def global_fallback_has_no_geographic_scope
+      return unless global_fallback?
+      return if country_codes.empty? && country_groups.empty? && regional_country_codes.empty?
+
+      errors.add(:global_fallback, "cannot include countries, groups, or regions")
     end
 
     def default_currency_is_allowed

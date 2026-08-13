@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
   class ProductRuleEvaluator
@@ -33,6 +33,7 @@ module RecordingStudioBilling
     end
 
     def violation_for(rule)
+      validate_rule!(rule)
       return unless conditions_met?(rule)
 
       target = rule.target_product_recording_id
@@ -45,18 +46,27 @@ module RecordingStudioBilling
 
     def conditions_met?(rule)
       conditions = rule.conditions
-      return false unless conditions.is_a?(Hash)
-      return false unless (conditions.keys.map(&:to_s) - ProductRule::CONDITION_KEYS).empty?
+      validate_conditions!(conditions)
 
       conditions.all? do |key, required|
-        if key.to_s == "selected_product_recording_ids"
-          next selected_recording_ids.intersect?(Array(required).map(&:to_s))
-        end
+        next Array(required).map(&:to_s).all? { |id| selected_recording_ids.include?(id) } if key.to_s == "selected_product_recording_ids"
 
         actual = context[key.to_s]
         Array(required).map(&:to_s).include?(actual.to_s) ||
           (required.is_a?(Array) && Array(actual).map(&:to_s).intersect?(required.map(&:to_s)))
       end
+    end
+
+    def validate_rule!(rule)
+      return if ProductRule::RULE_TYPES.include?(rule.rule_type) && rule.target_product_recording_id.present?
+
+      raise ArgumentError, "product rule is malformed"
+    end
+
+    def validate_conditions!(conditions)
+      return if ProductRule.valid_conditions?(conditions)
+
+      raise ArgumentError, "product rule conditions are malformed"
     end
 
     def selected_recording_ids

@@ -1,0 +1,26 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("checkout_title", "Checkout"), variant: :h1) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<p data-checkout-intent-state="<%= @presenter.checkout_intent.state %>"><%= @presenter.checkout_intent.state.humanize %></p>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.frozen_lines.each do |line| %>
+    <% price = line.dig("price") || {} %>
+    <% option = line.dig("billing_option") || {} %>
+    <li>
+      <%= line.dig("product", "name") || line.dig("product", "key") || "Billing item" %>
+      <%= price["amount_minor"] %> <%= price["currency_code"] %>
+      <%= option["recurrence"] %>
+      <%= option["overage_policy"] %>
+    </li>
+  <% end %>
+<% end %>
+<% if @presenter.embedded? %>
+  <p><%= @presenter.copy("checkout_provider_component_required", "Secure checkout is preparing in the configured payment provider.") %></p>
+<% elsif @presenter.redirect? %>
+  <%= render FlatPack::Button::Component.new(text: @presenter.copy("checkout_continue", "Continue to secure checkout"), style: :primary, size: :md, url: @presenter.presentation[:url], data: { turbo: false }) %>
+<% else %>
+  <p><%= @presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.") %></p>
+<% end %>
+<p><%= @presenter.copy("checkout_notice", "Your payment is confirmed only after provider reconciliation.") %></p>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:checkout).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

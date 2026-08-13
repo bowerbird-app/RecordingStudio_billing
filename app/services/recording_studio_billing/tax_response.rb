@@ -36,7 +36,9 @@ module RecordingStudioBilling
     def validate_arithmetic!
       raise ArgumentError, "tax currency is invalid" unless currency.match?(/\A[A-Z]{3}\z/)
       raise ArgumentError, "tax behavior is invalid" unless TaxCalculatorCapabilities::BEHAVIORS.include?(behavior)
-      raise ArgumentError, "tax monetary values cannot be negative" if [subtotal_minor, discount_minor, tax_minor, total_minor].any?(&:negative?)
+      raise ArgumentError, "tax monetary values cannot be negative" if [subtotal_minor, discount_minor, tax_minor,
+                                                                        total_minor].any?(&:negative?)
+
       expected = subtotal_minor - discount_minor
       expected += tax_minor if behavior == "exclusive"
       raise ArgumentError, "tax arithmetic is inconsistent" unless total_minor == expected
@@ -46,7 +48,8 @@ module RecordingStudioBilling
     def normalize_breakdown(value)
       Array(value).map do |entry|
         data = entry.respond_to?(:to_h) ? entry.to_h : {}
-        raise ArgumentError, "tax breakdown amounts must use integer minor units" unless data.values_at(:amount_minor, "amount_minor").compact.all?(Integer)
+        raise ArgumentError, "tax breakdown amounts must use integer minor units" unless data.values_at(:amount_minor,
+                                                                                                        "amount_minor").compact.all?(Integer)
 
         SafeFinancialPayload.normalize(data)
       end.freeze

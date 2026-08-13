@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/ClassLength, Metrics/MethodLength
 class CreateCommercialRecordables < ActiveRecord::Migration[8.1]
   RECORDINGS = :recording_studio_recordings
   STATES = %w[draft published retired].freeze
@@ -23,11 +22,9 @@ class CreateCommercialRecordables < ActiveRecord::Migration[8.1]
     create_cost_cards
     create_cost_rates
   end
-  # rubocop:enable Metrics/ClassLength, Metrics/MethodLength
 
   private
 
-  # rubocop:disable Metrics/MethodLength
   def create_provider_accounts
     create_table :recording_studio_billing_provider_accounts, id: :uuid do |t|
       recording_reference t, :billing_admin
@@ -278,5 +275,4 @@ class CreateCommercialRecordables < ActiveRecord::Migration[8.1]
                          name: "#{table}_package_size"
     add_check_constraint table, "version >= 1", name: "#{table}_version"
   end
-  # rubocop:enable Metrics/MethodLength
 end

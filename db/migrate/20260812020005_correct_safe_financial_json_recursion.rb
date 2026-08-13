@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+require_relative "20260812020004_harden_safe_financial_json_arrays"
+
+class CorrectSafeFinancialJsonRecursion < HardenSafeFinancialJsonArrays
+end

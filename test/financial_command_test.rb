@@ -8,6 +8,7 @@ require "rails/test_help"
 
 class FinancialCommandTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
+  parallelize(workers: 1)
 
   class InspectingAdapter
     attr_reader :called_outside_transaction, :persisted_attempt_state, :validated_request
@@ -70,10 +71,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
     created = RecordingStudioBilling::CreateFinancialCommand.call(**attributes)
     existing = RecordingStudioBilling::CreateFinancialCommand.call(
-      **attributes.merge(root_recording: account.recording, request: { quantity: 2, currency: "USD", amount_minor: 1_500 })
+      **attributes, root_recording: account.recording,
+                    request: { quantity: 2, currency: "USD", amount_minor: 1_500 }
     )
     conflict = RecordingStudioBilling::CreateFinancialCommand.call(
-      **attributes.merge(request: attributes.fetch(:request).merge(amount_minor: 1_501))
+      **attributes, request: attributes.fetch(:request).merge(amount_minor: 1_501)
     )
 
     assert created.created?
@@ -109,8 +111,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
     result = RecordingStudioBilling.create_financial_command(
       **command_attributes(root: customer_root, account:, request: { amount_minor: 100 })
-        .except(:calculator_key, :calculator_mode)
-        .merge(provider_account_recording: provider_recording, provider_adapter_key: "test")
+        .except(:calculator_key, :calculator_mode), provider_account_recording: provider_recording, provider_adapter_key: "test"
     )
 
     assert result.created?
@@ -127,12 +128,12 @@ class FinancialCommandTest < ActiveSupport::TestCase
     end
     assert_raises(ArgumentError) do
       RecordingStudioBilling.create_financial_command(
-        **attributes.merge(provider_account_recording: provider_authority)
+        **attributes, provider_account_recording: provider_authority
       )
     end
     assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
       RecordingStudioBilling.create_financial_command(
-        **attributes.merge(request: { amount_minor: 100, access_token: "must-not-persist" })
+        **attributes, request: { amount_minor: 100, access_token: "must-not-persist" }
       )
     end
   end
@@ -175,8 +176,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
           ready << true
           release.pop
           results << RecordingStudioBilling.create_financial_command(
-            **command_attributes(root:, account:, request: { approved_amount_minor: amount })
-              .merge(local_idempotency_key: key)
+            **command_attributes(root:, account:,
+                                 request: { approved_amount_minor: amount }), local_idempotency_key: key
           )
         end
       end
@@ -205,8 +206,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
     }.each do |digest, message|
       error = assert_raises(ArgumentError) do
         RecordingStudioBilling.create_financial_command(
-          **command_attributes(root:, account:, request: { approved_amount_minor: 100 })
-            .merge(commercial_manifest_digests: [digest])
+          **command_attributes(root:, account:,
+                               request: { approved_amount_minor: 100 }), commercial_manifest_digests: [digest]
         )
       end
       assert_match message, error.message
@@ -413,12 +414,12 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
   test "fake adapter outcomes map deterministically including pending and unknown" do
     expectations = {
-      success: ["succeeded", "success", "success"],
-      duplicate: ["succeeded", "duplicate", "duplicate"],
-      provider_rejection: ["failed", "provider_rejected", "provider_rejected"],
-      provider_unavailable: ["failed", "provider_unavailable", "provider_unavailable"],
-      pending: ["requires_reconciliation", "pending", "pending"],
-      unknown_provider_state: ["requires_reconciliation", "unknown", "unknown_provider_state"]
+      success: %w[succeeded success success],
+      duplicate: %w[succeeded duplicate duplicate],
+      provider_rejection: %w[failed provider_rejected provider_rejected],
+      provider_unavailable: %w[failed provider_unavailable provider_unavailable],
+      pending: %w[requires_reconciliation pending pending],
+      unknown_provider_state: %w[requires_reconciliation unknown unknown_provider_state]
     }
 
     expectations.each do |outcome, (state, status, normalized_outcome)|
@@ -481,7 +482,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
 
   test "unknown adapter states require reconciliation and remain unknown in normalized results" do
     root, account = account_authority
-    adapter = InspectingAdapter.new(response: { state: "provider_reviewing", normalized_result: { status: "provider_reviewing" } })
+    adapter = InspectingAdapter.new(response: { state: "provider_reviewing",
+                                                normalized_result: { status: "provider_reviewing" } })
 
     key = register_provider(adapter)
     result = RecordingStudioBilling::FinancialCommandExecutor.call(
@@ -526,7 +528,8 @@ class FinancialCommandTest < ActiveSupport::TestCase
     )
 
     refute unsafe_attempt.valid?
-    assert_includes unsafe_attempt.errors[:safe_metadata], "must not contain credentials, signatures, or raw provider data"
+    assert_includes unsafe_attempt.errors[:safe_metadata],
+                    "must not contain credentials, signatures, or raw provider data"
 
     adapter = InspectingAdapter.new(response: { state: "succeeded", normalized_result: { status: "succeeded" } })
     register_provider(adapter)
@@ -557,11 +560,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) { attempt.update_column(:safe_metadata, { "rewritten" => true }) }
     assert_raises(ActiveRecord::StatementInvalid) do
       command.attempts.insert_all!([{
-        id: SecureRandom.uuid, attempt_number: 2, state: "processing",
-        provider_idempotency_key: "different-key", started_at: Time.current,
-        normalized_result: {}, safe_error_details: {}, safe_metadata: {}, uncertain_outcome: false,
-        created_at: Time.current, updated_at: Time.current
-      }])
+                                     id: SecureRandom.uuid, attempt_number: 2, state: "processing",
+                                     provider_idempotency_key: "different-key", started_at: Time.current,
+                                     normalized_result: {}, safe_error_details: {}, safe_metadata: {}, uncertain_outcome: false,
+                                     created_at: Time.current, updated_at: Time.current
+                                   }])
     end
   end
 
@@ -578,13 +581,15 @@ class FinancialCommandTest < ActiveSupport::TestCase
     end
     assert_raises(ActiveRecord::StatementInvalid) do
       RecordingStudioBilling::FinancialCommandAttempt.insert_all!([
-        base_attempt.merge(id: SecureRandom.uuid, attempt_number: 99, state: "processing")
-      ])
+                                                                    base_attempt.merge(id: SecureRandom.uuid,
+                                                                                       attempt_number: 99, state: "processing")
+                                                                  ])
     end
     assert_raises(ActiveRecord::StatementInvalid) do
       RecordingStudioBilling::FinancialCommandAttempt.insert_all!([
-        base_attempt.merge(id: SecureRandom.uuid, state: "processing", completed_at: Time.current)
-      ])
+                                                                    base_attempt.merge(id: SecureRandom.uuid,
+                                                                                       state: "processing", completed_at: Time.current)
+                                                                  ])
     end
 
     other_root, other_account = account_authority
@@ -652,7 +657,7 @@ class FinancialCommandTest < ActiveSupport::TestCase
     %i[signature card_number provider_url provider_id provider_payload raw_response total].each do |unsafe_key|
       assert_raises(RecordingStudioBilling::SafeFinancialPayload::UnsafeValue) do
         RecordingStudioBilling.create_financial_command(
-          **safe.merge(local_idempotency_key: SecureRandom.uuid, request: { unsafe_key => "unsafe" })
+          **safe, local_idempotency_key: SecureRandom.uuid, request: { unsafe_key => "unsafe" }
         )
       end
     end
@@ -673,7 +678,11 @@ class FinancialCommandTest < ActiveSupport::TestCase
     assert_includes indexes.map(&:name), "idx_rs_billing_commands_reconciliation_work"
 
     generic_service_files = Dir[File.expand_path("../app/services/recording_studio_billing/**/*.rb", __dir__)] -
-                            [File.expand_path("../app/services/recording_studio_billing/stripe_adapter.rb", __dir__)]
+                            [
+                              File.expand_path("../app/services/recording_studio_billing/stripe_adapter.rb", __dir__),
+                              File.expand_path("../app/services/recording_studio_billing/stripe_tax_calculator.rb",
+                                               __dir__)
+                            ]
     generic_service_source = generic_service_files.map { |path| File.read(path) }.join
     refute_match(/Stripe::|stripe_credential_resolver|provider\s*==\s*:stripe/, generic_service_source)
   end
@@ -758,10 +767,10 @@ class FinancialCommandTest < ActiveSupport::TestCase
     envelope = manifest_envelope(root:, data:, snapshots:, references:, schema_version:)
     digest = valid_digest ? RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope) : SecureRandom.hex(32)
     RecordingStudioBilling::CommercialManifest.insert_all!([{
-      id: SecureRandom.uuid, root_recording_id: root.id, schema_version:, resolver_version: "v1",
-      canonical_data: data, recording_snapshots: snapshots, snapshot_references: references,
-      manifest_digest: digest, used_at: Time.current, created_at: Time.current, updated_at: Time.current
-    }])
+                                                             id: SecureRandom.uuid, root_recording_id: root.id, schema_version:, resolver_version: "v1",
+                                                             canonical_data: data, recording_snapshots: snapshots, snapshot_references: references,
+                                                             manifest_digest: digest, used_at: Time.current, created_at: Time.current, updated_at: Time.current
+                                                           }])
     RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: digest)
   end
 
@@ -773,15 +782,6 @@ class FinancialCommandTest < ActiveSupport::TestCase
   end
 
   def clear_financial_data!
-    connection = ActiveRecord::Base.connection
-    tables = [RecordingStudioBilling::FinancialCommand.table_name, RecordingStudioBilling::CommercialManifest.table_name]
-    connection.execute("TRUNCATE TABLE #{tables.map { |table| connection.quote_table_name(table) }.join(', ')} RESTART IDENTITY CASCADE")
-    RecordingStudio::Event.unscoped.delete_all
-    RecordingStudioBilling::ProviderAccount.delete_all
-    RecordingStudioBilling::BillingAdmin.delete_all
-    RecordingStudioBilling::Account.delete_all
-    RecordingStudio::Recording.unscoped.delete_all
-    Workspace.delete_all
-    AdminRoot.delete_all
+    BillingTestDatabaseCleanup.clear!
   end
 end
