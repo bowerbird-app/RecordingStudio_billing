@@ -129,7 +129,9 @@ module RecordingStudioBilling
     end
 
     def money_delta(allocation, settlement)
-      rate = allocation.rated_usage.rate_snapshot.fetch("customer_rate")
+      rate = allocation.overage_calculation&.rate_snapshot
+      raise ArgumentError, "usage correction overage authority is unavailable" unless rate
+
       settled = settlement.canonical_request.fetch("allocations").find do |entry|
         entry.fetch("usage_allocation_id") == allocation.id
       end
@@ -149,7 +151,13 @@ module RecordingStudioBilling
       package_size = Integer(rate.fetch("package_size", 1) || 1)
       raise ArgumentError, "usage correction package size is invalid" unless package_size.positive?
 
-      ((Integer(quantity) * Integer(rate.fetch("amount_minor"))) + package_size - 1) / package_size
+      case rate.fetch("pricing_model")
+      when "flat" then Integer(quantity).positive? ? Integer(rate.fetch("amount_minor")) : 0
+      when "per_unit" then Integer(quantity) * Integer(rate.fetch("amount_minor"))
+      when "package"
+        ((Integer(quantity) * Integer(rate.fetch("amount_minor"))) + package_size - 1) / package_size
+      else raise ArgumentError, "usage correction pricing model is invalid"
+      end
     end
 
     def append_adjustment!(period, allocation, correction)

@@ -37,16 +37,19 @@ module RecordingStudioBilling
                             reason: :usage_period_empty)
         end
 
-        overages = allocations.to_h do |allocation|
-          [allocation.id,
-           CalculateOverage.call(allocation:, rate: allocation.rated_usage.rate_snapshot.fetch("customer_rate"))]
-        end
+        overages = allocations.to_h { |allocation| [allocation.id, CalculateOverage.call(allocation:)] }.compact
         terms = settlement_terms(allocations)
         return Result.new(status: terms, settlement: nil, command: nil, reason: terms) if terms.is_a?(Symbol)
 
         unless compatible_money?(overages)
           return Result.new(status: :requires_review, settlement: nil, command: nil,
                             reason: :incompatible_currency_terms)
+        end
+
+        safety = safety_gate(overages)
+        if safety
+          period.update!(state: "requires_review") if period.state == "closed"
+          return Result.new(status: :requires_review, settlement: nil, command: nil, reason: safety)
         end
 
         capability = provider_capability(terms, allocations.first.rated_usage)
@@ -86,6 +89,8 @@ module RecordingStudioBilling
         Result.new(status: command_result.created? ? :created : :existing, settlement:,
                    command: command_result.command, reason: nil)
       end
+    rescue CalculateOverage::AuthorityError => e
+      Result.new(status: :requires_review, settlement: nil, command: nil, reason: e.reason)
     rescue ActiveRecord::RecordNotFound, ArgumentError
       Result.new(status: :denied, settlement: nil, command: nil, reason: :invalid_authority)
     end
@@ -184,7 +189,39 @@ module RecordingStudioBilling
     end
 
     def compatible_money?(overages)
+      return true if overages.empty?
+
       overages.values.map { |overage| [overage.currency_code, overage.currency_exponent] }.uniq.one?
+    end
+
+    def safety_gate(overages)
+      return if overages.empty?
+
+      limits = overages.values.map { |overage| overage.rate_snapshot.fetch("safety_limits", {}).stringify_keys }
+      return :overage_safety_limits_ambiguous unless limits.uniq.one?
+
+      limits = limits.sole
+      amount = overages.values.sum(&:amount_minor)
+      hard = integer_limit(limits["hard_threshold_minor"])
+      maximum_liability = integer_limit(limits["maximum_period_liability_minor"])
+      maximum_submission = integer_limit(limits["maximum_submission_minor"])
+      review = integer_limit(limits["review_threshold_minor"])
+      return :overage_hard_threshold_exceeded if hard && amount > hard
+      return :overage_period_liability_exceeded if maximum_liability && amount > maximum_liability
+      return :overage_submission_limit_exceeded if maximum_submission && amount > maximum_submission
+
+      :overage_review_threshold_exceeded if review && amount > review
+    end
+
+    def integer_limit(value)
+      return if value.nil?
+
+      limit = Integer(value)
+      raise ArgumentError, "overage safety limit must be non-negative" if limit.negative?
+
+      limit
+    rescue ArgumentError, TypeError
+      raise CalculateOverage::AuthorityError, :overage_safety_limits_invalid
     end
 
     def provider_markets(terms)
@@ -200,19 +237,33 @@ module RecordingStudioBilling
                                        "usage_period_id" => period.id, "usage_key" => period.usage_key,
                                        "allocations" => allocations.map do |allocation|
                                          rated = allocation.rated_usage
-                                         overage = overages.fetch(allocation.id)
+                                         overage = overages[allocation.id]
                                          { "rated_usage_id" => rated.id, "usage_allocation_id" => allocation.id,
                                            "meter_recording_id" => rated.meter_aggregation.meter_recording_id, "credited_quantity" => allocation.credited_quantity,
-                                           "excess_quantity" => allocation.excess_quantity, "amount_minor" => overage.amount_minor }
+                                           "excess_quantity" => allocation.excess_quantity, "amount_minor" => overage&.amount_minor || 0 }
                                        end,
                                        "market_recording_id" => terms.fetch(:market_recording_id), "collection_method" => terms.fetch(:collection_method),
-                                       "amount_minor" => overages.values.sum(&:amount_minor), "currency" => overages.values.first.currency_code,
-                                       "currency_exponent" => overages.values.first.currency_exponent,
+                                       "amount_minor" => overages.values.sum(&:amount_minor), "currency" => settlement_currency(allocations, overages).first,
+                                       "currency_exponent" => settlement_currency(allocations, overages).last,
                                        "commercial_manifest_digests" => allocations.map do |allocation|
                                          allocation.rated_usage.manifest_digest
                                        end.uniq.sort,
                                        "window_starts_at" => period.starts_at.utc.iso8601(6), "window_ends_at" => period.ends_at.utc.iso8601(6)
                                      }, allow_authoritative_totals: true)
+    end
+
+    def settlement_currency(allocations, overages)
+      return [overages.values.first.currency_code, overages.values.first.currency_exponent] if overages.present?
+
+      money = allocations.map do |allocation|
+        rate = allocation.rated_usage.rate_snapshot.fetch("customer_rate")
+        [rate.fetch("currency_code"), Integer(rate.fetch("currency_exponent"))]
+      end
+      raise CalculateOverage::AuthorityError, :incompatible_currency_terms unless money.uniq.one?
+
+      money.sole
+    rescue KeyError, ArgumentError, TypeError
+      raise CalculateOverage::AuthorityError, :incompatible_currency_terms
     end
 
     def calculate_tax(root, account, period, allocations, request, terms)

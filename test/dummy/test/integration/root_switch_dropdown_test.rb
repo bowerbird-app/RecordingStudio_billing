@@ -6,7 +6,7 @@ require "devise/test/integration_helpers"
 class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
-  test "home page renders the root switch dropdown trigger" do
+  test "home page renders workspace and administration roots in the switch dropdown" do
     user = User.find_or_create_by!(email: "root-switch-test@example.com") do |record|
       record.password = "Password123!"
       record.password_confirmation = "Password123!"
@@ -15,12 +15,15 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     sign_in user
 
     workspace = Workspace.create!(name: "Dropdown Workspace")
+    admin_root = AdminRoot.create!(name: "Dropdown Administration")
     RecordingStudio.root_recording_for(workspace)
+    RecordingStudio.root_recording_for(admin_root)
 
     get root_path
 
     assert_response :success
     assert_includes response.body, workspace.name
+    assert_includes response.body, admin_root.name
   end
 
   test "root switch page renders with the host sidebar" do

@@ -8,4 +8,3 @@ pin_all_from "app/javascript/controllers", under: "controllers"
 # Pin FlatPack controllers
 pin_all_from FlatPack::Engine.root.join("app/javascript/flat_pack/controllers"), under: "controllers/flat_pack", to: "flat_pack/controllers", preload: false
 pin "flat_pack/heroicons", to: "flat_pack/heroicons.js", preload: false
-pin "recording_studio_billing/stripe_checkout", to: "recording_studio_billing/stripe_checkout.js", preload: false

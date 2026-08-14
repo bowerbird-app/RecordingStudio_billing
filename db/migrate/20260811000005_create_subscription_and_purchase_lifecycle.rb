@@ -155,7 +155,7 @@ class CreateSubscriptionAndPurchaseLifecycle < ActiveRecord::Migration[8.1]
       BEGIN
         IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'subscriptions are durable'; END IF;
         IF OLD.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR OLD.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR OLD.identifier IS DISTINCT FROM NEW.identifier OR OLD.provider_reference IS DISTINCT FROM NEW.provider_reference THEN RAISE EXCEPTION 'subscription authority is immutable'; END IF;
-        IF NOT ((OLD.state = 'trialing' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'active' AND NEW.state IN ('past_due', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'past_due' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'paused' AND NEW.state IN ('active', 'cancelled', 'expired')) OR OLD.state = NEW.state) THEN RAISE EXCEPTION 'subscription lifecycle transition is invalid'; END IF;
+        IF NOT ((OLD.state = 'trialing' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'active' AND NEW.state IN ('past_due', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'past_due' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'paused' AND NEW.state IN ('active', 'cancelled', 'expired')) OR (OLD.state = 'cancelled' AND NEW.state = 'active') OR OLD.state = NEW.state) THEN RAISE EXCEPTION 'subscription lifecycle transition is invalid'; END IF;
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;

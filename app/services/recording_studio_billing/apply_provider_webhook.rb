@@ -44,6 +44,23 @@ module RecordingStudioBilling
       return reject!("provider_verification_rejected") unless trusted_identity?(trusted, provider_account_id,
                                                                                 environment, receipt.provider_event_id)
 
+      reference = ProviderReference.find_by!(
+        provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:, remote_type:, remote_id:
+      )
+      existing = WebhookEffect.find_by(
+        inbound_event_id: receipt.id, provider_account_recording_id: provider_account_id, environment:,
+        handler_name:, action_version:
+      )
+      return Result.new(status: :accepted, effect: existing) if existing
+
+      command = reference.financial_command
+      ReconcileProviderCommand.call(command:) if command.command_type == "checkout" || !command.reload.state.in?(%w[
+                                                                                                                   succeeded failed cancelled
+                                                                                                                 ])
+      return reject!("checkout_reconciliation_pending") if command.command_type == "checkout" && !paid_checkout_result?(command)
+      return reject!("checkout_projection_incomplete") if command.command_type == "checkout" &&
+                                                          !project_checkout!(command, verified: true)
+
       WebhookEffect.transaction(requires_new: true) do
         reference = ProviderReference.lock.find_by!(
           provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:, remote_type:, remote_id:
@@ -55,10 +72,8 @@ module RecordingStudioBilling
         return Result.new(status: :accepted, effect: existing) if existing
 
         command = reference.financial_command
-        ReconcileProviderCommand.call(command:) if command.command_type == "checkout" || !command.reload.state.in?(%w[
-                                                                                                                     succeeded failed cancelled
-                                                                                                                   ])
-        project_checkout!(command, verified: true)
+        return reject!("checkout_reconciliation_pending") if command.command_type == "checkout" && !paid_checkout_result?(command)
+
         effect = WebhookEffect.create!(
           provider_adapter_key:, event_id: receipt.provider_event_id, inbound_event_id: receipt.id,
           provider_account_recording_id: provider_account_id, environment:, handler_name:, action_version:,
@@ -138,9 +153,9 @@ module RecordingStudioBilling
     end
 
     def project_checkout!(command, verified:)
-      return unless command.reload.command_type == "checkout" && command.state == "succeeded"
-      return unless verified
-      return unless authoritative_checkout_result?(command)
+      return false unless command.reload.command_type == "checkout" && command.state == "succeeded"
+      return false unless verified
+      return false unless paid_checkout_result?(command)
 
       intent = CheckoutIntent.find_by(financial_command: command)
       unless intent
@@ -148,17 +163,24 @@ module RecordingStudioBilling
                                                kind: "checkout_intent_missing") do |issue|
           issue.safe_payload = {}
         end
-        return
+        return false
       end
       mark_verified_checkout_result!(command)
-      ProjectCheckoutFinancialRecords.call(checkout_intent: intent, root_recording: command.root_recording)
+      begin
+        ProjectCheckoutFinancialRecords.call(checkout_intent: intent, root_recording: command.root_recording)
+      rescue ArgumentError
+        return false
+      end
       ProjectCompletedCheckoutIntent.call(checkout_intent: intent, root_recording: command.root_recording)
+      checkout_projection_complete?(intent, command)
     end
 
-    def authoritative_checkout_result?(command)
+    def paid_checkout_result?(command)
+      return false unless command.reload.state == "succeeded"
+
       %w[subtotal_minor discount_minor tax_minor total_minor currency lines].all? do |key|
         command.normalized_result.key?(key)
-      end
+      end && command.normalized_result["payment_state"] == "paid"
     end
 
     def mark_verified_checkout_result!(command)
@@ -167,6 +189,20 @@ module RecordingStudioBilling
 
         command.update!(normalized_result: command.normalized_result.merge("authority" => "verified_webhook"))
       end
+    end
+
+    def checkout_projection_complete?(intent, command)
+      invoice = Invoice.find_by(financial_command: command)
+      payment = Payment.find_by(financial_command: command)
+      return false unless invoice && payment&.invoice_id == invoice.id && intent.reload.state == "completed"
+      return true unless native_tax_checkout?(command)
+
+      TaxCalculation.exists?(financial_command: command)
+    end
+
+    def native_tax_checkout?(command)
+      tax = command.canonical_request.dig("request", "tax").to_h
+      tax["enabled"] == true && tax["mode"] == "provider_native"
     end
   end
 end

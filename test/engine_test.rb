@@ -54,4 +54,10 @@ class EngineTest < Minitest::Test
   ensure
     configuration&.reset_registries!
   end
+
+  def test_engine_packages_the_stripe_checkout_module_for_host_asset_pipelines
+    assert_includes Rails.application.config.assets.precompile, "recording_studio_billing/stripe_checkout.js"
+    assert_includes RecordingStudioBilling::Engine.paths["app/assets"].paths.map(&:to_s),
+                    RecordingStudioBilling::Engine.root.join("app/assets").to_s
+  end
 end

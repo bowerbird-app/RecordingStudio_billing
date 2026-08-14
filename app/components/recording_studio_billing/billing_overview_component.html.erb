@@ -8,13 +8,18 @@
       <%= render FlatPack::List::Component.new do %>
         <% @presenter.subscriptions.each do |subscription| %>
           <li>
-            <%= subscription.identifier %>: <%= subscription.state %>
+            <% row = @presenter.subscription_rows.find { |candidate| candidate[:identifier] == subscription.identifier } %>
+            <strong><%= row[:identifier] %></strong>: <%= row[:state] %> (<%= row[:currency] %>)
+            <% if row[:lifecycle].present? %><br>Current versions: <%= row[:lifecycle] %><% end %>
+            <% if row[:market].present? %><br>Market: <%= row[:market] %><% end %>
+            <% if row[:benefits].present? %><br>Benefits and allowances: <%= row[:benefits] %><% end %>
             <% if subscription.state.in?(%w[trialing active past_due paused]) %>
               <%= link_to "Cancel", helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
             <% end %>
             <% if subscription.state == "paused" %>
               <%= link_to "Resume", helpers.resume_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
             <% end %>
+            <br>Cancellation and resumption are requests; the current plan changes only after provider reconciliation.
           </li>
         <% end %>
       <% end %>

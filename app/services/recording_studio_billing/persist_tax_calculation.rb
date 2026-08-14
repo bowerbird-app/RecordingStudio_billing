@@ -15,6 +15,7 @@ module RecordingStudioBilling
         commercial_manifest_id: payload.fetch("commercial_manifest_id"), supersedes:, revision_number:,
         calculator_key: command.calculator_key, calculator_mode: command.calculator_mode,
         manifest_digest: payload.fetch("commercial_manifest_digest"),
+        manifest_digests: [payload.fetch("commercial_manifest_digest")],
         transaction_type: payload.fetch("transaction_type"), operation_reference: payload.fetch("operation_reference"),
         request_fingerprint: CommercialManifestCanonicalizer.digest(payload),
         idempotency_key: payload.fetch("idempotency_key"), subtotal_minor: result.fetch("subtotal_minor"),

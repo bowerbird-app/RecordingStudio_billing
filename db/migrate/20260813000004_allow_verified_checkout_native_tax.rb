@@ -2,6 +2,15 @@
 
 class AllowVerifiedCheckoutNativeTax < ActiveRecord::Migration[8.1]
   def up
+    add_column :recording_studio_billing_tax_calculations, :manifest_digests, :jsonb, null: false, default: []
+    execute <<~SQL
+      UPDATE recording_studio_billing_tax_calculations
+      SET manifest_digests = jsonb_build_array(manifest_digest)
+    SQL
+    add_check_constraint :recording_studio_billing_tax_calculations,
+                         "jsonb_typeof(manifest_digests) = 'array' AND jsonb_array_length(manifest_digests) > 0 " \
+                         "AND manifest_digests ->> 0 = manifest_digest",
+                         name: "rs_billing_tax_manifest_set"
     execute <<~SQL
       CREATE OR REPLACE FUNCTION rs_billing_validate_tax_authority() RETURNS trigger AS $$
       DECLARE
@@ -67,6 +76,9 @@ class AllowVerifiedCheckoutNativeTax < ActiveRecord::Migration[8.1]
              OR command_metadata IS DISTINCT FROM NEW.safe_metadata THEN
             RAISE EXCEPTION 'tax calculation does not match its durable command';
           END IF;
+          IF NEW.manifest_digests IS DISTINCT FROM jsonb_build_array(NEW.manifest_digest) THEN
+            RAISE EXCEPTION 'tax calculation manifest set is invalid';
+          END IF;
         ELSIF command_row.command_type = 'checkout' THEN
           IF NOT EXISTS (
             SELECT 1
@@ -81,6 +93,19 @@ class AllowVerifiedCheckoutNativeTax < ActiveRecord::Migration[8.1]
               AND provider.adapter_key = command_row.provider_adapter_key
               AND manifest.recording_snapshots @> jsonb_build_array(jsonb_build_object('recording_id', provider_recording.id))
           ) THEN RAISE EXCEPTION 'native checkout tax manifest authority is invalid'; END IF;
+          IF NEW.manifest_digests IS DISTINCT FROM command_row.canonical_request -> 'authority' -> 'commercial_manifest_digests'
+             OR NEW.manifest_digest IS DISTINCT FROM NEW.manifest_digests ->> 0
+             OR EXISTS (
+               SELECT 1 FROM jsonb_array_elements_text(NEW.manifest_digests) digest
+               WHERE NOT EXISTS (
+                 SELECT 1
+                 FROM recording_studio_billing_commercial_manifests manifest
+                 JOIN recording_studio_recordings provider_recording ON provider_recording.id = command_row.provider_account_recording_id
+                 WHERE manifest.root_recording_id = provider_recording.root_recording_id
+                   AND manifest.manifest_digest = digest.value AND manifest.used_at IS NOT NULL
+                   AND manifest.recording_snapshots @> jsonb_build_array(jsonb_build_object('recording_id', provider_recording.id))
+               )
+             ) THEN RAISE EXCEPTION 'native checkout tax manifest set authority is invalid'; END IF;
           IF command_row.state <> 'succeeded'
              OR command_row.root_recording_id IS DISTINCT FROM NEW.root_recording_id
              OR command_row.account_recording_id IS DISTINCT FROM NEW.account_recording_id
@@ -93,9 +118,15 @@ class AllowVerifiedCheckoutNativeTax < ActiveRecord::Migration[8.1]
              OR jsonb_typeof(command_request #> '{tax,location_requirements}') IS DISTINCT FROM 'array'
              OR NOT (command_row.canonical_request -> 'authority' -> 'commercial_manifest_digests' ? NEW.manifest_digest)
              OR NEW.revision_number <> 1 OR NEW.supersedes_id IS NOT NULL
+             OR NEW.status <> 'success'
              OR command_result ->> 'authority' IS DISTINCT FROM 'verified_webhook'
+             OR command_result ->> 'payment_state' IS DISTINCT FROM 'paid'
              OR jsonb_typeof(command_result -> 'lines') IS DISTINCT FROM 'array'
              OR jsonb_array_length(command_result -> 'lines') = 0
+             OR NOT EXISTS (
+               SELECT 1 FROM jsonb_array_elements(command_result -> 'lines') AS line
+               WHERE line ->> 'manifest_digest' = NEW.manifest_digest
+             )
              OR NEW.operation_reference IS DISTINCT FROM command_row.operation_id::text
              OR NEW.idempotency_key IS DISTINCT FROM command_row.provider_idempotency_key
              OR NEW.request_fingerprint IS DISTINCT FROM command_row.request_fingerprint
@@ -111,6 +142,31 @@ class AllowVerifiedCheckoutNativeTax < ActiveRecord::Migration[8.1]
              OR command_metadata IS DISTINCT FROM NEW.safe_metadata THEN
             RAISE EXCEPTION 'native checkout tax does not match the verified provider result';
           END IF;
+          IF (SELECT count(*) FROM jsonb_array_elements(command_result -> 'lines')) IS DISTINCT FROM (
+               SELECT count(*) FROM recording_studio_billing_checkout_intent_items item
+               WHERE item.checkout_intent_id = (command_request ->> 'checkout_intent_id')::uuid
+             )
+             OR EXISTS (
+               SELECT 1
+               FROM recording_studio_billing_checkout_intent_items item
+               WHERE item.checkout_intent_id = (command_request ->> 'checkout_intent_id')::uuid
+                 AND NOT EXISTS (
+                   SELECT 1 FROM jsonb_array_elements(command_result -> 'lines') line
+                   WHERE line ->> 'checkout_intent_item_id' = item.id::text
+                     AND line ->> 'manifest_digest' = item.manifest_digest
+                     AND line ->> 'currency' = item.currency_code
+                     AND (line ->> 'quantity')::integer IS NOT DISTINCT FROM item.quantity
+                     AND (line ->> 'unit_amount_minor')::bigint IS NOT DISTINCT FROM
+                         (item.commercial_manifest #>> '{canonical_data,price,amount_minor}')::bigint
+                     AND (line ->> 'subtotal_minor')::bigint IS NOT DISTINCT FROM
+                         (item.commercial_manifest #>> '{canonical_data,price,amount_minor}')::bigint * item.quantity
+                     AND (line ->> 'discount_minor')::bigint IS NOT DISTINCT FROM
+                         COALESCE((item.commercial_manifest #>> '{canonical_data,discount_policy,amount_minor}')::bigint, 0)
+                     AND (line ->> 'total_minor')::bigint IS NOT DISTINCT FROM
+                         (line ->> 'subtotal_minor')::bigint - (line ->> 'discount_minor')::bigint +
+                           (line ->> 'tax_minor')::bigint
+                 )
+             ) THEN RAISE EXCEPTION 'native checkout tax lines do not match frozen checkout items'; END IF;
         ELSE
           RAISE EXCEPTION 'tax command authority is invalid';
         END IF;

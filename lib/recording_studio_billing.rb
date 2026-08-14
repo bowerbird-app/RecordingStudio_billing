@@ -142,6 +142,18 @@ module RecordingStudioBilling
       CreateRatedUsageSettlement.call(...)
     end
 
+    def execute_rated_usage_settlement(...)
+      ExecuteRatedUsageSettlement.call(...)
+    end
+
+    def project_rated_usage_settlement(...)
+      ProjectRatedUsageSettlement.call(...)
+    end
+
+    def reconcile_rated_usage_settlement(...)
+      ReconcileRatedUsageSettlement.call(...)
+    end
+
     def allocate_rated_usage(...)
       AllocateRatedUsage.call(...)
     end

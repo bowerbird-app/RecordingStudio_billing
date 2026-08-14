@@ -229,6 +229,8 @@ module RecordingStudioBilling
       validate_recurring_composition!(versions, option)
       validate_proposed_product_rules!(subscription, proposed)
       validate_proposed_provider_capability!(provider, subscription, price)
+    rescue KeyError
+      raise ArgumentError, "subscription proposal terms are incomplete"
     end
 
     def validate_recurring_composition!(versions, option)

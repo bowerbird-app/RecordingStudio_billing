@@ -9,6 +9,9 @@ module RecordingStudioBilling
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :checkout_intent, optional: true
+    belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    belongs_to :billing_option_recording, class_name: "RecordingStudio::Recording", inverse_of: false
+    belongs_to :price_recording, class_name: "RecordingStudio::Recording", inverse_of: false
 
     validates :mode, inclusion: { in: MODES }
     validates :line_key, format: { with: /\A[0-9a-f-]{36}(?::[0-9a-f-]{36})?\z/ }

@@ -21,6 +21,10 @@ module RecordingStudioBilling
       new(...).activate!
     end
 
+    def self.retire!(...)
+      new(...).retire!
+    end
+
     def self.replace_price!(prior_price:, replacement_price:, **)
       new(**, price_recording_ids: [replacement_price.recording.id],
               replacements: { replacement_price.recording.id => prior_price.recording.id }).publish!
@@ -31,11 +35,12 @@ module RecordingStudioBilling
               replacements: { replacement_overage_price.recording.id => prior_overage_price.recording.id }).publish!
     end
 
-    def initialize(root_recording: nil, effective_at: Time.current, candidate: nil, price_recording_ids: nil,
+    def initialize(root_recording: nil, effective_at: Time.current, candidate: nil, retirement_recording: nil, price_recording_ids: nil,
                    replacements: {}, rule_context: {}, actor: nil, now: Time.current)
       @root_recording = root_recording
       @effective_at = effective_at
       @candidate = candidate
+      @retirement_recording = retirement_recording
       @price_recording_ids = Array(price_recording_ids).compact.map(&:to_s).uniq.sort
       @resolved_price_recording_ids = nil
       @replacements = replacements.to_h.each_with_object({}) do |(replacement_id, predecessor_id), normalized|
@@ -83,10 +88,67 @@ module RecordingStudioBilling
       end
     end
 
+    def retire!
+      RecordingStudio::Recording.transaction do
+        recording = RecordingStudio::Recording.unscoped.lock.find(retirement_recording_or_id)
+        record = recording.recordable
+        raise ArgumentError, "commercial retirement requires a central commercial recording" unless record.is_a?(CommercialRecordable) && !record.is_a?(FeatureOverride)
+
+        root = RecordingStudio::Recording.unscoped.lock.find(recording.root_recording_id)
+        authorize!(:retire, root:)
+        ActiveRecord::Base.connection.execute(
+          "SET LOCAL recording_studio_billing.authorized_publication = 'on'"
+        )
+        defer_publication_constraints!([record.class])
+        candidate = create_retirement_candidate!(root, recording, record)
+        root.revise(recording, actor:, metadata: { "commercial_candidate_digest" => candidate.candidate_digest }) do |revision|
+          revision.state = "retired"
+        end
+        candidate.update!(activated_at: now)
+        recording.reload.log_event!(
+          action: "commercial_published", actor: actor, metadata: { "candidate_digest" => candidate.candidate_digest }
+        )
+        candidate
+      end
+    end
+
     private
 
-    attr_reader :root_recording, :effective_at, :candidate, :price_recording_ids, :replacements, :rule_context, :actor,
+    attr_reader :root_recording, :effective_at, :candidate, :retirement_recording, :price_recording_ids, :replacements, :rule_context, :actor,
                 :now
+
+    def retirement_recording_or_id
+      retirement_recording.respond_to?(:id) ? retirement_recording.id : retirement_recording
+    end
+
+    def create_retirement_candidate!(root, recording, record)
+      snapshot = retirement_snapshot(recording, record)
+      envelope = {
+        "schema_version" => SUPPORTED_MANIFEST_SCHEMA,
+        "resolver_version" => SUPPORTED_RESOLVER_VERSION,
+        "root_recording_id" => root.id,
+        "effective_at" => now.utc.iso8601(6),
+        "selection" => { "retirement_recording_id" => recording.id },
+        "recordings" => { recording.id => snapshot },
+        "manifests" => []
+      }
+      CommercialPublicationCandidate.create!(
+        root_recording_id: root.id, effective_at: now, candidate_digest: CommercialManifestCanonicalizer.digest(envelope),
+        manifest_digests: ["retirement:#{recording.id}"], recording_snapshots: envelope.fetch("recordings"), snapshot_envelope: envelope
+      )
+    end
+
+    def retirement_snapshot(recording, record)
+      {
+        "recording_id" => recording.id, "root_recording_id" => recording.root_recording_id,
+        "parent_recording_id" => recording.parent_recording_id, "recordable_type" => recording.recordable_type,
+        "recordable_id" => recording.recordable_id, "recording_created_at" => recording.created_at.utc.iso8601(6),
+        "recording_updated_at" => recording.updated_at.utc.iso8601(6),
+        "recording_trashed_at" => recording.attributes["trashed_at"]&.utc&.iso8601(6),
+        "recordable_created_at" => record.created_at.utc.iso8601(6), "recordable_updated_at" => record.updated_at.utc.iso8601(6),
+        "recordable_digest" => CommercialManifestCanonicalizer.digest(record.attributes.except("created_at", "updated_at"))
+      }
+    end
 
     def canonical_root!
       root = RecordingStudio.root_recording_or_self(root_recording)

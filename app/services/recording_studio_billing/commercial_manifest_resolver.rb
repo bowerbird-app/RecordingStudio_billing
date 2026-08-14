@@ -193,8 +193,10 @@ module RecordingStudioBilling
         "overage_prices" => overage_prices.map do |overage_price|
           terms(overage_price, %w[
                   key amount_minor currency_code currency_exponent pricing_model package_size version scope
-                  usage_unit_recording_id
-                ]).merge("consumption_policy" => overage_consumption_policy(overage_price))
+                  usage_unit_recording_id market_recording_id review_threshold_minor hard_threshold_minor
+                  maximum_period_liability_minor maximum_submission_minor
+                ]).merge("overage_price_recording_id" => overage_price.recording.id,
+                         "consumption_policy" => overage_consumption_policy(overage_price))
         end,
         "usage_rating" => usage_rating_terms,
         "usage_settlement" => {
@@ -308,7 +310,11 @@ module RecordingStudioBilling
         "pricing_model" => overage_price.pricing_model,
         "unit_size" => overage_price.package_size || 1,
         "quantity_behavior" => overage_price.pricing_model == "package" ? "round_up" : "proportional",
-        "minimum_billing_increment" => overage_price.package_size || 1
+        "minimum_billing_increment" => overage_price.package_size || 1,
+        "review_threshold_minor" => overage_price.review_threshold_minor,
+        "hard_threshold_minor" => overage_price.hard_threshold_minor,
+        "maximum_period_liability_minor" => overage_price.maximum_period_liability_minor,
+        "maximum_submission_minor" => overage_price.maximum_submission_minor
       }
     end
 

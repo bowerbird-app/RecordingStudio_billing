@@ -42,7 +42,7 @@ module RecordingStudioBilling
       @billing_copy = {}.freeze
       @support_url = nil
       @billing_presenter_overrides = {}.freeze
-      @billing_provider_components = {}.freeze
+      @billing_provider_components = { stripe: { checkout: "RecordingStudioBilling::StripeCheckoutComponent" }.freeze }.freeze
       @stripe_trusted_origins = [].freeze
       @stripe_tax_code_resolver = nil
       @stripe_portal_customer_resolver = nil
@@ -139,7 +139,9 @@ module RecordingStudioBilling
     end
 
     # Maps a billing page key to a presenter class or callable. A callable is
-    # invoked with the default presenter class and must return a class.
+    # invoked with the default presenter class and must return a class. Presenters
+    # may use copy, support_url, navigation_items, and page_contents so hosts can
+    # extend customer UI without copying engine templates.
     def billing_presenter_overrides=(value)
       overrides = value.respond_to?(:to_h) ? value.to_h : {}
       @billing_presenter_overrides = overrides.transform_keys(&:to_sym).freeze
@@ -158,17 +160,22 @@ module RecordingStudioBilling
       override.respond_to?(:call) ? override.call(default) : override
     end
 
-    # Maps a provider-specific UI surface (for example :checkout) to a
-    # ViewComponent class. The component receives the corresponding presenter.
+    # Maps provider keys and UI surfaces (for example :stripe, :checkout) to
+    # ViewComponent classes. Components receive the corresponding presenter.
     def billing_provider_components=(value)
       components = value.respond_to?(:to_h) ? value.to_h : {}
-      @billing_provider_components = components.transform_keys(&:to_sym).freeze
+      @billing_provider_components = components.each_with_object({}) do |(provider_key, surfaces), result|
+        result[provider_key.to_sym] = surfaces.to_h.transform_keys(&:to_sym).freeze
+      end.freeze
     end
 
-    def billing_provider_component(name, component = nil)
-      return billing_provider_components[name.to_sym] unless component
+    def billing_provider_component(provider_key, name, component = nil)
+      provider = provider_key.to_s.to_sym
+      return billing_provider_components.dig(provider, name.to_sym) unless component
 
-      self.billing_provider_components = billing_provider_components.merge(name.to_sym => component)
+      self.billing_provider_components = billing_provider_components.merge(
+        provider => billing_provider_components.fetch(provider, {}).merge(name.to_sym => component)
+      )
     end
 
     def stripe_credential_resolver=(value)

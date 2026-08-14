@@ -1,7 +1,39 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("usage_title", "Usage & Credits"), variant: :h1) %>
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :usage) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::List::Component.new do %>
   <% @presenter.credits.each do |key, balance| %><li><%= key %>: <%= balance %></li><% end %>
 <% end %>
-<p><%= @presenter.copy("usage_notice", "Usage is recorded by trusted server integrations and is never available through this customer surface.") %></p>
+<%= render FlatPack::PageTitle::Component.new(title: "Usage periods", variant: :h2) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.period_rows.each do |period| %>
+    <li><strong><%= period[:usage_key] %></strong>: <%= period[:window] %> (<%= period[:state] %>)
+      <% if period[:caps].present? %><br>Caps: <%= period[:caps] %><% end %>
+      <% if period[:metadata].present? %><br>Details: <%= period[:metadata] %><% end %>
+    </li>
+  <% end %>
+<% end %>
+<%= render FlatPack::PageTitle::Component.new(title: "Credit grants", variant: :h2) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.grant_rows.each do |grant| %><li><%= grant[:key] %>: <%= grant[:available] %> available of <%= grant[:quantity] %>; <%= grant[:expires_at] %><% if grant[:metadata].present? %><br>Details: <%= grant[:metadata] %><% end %></li><% end %>
+<% end %>
+<%= render FlatPack::PageTitle::Component.new(title: "Usage allocations", variant: :h2) %>
+<%= render FlatPack::List::Component.new do %>
+  <% @presenter.allocation_rows.each do |allocation| %>
+    <li><%= allocation[:key] %>: <%= allocation[:measured] %> used, <%= allocation[:credited] %> credited, <%= allocation[:excess] %> excess (<%= allocation[:state] %>)
+      <% if allocation[:grant_allocation].positive? %><br>Grant allocation: <%= allocation[:grant_allocation] %><% end %>
+      <% if allocation[:overage].present? %><br>Overage: <%= allocation[:overage] %><% end %>
+      <% if allocation[:tax].present? %><br>Tax/rate: <%= allocation[:tax] %><% end %>
+      <% if allocation[:metadata].present? %><br>Details: <%= allocation[:metadata] %><% end %>
+    </li>
+  <% end %>
+<% end %>
+<% if @presenter.usage_rows.present? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.usage_rows.each do |label, value| %><li><%= label %>: <%= value %></li><% end %>
+  <% end %>
+<% end %>
+<p><%= @presenter.copy("usage_notice", "Usage is recorded by trusted server integrations. This customer surface is read-only.") %></p>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:usage).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

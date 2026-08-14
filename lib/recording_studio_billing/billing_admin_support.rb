@@ -10,6 +10,11 @@ module RecordingStudioBilling
       base.include RecordingStudioAdmin::AllowsAdminSections
       RecordingStudioBilling.register_capabilities!
       RecordingStudio.enable_capability(:billing_admin, on: base)
+      RecordingStudioAdmin.configuration.site_admin_recording_resolver ||= lambda do |context|
+        recording = context.access_recording
+        recordable = recording&.recordable
+        recording if recordable && RecordingStudio.capability_enabled?(:billing_admin, for: recordable.class)
+      end
 
       base.recording_studio_admin_sections do
         section :billing_commercial

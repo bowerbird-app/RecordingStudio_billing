@@ -2,6 +2,9 @@
 
 module RecordingStudioBilling
   module AccessActions
+    # Canonical engine actions and their minimum RecordingStudioAccessible roles.
+    # Customer controllers authorize only these actions; usage ingestion remains
+    # a trusted server integration and is intentionally absent from this catalog.
     CUSTOMER = {
       view_billing: :view,
       start_checkout: :edit,
@@ -24,8 +27,14 @@ module RecordingStudioBilling
       recovery: :admin
     }.freeze
 
+    ALL = CUSTOMER.merge(SITE).freeze
+
     def self.role_for(action)
-      CUSTOMER.fetch(action.to_sym) { SITE.fetch(action.to_sym) }
+      ALL.fetch(action.to_sym)
+    end
+
+    def self.customer_action?(action)
+      CUSTOMER.key?(action.to_sym)
     end
   end
 end

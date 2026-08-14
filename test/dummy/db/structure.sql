@@ -401,6 +401,51 @@ $$;
 
 
 --
+-- Name: rs_billing_protect_overage_calculation(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_protect_overage_calculation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'overage calculations are append-only'; END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM recording_studio_billing_usage_allocations allocation
+    JOIN recording_studio_billing_rated_usages rated ON rated.id = allocation.rated_usage_id
+    JOIN recording_studio_billing_commercial_manifests manifest ON manifest.manifest_digest = rated.manifest_digest
+    CROSS JOIN LATERAL jsonb_array_elements(manifest.canonical_data -> 'overage_prices') price
+    WHERE allocation.id = NEW.usage_allocation_id AND allocation.excess_quantity > 0
+      AND manifest.used_at IS NOT NULL
+      AND NEW.excess_quantity = allocation.excess_quantity
+      AND NEW.overage_price_recording_id::text = price ->> 'overage_price_recording_id'
+      AND NEW.rate_snapshot ->> 'manifest_digest' = rated.manifest_digest
+      AND NEW.rate_snapshot ->> 'overage_price_recording_id' = price ->> 'overage_price_recording_id'
+      AND NEW.rate_snapshot ->> 'market_recording_id' = manifest.canonical_data #>> '{usage_settlement,market_recording_id}'
+      AND price ->> 'market_recording_id' = manifest.canonical_data #>> '{usage_settlement,market_recording_id}'
+      AND NEW.rate_snapshot ->> 'usage_unit_recording_id' = rated.rate_snapshot #>> '{meter,usage_unit_recording_id}'
+      AND price ->> 'usage_unit_recording_id' = rated.rate_snapshot #>> '{meter,usage_unit_recording_id}'
+      AND NEW.currency_code = price ->> 'currency_code'
+      AND NEW.currency_exponent = (price ->> 'currency_exponent')::integer
+      AND NEW.rate_snapshot ->> 'currency_code' = price ->> 'currency_code'
+      AND (NEW.rate_snapshot ->> 'currency_exponent')::integer = (price ->> 'currency_exponent')::integer
+      AND NEW.rate_snapshot ->> 'pricing_model' = price ->> 'pricing_model'
+      AND COALESCE((NEW.rate_snapshot ->> 'package_size')::integer, 1) = COALESCE((price ->> 'package_size')::integer, 1)
+      AND (NEW.rate_snapshot ->> 'amount_minor')::bigint = (price ->> 'amount_minor')::bigint
+      AND NEW.rate_snapshot ->> 'scope' = price ->> 'scope'
+      AND (NEW.rate_snapshot ->> 'version')::integer = (price ->> 'version')::integer
+      AND NEW.amount_minor = CASE price ->> 'pricing_model'
+        WHEN 'flat' THEN (price ->> 'amount_minor')::bigint
+        WHEN 'per_unit' THEN allocation.excess_quantity * (price ->> 'amount_minor')::bigint
+        WHEN 'package' THEN ((allocation.excess_quantity * (price ->> 'amount_minor')::bigint) + COALESCE((price ->> 'package_size')::integer, 1) - 1) / COALESCE((price ->> 'package_size')::integer, 1)
+      END
+  ) THEN RAISE EXCEPTION 'overage calculation source authority is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: rs_billing_protect_purchase(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -652,6 +697,37 @@ $_$;
 
 
 --
+-- Name: rs_billing_sorted_manifest_set(jsonb, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_sorted_manifest_set(digests jsonb, anchor text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    AS $_$
+DECLARE
+  digest text;
+  previous_digest text;
+BEGIN
+  IF jsonb_typeof(digests) <> 'array'
+     OR jsonb_array_length(digests) = 0
+     OR digests ->> 0 <> anchor THEN
+    RETURN false;
+  END IF;
+
+  FOR digest IN SELECT jsonb_array_elements_text(digests)
+  LOOP
+    IF digest !~ '^[0-9a-f]{64}$'
+       OR (previous_digest IS NOT NULL AND digest <= previous_digest) THEN
+      RETURN false;
+    END IF;
+    previous_digest := digest;
+  END LOOP;
+
+  RETURN true;
+END;
+$_$;
+
+
+--
 -- Name: rs_billing_subscription_lifecycle(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -661,7 +737,7 @@ CREATE FUNCTION public.rs_billing_subscription_lifecycle() RETURNS trigger
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'subscriptions are durable'; END IF;
   IF OLD.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR OLD.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR OLD.identifier IS DISTINCT FROM NEW.identifier OR OLD.provider_reference IS DISTINCT FROM NEW.provider_reference THEN RAISE EXCEPTION 'subscription authority is immutable'; END IF;
-  IF NOT ((OLD.state = 'trialing' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'active' AND NEW.state IN ('past_due', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'past_due' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'paused' AND NEW.state IN ('active', 'cancelled', 'expired')) OR OLD.state = NEW.state) THEN RAISE EXCEPTION 'subscription lifecycle transition is invalid'; END IF;
+  IF NOT ((OLD.state = 'trialing' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'active' AND NEW.state IN ('past_due', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'past_due' AND NEW.state IN ('active', 'paused', 'cancelled', 'expired')) OR (OLD.state = 'paused' AND NEW.state IN ('active', 'cancelled', 'expired')) OR (OLD.state = 'cancelled' AND NEW.state = 'active') OR OLD.state = NEW.state) THEN RAISE EXCEPTION 'subscription lifecycle transition is invalid'; END IF;
   RETURN NEW;
 END;
 $$;
@@ -1051,19 +1127,53 @@ DECLARE
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM recording_studio_recordings root WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL) THEN RAISE EXCEPTION 'tax root authority is invalid'; END IF;
   IF NOT EXISTS (SELECT 1 FROM recording_studio_recordings account_recording JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id WHERE account_recording.id = NEW.account_recording_id AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = NEW.root_recording_id AND account_recording.parent_recording_id = NEW.root_recording_id AND account_recording.trashed_at IS NULL AND account.root_recording_id = NEW.root_recording_id) THEN RAISE EXCEPTION 'tax account authority is invalid'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_commercial_manifests manifest WHERE manifest.id = NEW.commercial_manifest_id AND manifest.root_recording_id = NEW.root_recording_id AND manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL) THEN RAISE EXCEPTION 'tax manifest authority is invalid'; END IF;
   SELECT * INTO command_row FROM recording_studio_billing_financial_commands WHERE id = NEW.financial_command_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'tax command authority is invalid'; END IF;
   command_request := command_row.canonical_request -> 'request'; command_result := command_row.normalized_result;
   SELECT safe_metadata INTO command_metadata FROM recording_studio_billing_financial_command_attempts WHERE financial_command_id = NEW.financial_command_id AND completed_at IS NOT NULL ORDER BY attempt_number DESC LIMIT 1;
   IF command_row.command_type = 'tax_calculation' THEN
+    IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_commercial_manifests manifest WHERE manifest.id = NEW.commercial_manifest_id AND manifest.root_recording_id = NEW.root_recording_id AND manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL) THEN RAISE EXCEPTION 'tax manifest authority is invalid'; END IF;
     IF command_row.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR command_row.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR command_row.calculator_key IS DISTINCT FROM NEW.calculator_key OR command_row.calculator_mode IS DISTINCT FROM NEW.calculator_mode THEN RAISE EXCEPTION 'tax command authority is invalid'; END IF;
     IF command_request ->> 'commercial_manifest_id' IS DISTINCT FROM NEW.commercial_manifest_id::text OR command_request ->> 'commercial_manifest_digest' IS DISTINCT FROM NEW.manifest_digest OR command_request ->> 'transaction_type' IS DISTINCT FROM NEW.transaction_type OR command_request ->> 'operation_reference' IS DISTINCT FROM NEW.operation_reference OR command_request ->> 'idempotency_key' IS DISTINCT FROM NEW.idempotency_key OR (command_request ->> 'subtotal_minor')::bigint IS DISTINCT FROM NEW.subtotal_minor OR (command_request ->> 'discount_minor')::bigint IS DISTINCT FROM NEW.discount_minor OR command_request ->> 'currency' IS DISTINCT FROM NEW.currency OR command_result ->> 'request_fingerprint' IS DISTINCT FROM NEW.request_fingerprint OR command_result ->> 'status' IS DISTINCT FROM NEW.status OR (command_result ->> 'subtotal_minor')::bigint IS DISTINCT FROM NEW.subtotal_minor OR (command_result ->> 'discount_minor')::bigint IS DISTINCT FROM NEW.discount_minor OR (command_result ->> 'tax_minor')::bigint IS DISTINCT FROM NEW.tax_minor OR (command_result ->> 'total_minor')::bigint IS DISTINCT FROM NEW.total_minor OR command_result ->> 'currency' IS DISTINCT FROM NEW.currency OR command_result ->> 'behavior' IS DISTINCT FROM NEW.behavior OR command_result -> 'breakdown' IS DISTINCT FROM NEW.breakdown OR command_result ->> 'calculator_reference' IS DISTINCT FROM NEW.calculator_reference OR (command_result ->> 'calculated_at')::timestamptz IS DISTINCT FROM NEW.calculated_at OR command_metadata IS DISTINCT FROM NEW.safe_metadata THEN RAISE EXCEPTION 'tax calculation does not match its durable command'; END IF;
   ELSIF command_row.command_type = 'checkout' THEN
-    IF command_row.state <> 'succeeded' OR command_row.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR command_row.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR command_request #>> '{tax,enabled}' IS DISTINCT FROM 'true' OR command_request #>> '{tax,mode}' IS DISTINCT FROM 'provider_native' OR command_request #>> '{tax,calculator_key}' IS DISTINCT FROM NEW.calculator_key OR NEW.calculator_mode <> 'provider_calculation' OR command_request #>> '{tax,behavior}' IS DISTINCT FROM NEW.behavior OR NOT (command_row.canonical_request -> 'authority' -> 'commercial_manifest_digests' ? NEW.manifest_digest) OR NEW.revision_number <> 1 OR NEW.supersedes_id IS NOT NULL OR command_result ->> 'authority' IS DISTINCT FROM 'verified_webhook' OR jsonb_typeof(command_result -> 'lines') IS DISTINCT FROM 'array' OR jsonb_array_length(command_result -> 'lines') = 0 OR NEW.operation_reference IS DISTINCT FROM command_row.operation_id::text OR NEW.idempotency_key IS DISTINCT FROM command_row.provider_idempotency_key OR NEW.request_fingerprint IS DISTINCT FROM command_row.request_fingerprint OR (command_result ->> 'subtotal_minor')::bigint IS DISTINCT FROM NEW.subtotal_minor OR (command_result ->> 'discount_minor')::bigint IS DISTINCT FROM NEW.discount_minor OR (command_result ->> 'tax_minor')::bigint IS DISTINCT FROM NEW.tax_minor OR (command_result ->> 'total_minor')::bigint IS DISTINCT FROM NEW.total_minor OR command_result ->> 'currency' IS DISTINCT FROM NEW.currency OR command_result ->> 'behavior' IS DISTINCT FROM NEW.behavior OR command_result -> 'breakdown' IS DISTINCT FROM NEW.breakdown OR command_result ->> 'calculator_reference' IS DISTINCT FROM NEW.calculator_reference OR (command_result ->> 'calculated_at')::timestamptz IS DISTINCT FROM NEW.calculated_at OR command_metadata IS DISTINCT FROM NEW.safe_metadata THEN RAISE EXCEPTION 'native checkout tax does not match the verified provider result'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM recording_studio_billing_commercial_manifests manifest JOIN recording_studio_recordings provider_recording ON provider_recording.id = command_row.provider_account_recording_id JOIN recording_studio_billing_provider_accounts provider ON provider.id = provider_recording.recordable_id JOIN recording_studio_recordings billing_admin ON billing_admin.id = provider.billing_admin_recording_id WHERE manifest.id = NEW.commercial_manifest_id AND manifest.manifest_digest = NEW.manifest_digest AND manifest.used_at IS NOT NULL AND provider_recording.recordable_type = 'RecordingStudioBilling::ProviderAccount' AND provider_recording.parent_recording_id = billing_admin.id AND manifest.root_recording_id = billing_admin.root_recording_id AND provider.adapter_key = command_row.provider_adapter_key AND manifest.recording_snapshots @> jsonb_build_array(jsonb_build_object('recording_id', provider_recording.id))) THEN RAISE EXCEPTION 'native checkout tax manifest authority is invalid'; END IF;
+    IF command_row.state <> 'succeeded' OR command_row.root_recording_id IS DISTINCT FROM NEW.root_recording_id OR command_row.account_recording_id IS DISTINCT FROM NEW.account_recording_id OR command_request #>> '{tax,enabled}' IS DISTINCT FROM 'true' OR command_request #>> '{tax,mode}' IS DISTINCT FROM 'provider_native' OR command_request #>> '{tax,calculator_key}' IS DISTINCT FROM NEW.calculator_key OR NEW.calculator_mode <> 'provider_calculation' OR command_request #>> '{tax,behavior}' IS DISTINCT FROM NEW.behavior OR jsonb_typeof(command_request #> '{tax,semantic_categories}') IS DISTINCT FROM 'array' OR jsonb_typeof(command_request #> '{tax,location_requirements}') IS DISTINCT FROM 'array' OR NOT (command_row.canonical_request -> 'authority' -> 'commercial_manifest_digests' ? NEW.manifest_digest) OR NEW.revision_number <> 1 OR NEW.supersedes_id IS NOT NULL OR command_result ->> 'authority' IS DISTINCT FROM 'verified_webhook' OR jsonb_typeof(command_result -> 'lines') IS DISTINCT FROM 'array' OR jsonb_array_length(command_result -> 'lines') = 0 OR NEW.operation_reference IS DISTINCT FROM command_row.operation_id::text OR NEW.idempotency_key IS DISTINCT FROM command_row.provider_idempotency_key OR NEW.request_fingerprint IS DISTINCT FROM command_row.request_fingerprint OR (command_result ->> 'subtotal_minor')::bigint IS DISTINCT FROM NEW.subtotal_minor OR (command_result ->> 'discount_minor')::bigint IS DISTINCT FROM NEW.discount_minor OR (command_result ->> 'tax_minor')::bigint IS DISTINCT FROM NEW.tax_minor OR (command_result ->> 'total_minor')::bigint IS DISTINCT FROM NEW.total_minor OR command_result ->> 'currency' IS DISTINCT FROM NEW.currency OR command_result ->> 'behavior' IS DISTINCT FROM NEW.behavior OR command_result -> 'breakdown' IS DISTINCT FROM NEW.breakdown OR command_result ->> 'calculator_reference' IS DISTINCT FROM NEW.calculator_reference OR (command_result ->> 'calculated_at')::timestamptz IS DISTINCT FROM NEW.calculated_at OR command_metadata IS DISTINCT FROM NEW.safe_metadata THEN RAISE EXCEPTION 'native checkout tax does not match the verified provider result'; END IF;
   ELSE RAISE EXCEPTION 'tax command authority is invalid'; END IF;
   IF NOT rs_billing_safe_financial_json(NEW.breakdown) OR NOT rs_billing_safe_financial_json(NEW.safe_metadata) OR NEW.operation_reference ~* '^[[:space:]]*(https?|ftp)://' OR NEW.calculator_reference ~* '^[[:space:]]*(https?|ftp)://' THEN RAISE EXCEPTION 'tax calculation contains unsafe persisted data'; END IF;
   IF NEW.revision_number > 1 AND NOT EXISTS (SELECT 1 FROM recording_studio_billing_tax_calculations previous WHERE previous.id = NEW.supersedes_id AND previous.financial_command_id = NEW.financial_command_id AND previous.revision_number = NEW.revision_number - 1 AND previous.root_recording_id = NEW.root_recording_id AND previous.idempotency_key = NEW.idempotency_key AND previous.calculator_key = NEW.calculator_key AND previous.calculator_mode = NEW.calculator_mode AND previous.request_fingerprint = NEW.request_fingerprint) THEN RAISE EXCEPTION 'tax calculation revision history is invalid'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: rs_billing_validate_tax_manifest_set(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rs_billing_validate_tax_manifest_set() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  command_row recording_studio_billing_financial_commands%ROWTYPE;
+BEGIN
+  IF NOT rs_billing_sorted_manifest_set(NEW.manifest_digests, NEW.manifest_digest) THEN
+    RAISE EXCEPTION 'tax calculation manifest set is invalid';
+  END IF;
+
+  SELECT * INTO command_row
+  FROM recording_studio_billing_financial_commands
+  WHERE id = NEW.financial_command_id;
+
+  IF command_row.command_type = 'tax_calculation'
+     AND NEW.manifest_digests IS DISTINCT FROM jsonb_build_array(NEW.manifest_digest) THEN
+    RAISE EXCEPTION 'tax calculation manifest set is invalid';
+  END IF;
+
+  IF command_row.command_type = 'checkout'
+     AND NEW.manifest_digests IS DISTINCT FROM command_row.canonical_request -> 'authority' -> 'commercial_manifest_digests' THEN
+    RAISE EXCEPTION 'native checkout tax manifest set authority is invalid';
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -1678,6 +1788,7 @@ CREATE TABLE public.recording_studio_billing_overage_calculations (
     rate_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    overage_price_recording_id uuid,
     CONSTRAINT rs_billing_overage_calculation_amount CHECK (((excess_quantity >= 0) AND (amount_minor >= 0)))
 );
 
@@ -1702,6 +1813,10 @@ CREATE TABLE public.recording_studio_billing_overage_prices (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     scope character varying DEFAULT 'default'::character varying NOT NULL,
+    review_threshold_minor bigint,
+    hard_threshold_minor bigint,
+    maximum_period_liability_minor bigint,
+    maximum_submission_minor bigint,
     CONSTRAINT recording_studio_billing_overage_prices_amount_minor CHECK ((amount_minor >= 0)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_code CHECK (((currency_code)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT recording_studio_billing_overage_prices_currency_exponent CHECK (((currency_exponent >= 0) AND (currency_exponent <= 3))),
@@ -1709,7 +1824,11 @@ CREATE TABLE public.recording_studio_billing_overage_prices (
     CONSTRAINT recording_studio_billing_overage_prices_pricing_model CHECK (((pricing_model)::text = ANY (ARRAY[('flat'::character varying)::text, ('per_unit'::character varying)::text, ('package'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_overage_prices_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text]))),
     CONSTRAINT recording_studio_billing_overage_prices_v1_scope CHECK (((scope)::text = 'default'::text)),
-    CONSTRAINT recording_studio_billing_overage_prices_version CHECK ((version >= 1))
+    CONSTRAINT recording_studio_billing_overage_prices_version CHECK ((version >= 1)),
+    CONSTRAINT rs_billing_overage_hard_threshold CHECK (((hard_threshold_minor IS NULL) OR (hard_threshold_minor >= 0))),
+    CONSTRAINT rs_billing_overage_period_liability_limit CHECK (((maximum_period_liability_minor IS NULL) OR (maximum_period_liability_minor >= 0))),
+    CONSTRAINT rs_billing_overage_review_threshold CHECK (((review_threshold_minor IS NULL) OR (review_threshold_minor >= 0))),
+    CONSTRAINT rs_billing_overage_submission_limit CHECK (((maximum_submission_minor IS NULL) OR (maximum_submission_minor >= 0)))
 );
 
 
@@ -2319,6 +2438,7 @@ CREATE TABLE public.recording_studio_billing_tax_calculations (
     safe_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    manifest_digests jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT rs_billing_tax_arithmetic CHECK (((((behavior)::text = 'exclusive'::text) AND (total_minor = ((subtotal_minor - discount_minor) + tax_minor))) OR (((behavior)::text = ANY (ARRAY[('inclusive'::character varying)::text, ('provider_default'::character varying)::text])) AND (total_minor = (subtotal_minor - discount_minor)) AND (tax_minor <= total_minor)))),
     CONSTRAINT rs_billing_tax_behavior CHECK (((behavior)::text = ANY (ARRAY[('inclusive'::character varying)::text, ('exclusive'::character varying)::text, ('provider_default'::character varying)::text]))),
     CONSTRAINT rs_billing_tax_calculator_key CHECK (((calculator_key)::text ~ '^[a-z][a-z0-9_]*$'::text)),
@@ -2326,6 +2446,7 @@ CREATE TABLE public.recording_studio_billing_tax_calculations (
     CONSTRAINT rs_billing_tax_currency CHECK (((currency)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT rs_billing_tax_digests CHECK ((((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text) AND ((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT rs_billing_tax_discount CHECK ((discount_minor <= subtotal_minor)),
+    CONSTRAINT rs_billing_tax_manifest_set CHECK (public.rs_billing_sorted_manifest_set(manifest_digests, (manifest_digest)::text)),
     CONSTRAINT rs_billing_tax_nonnegative CHECK (((subtotal_minor >= 0) AND (discount_minor >= 0) AND (tax_minor >= 0) AND (total_minor >= 0))),
     CONSTRAINT rs_billing_tax_revision CHECK (((revision_number > 0) AND ((revision_number = 1) = (supersedes_id IS NULL)))),
     CONSTRAINT rs_billing_tax_safe_json CHECK (((jsonb_typeof(breakdown) = 'array'::text) AND (jsonb_typeof(safe_metadata) = 'object'::text))),
@@ -3734,6 +3855,13 @@ CREATE INDEX idx_on_market_recording_id_2ba99ee38f ON public.recording_studio_bi
 --
 
 CREATE INDEX idx_on_meter_aggregation_id_e92f2d7213 ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
+
+
+--
+-- Name: idx_on_overage_price_recording_id_2ef7fea3a9; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_overage_price_recording_id_2ef7fea3a9 ON public.recording_studio_billing_overage_calculations USING btree (overage_price_recording_id);
 
 
 --
@@ -5319,6 +5447,13 @@ CREATE TRIGGER rs_billing_meter_aggregation_history BEFORE INSERT OR DELETE OR U
 
 
 --
+-- Name: recording_studio_billing_overage_calculations rs_billing_overage_calculation_history; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_overage_calculation_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_overage_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_overage_calculation();
+
+
+--
 -- Name: recording_studio_billing_payment_allocations rs_billing_payment_allocation_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5477,6 +5612,13 @@ CREATE TRIGGER rs_billing_tax_calculation_authority BEFORE INSERT ON public.reco
 --
 
 CREATE TRIGGER rs_billing_tax_calculation_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_tax_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_tax_calculation();
+
+
+--
+-- Name: recording_studio_billing_tax_calculations rs_billing_tax_manifest_set_authority; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER rs_billing_tax_manifest_set_authority BEFORE INSERT ON public.recording_studio_billing_tax_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_tax_manifest_set();
 
 
 --
@@ -6156,6 +6298,14 @@ ALTER TABLE ONLY public.recording_studio_billing_usage_periods
 
 
 --
+-- Name: recording_studio_billing_overage_calculations fk_rails_8c0a89323f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_overage_calculations
+    ADD CONSTRAINT fk_rails_8c0a89323f FOREIGN KEY (overage_price_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_billing_payments fk_rails_8e6bba275d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6762,6 +6912,9 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260814000002'),
+('20260814000001'),
+('20260814000000'),
 ('20260813014124'),
 ('20260813000004'),
 ('20260813000003'),

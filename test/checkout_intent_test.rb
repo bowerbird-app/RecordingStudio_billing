@@ -11,6 +11,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   parallelize(workers: 1)
 
   setup do
+    acquire_database_lock!
     clear_data!
     @actor = User.create!(email: "checkout-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
                           password_confirmation: "Password1!")
@@ -21,9 +22,17 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       { host_country: verified_country("IT", :host) }
     end
     RecordingStudioBilling.configuration.reset_registries!
+  rescue StandardError
+    clear_data! if @database_lock_held
+    release_database_lock!
+    raise
   end
 
-  teardown { clear_data! }
+  teardown do
+    clear_data! if @database_lock_held
+  ensure
+    release_database_lock!
+  end
 
   test "freezes country-specific EUR terms, reuses identical input, and defers provider work" do
     graph = published_catalogue
@@ -405,6 +414,110 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert_equal "mixed_recurring_intervals", error.message
     assert_nil RecordingStudioBilling::CheckoutIntent.find_by(local_idempotency_key: "mixed-intervals")
+  end
+
+  test "rejects disabled checkout options and duplicate option selections before persistence" do
+    graph = published_catalogue(checkout_policy: "disabled")
+
+    assert_raises(ActiveRecord::RecordNotFound) do
+      create_intent(graph, country: "IT", key: "disabled-option")
+    end
+    assert_nil RecordingStudioBilling::CheckoutIntent.find_by(local_idempotency_key: "disabled-option")
+
+    RecordingStudioBilling.configuration.reset_registries!
+    graph = published_catalogue
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.create_checkout_intent(
+        root_recording: graph[:customer_root], local_idempotency_key: "duplicate-option", country_code: "IT",
+        items: [{ billing_option_recording_id: graph[:option].recording.id, quantity: 1 },
+                { billing_option_recording_id: graph[:option].recording.id, quantity: 1 }]
+      )
+    end
+    assert_equal "duplicate checkout option", error.message
+    assert_nil RecordingStudioBilling::CheckoutIntent.find_by(local_idempotency_key: "duplicate-option")
+  end
+
+  test "evaluates product requires and excludes rules against active subscription products" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+    record_child(
+      RecordingStudioBilling::ProductRule.new(product_recording: addon.product_recording,
+                                              target_product_recording: graph[:option].product_recording,
+                                              key: "requires_plan_#{SecureRandom.hex(4)}", rule_type: "requires", conditions: {}),
+      graph[:provider_root], graph[:admin].recording
+    )
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [graph[:italy_price].recording.id], actor: @actor)
+    project_subscription!(graph, key: "active-plan")
+
+    assert create_intent(graph, country: "IT", key: "requires-active-plan", option: addon).created?
+  end
+
+  test "rejects a requested addon that excludes an active plan" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+    excludes_plan = record_child(
+      RecordingStudioBilling::ProductRule.new(product_recording: addon.product_recording,
+                                              target_product_recording: graph[:option].product_recording,
+                                              key: "excludes_plan_#{SecureRandom.hex(4)}", rule_type: "excludes", conditions: {}),
+      graph[:provider_root], graph[:admin].recording
+    )
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [graph[:italy_price].recording.id], actor: @actor)
+    project_subscription!(graph, key: "active-plan-excluded-by-addon")
+
+    error = assert_raises(ArgumentError) do
+      create_intent(graph, country: "IT", key: "excludes-active-plan", option: addon)
+    end
+    assert_includes error.message, excludes_plan.recordable.key
+  end
+
+  test "rejects a requested addon excluded by an active plan" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    project_subscription!(graph, key: "active-plan-excludes-addon")
+    addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+    admin = current_recordable(graph[:admin].recording)
+    excludes_addon = record_child(
+      RecordingStudioBilling::ProductRule.new(product_recording: graph[:option].product_recording,
+                                              target_product_recording: addon.product_recording,
+                                              key: "plan_excludes_#{SecureRandom.hex(4)}", rule_type: "excludes", conditions: {}),
+      graph[:provider_root], admin.recording
+    )
+    excludes_addon_key = excludes_addon.recordable.key
+    italy_price = current_recordable(graph[:italy_price].recording)
+    RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                         price_recording_ids: [italy_price.recording.id], actor: @actor)
+
+    error = assert_raises(ArgumentError) do
+      create_intent(graph, country: "IT", key: "excluded-by-active-plan", option: addon)
+    end
+    assert_includes error.message, excludes_addon_key
+  end
+
+  test "enforces active product requires and available-with rules against the resulting selection" do
+    %w[requires available_with].each do |rule_type|
+      RecordingStudioBilling.configuration.reset_registries!
+      graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+      requested_addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+      required_addon, = published_option(graph, kind: "addon", recurrence: "recurring", interval: "month")
+      project_subscription!(graph, key: "active-plan-#{rule_type}")
+      admin = current_recordable(graph[:admin].recording)
+      rule = record_child(
+        RecordingStudioBilling::ProductRule.new(product_recording: graph[:option].product_recording,
+                                                target_product_recording: required_addon.product_recording,
+                                                key: "plan_#{rule_type}_#{SecureRandom.hex(4)}", rule_type:, conditions: {}),
+        graph[:provider_root], admin.recording
+      )
+      rule_key = rule.recordable.key
+      italy_price = current_recordable(graph[:italy_price].recording)
+      RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
+                                                           price_recording_ids: [italy_price.recording.id], actor: @actor)
+
+      error = assert_raises(ArgumentError) do
+        create_intent(graph, country: "IT", key: "missing-#{rule_type}", option: requested_addon)
+      end
+      assert_includes error.message, rule_key
+    end
   end
 
   test "final verification confirms unchanged complete terms and rejects unverified evidence" do
@@ -1264,13 +1377,25 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     )
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
                                                          price_recording_ids: [graph[:italy_price].recording.id], actor: @actor)
-    rule_manifest = RecordingStudioBilling::CommercialManifest.where(root_recording: graph[:provider_root]).order(created_at: :desc).find do |manifest|
+    rule_manifest = RecordingStudioBilling::CommercialManifest.where(root_recording_id: graph[:provider_root].id).order(created_at: :desc).find do |manifest|
       manifest.canonical_data.fetch("product_rules").any? { |entry| entry["key"] == rule.recordable.key }
     end
     assert_rejects_proposed_manifest(subscription, graph, rule_manifest, key: "rule-conflict", option_id:)
   end
 
   private
+
+  def acquire_database_lock!
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    @database_lock_held = true
+  end
+
+  def release_database_lock!
+    return unless @database_lock_held
+
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    @database_lock_held = false
+  end
 
   def create_intent(graph, country:, key:, option: graph[:option])
     RecordingStudioBilling.create_checkout_intent(
@@ -1338,7 +1463,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000,
-                          account_country: "IT")
+                          account_country: "IT", checkout_policy: "allowed")
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root,
                                                         key: "billing_#{SecureRandom.hex(4)}")
@@ -1351,7 +1476,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording, "requote")
     graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
     option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:,
-                                                                                     trial_days:, amount:)
+                                                                                     trial_days:, amount:, checkout_policy:)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success,
                                                                capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"],
                                                                                                                               markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
@@ -1371,14 +1496,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   def published_option(graph, kind:, recurrence:, interval:, product_recording: nil, trial_days: 0, amount: 1_000,
-                       option_feature_values: {}, price_feature_values: {})
+                       option_feature_values: {}, price_feature_values: {}, checkout_policy: "allowed")
     product_recording ||= record_child(
       RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording],
                                           key: "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording
     )
     option_recording = record_child(
       RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}",
-                                                recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording
+                                                recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy:, tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording
     )
     RecordingStudioBilling.configuration.feature_definitions.each do |key, definition|
       record_child(
@@ -1393,10 +1518,18 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: graph[:provider_root],
                                                          price_recording_ids: [italy_price.id, germany_price.id], actor: @actor)
     [
-      RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_recording.recordable.key),
-      RecordingStudioBilling::Price.with_current_recording.find_by!(key: italy_price.recordable.key),
-      RecordingStudioBilling::Price.with_current_recording.find_by!(key: germany_price.recordable.key)
+      current_recordable(option_recording, RecordingStudioBilling::BillingOption),
+      current_recordable(italy_price, RecordingStudioBilling::Price),
+      current_recordable(germany_price, RecordingStudioBilling::Price)
     ]
+  end
+
+  def current_recordable(recording, expected_type = nil)
+    recordable = RecordingStudio::Recording.unscoped.find(recording.id).recordable
+    raise "published recording has no current recordable" unless recordable
+    raise "published recording has an unexpected recordable" if expected_type && !recordable.is_a?(expected_type)
+
+    recordable
   end
 
   def market(key, country, provider, root, parent, verification_policy)

@@ -13,7 +13,7 @@
       <img src="./assets/0.13.2/loading.gif" alt="loading"/>
     </div>
     <div id="wrapper" class="hide">
-      <div class="timestamp">Generated <abbr class="timeago" title="2026-08-13T05:50:51+00:00">2026-08-13T05:50:51+00:00</abbr></div>
+      <div class="timestamp">Generated <abbr class="timeago" title="2026-08-14T05:10:52+00:00">2026-08-14T05:10:52+00:00</abbr></div>
       <ul class="group_tabs"></ul>
 
       <div id="content">
@@ -28,8 +28,8 @@
      </span>
      covered at
      <span class="covered_strength">
-       <span class="yellow">
-         1.0
+       <span class="green">
+         1.24
        </span>
     </span> hits/line
     )
@@ -38,12 +38,12 @@
   <a name="AllFiles"></a>
 
   <div>
-    <b>5</b> files in total.
+    <b>8</b> files in total.
   </div>
 
   <div class="t-line-summary">
-    <b>15</b> relevant lines,
-    <span class="green"><b>15</b> lines covered</span> and
+    <b>29</b> relevant lines,
+    <span class="green"><b>29</b> lines covered</span> and
     <span class="red"><b>0</b> lines missed. </span>
     (<span class="green">
   100.0%
@@ -53,11 +53,11 @@
 
   
     <div class="t-branch-summary">
-      <span><b>0</b> total branches, </span>
-      <span class="green"><b>0</b> branches covered</span> and
-      <span class="red"><b>0</b> branches missed.</span>
-      (<span class="green">
-  100.0%
+      <span><b>2</b> total branches, </span>
+      <span class="green"><b>1</b> branches covered</span> and
+      <span class="red"><b>1</b> branches missed.</span>
+      (<span class="red">
+  50.0%
 </span>
 )
     </div>
@@ -83,6 +83,54 @@
         </tr>
       </thead>
       <tbody>
+        
+          <tr class="t-file">
+            <td class="strong t-file__name"><a href="#d7526e06dd78c37610be31fc77e9aae5af30ca7a" class="src_link" title="app/controllers/application_controller.rb">app/controllers/application_controller.rb</a></td>
+            <td class="green strong cell--number t-file__coverage">100.00 %</td>
+            <td class="cell--number">21</td>
+            <td class="cell--number">11</td>
+            <td class="cell--number">11</td>
+            <td class="cell--number">0</td>
+            <td class="cell--number">1.64</td>
+            
+              <td class="red strong cell--number t-file__branch-coverage">50.00 %</td>
+              <td class="cell--number">2</td>
+              <td class="cell--number">1</td>
+              <td class="cell--number">1</td>
+            
+          </tr>
+        
+          <tr class="t-file">
+            <td class="strong t-file__name"><a href="#5f45f818fa39cfc14da6aa4552189d6330d665da" class="src_link" title="app/controllers/home_controller.rb">app/controllers/home_controller.rb</a></td>
+            <td class="green strong cell--number t-file__coverage">100.00 %</td>
+            <td class="cell--number">4</td>
+            <td class="cell--number">2</td>
+            <td class="cell--number">2</td>
+            <td class="cell--number">0</td>
+            <td class="cell--number">1.00</td>
+            
+              <td class="green strong cell--number t-file__branch-coverage">100.00 %</td>
+              <td class="cell--number">0</td>
+              <td class="cell--number">0</td>
+              <td class="cell--number">0</td>
+            
+          </tr>
+        
+          <tr class="t-file">
+            <td class="strong t-file__name"><a href="#af64ee842db3e7f1490693dfb42064dedaa63a9e" class="src_link" title="app/helpers/application_helper.rb">app/helpers/application_helper.rb</a></td>
+            <td class="green strong cell--number t-file__coverage">100.00 %</td>
+            <td class="cell--number">2</td>
+            <td class="cell--number">1</td>
+            <td class="cell--number">1</td>
+            <td class="cell--number">0</td>
+            <td class="cell--number">1.00</td>
+            
+              <td class="green strong cell--number t-file__branch-coverage">100.00 %</td>
+              <td class="cell--number">0</td>
+              <td class="cell--number">0</td>
+              <td class="cell--number">0</td>
+            
+          </tr>
         
           <tr class="t-file">
             <td class="strong t-file__name"><a href="#143047d3aada2029241be0948127ea74dd328d83" class="src_link" title="app/models/admin_root.rb">app/models/admin_root.rb</a></td>
@@ -180,6 +228,501 @@
       </div>
 
       <div class="source_files">
+      
+        <div class="source_table" id="d7526e06dd78c37610be31fc77e9aae5af30ca7a">
+  <div class="header">
+    <h3>app/controllers/application_controller.rb</h3>
+    <h4>
+      <span class="green">
+  100.0%
+</span>
+
+      lines covered
+    </h4>
+
+    
+      <h4>
+        <span class="red">
+  50.0%
+</span>
+
+        branches covered
+      </h4>
+    
+
+    <div class="t-line-summary">
+      <b>11</b> relevant lines.
+      <span class="green"><b>11</b> lines covered</span> and
+      <span class="red"><b>0</b> lines missed.</span>
+    </div>
+
+    
+      <div class="t-branch-summary">
+          <span><b>2</b> total branches, </span>
+          <span class="green"><b>1</b> branches covered</span> and
+          <span class="red"><b>1</b> branches missed.</span>
+      </div>
+    
+
+  </div>
+
+  <pre>
+    <ol>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="1">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">class ApplicationController &lt; ActionController::Base</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="2">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  include RecordingStudio::RootSwitchable::ControllerSupport</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="3">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="4">
+            
+
+            
+              
+            
+
+            <code class="ruby">  # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="5">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  allow_browser versions: :modern</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="6">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="7">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  layout :application_layout</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="8">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="9">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  before_action :authenticate_user!</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="10">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  before_action :set_current_actor</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="11">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="12">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  private</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="13">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="14">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  def application_layout</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="missed-branch" data-hits="3" data-linenumber="15">
+            
+              <span class="hits">3</span>
+            
+
+            
+              
+                <span class="hits" title="then branch hit 0 times">
+                  then: 0
+                </span>
+              
+                <span class="hits" title="else branch hit 3 times">
+                  else: 3
+                </span>
+              
+            
+
+            <code class="ruby">    devise_controller? ? &quot;application&quot; : &quot;flat_pack_sidebar&quot;</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="16">
+            
+
+            
+              
+            
+
+            <code class="ruby">  end</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="17">
+            
+
+            
+              
+            
+
+            <code class="ruby"></code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="18">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  def set_current_actor</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="6" data-linenumber="19">
+            
+              <span class="hits">6</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">    Current.actor = current_user</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="20">
+            
+
+            
+              
+            
+
+            <code class="ruby">  end</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="21">
+            
+
+            
+              
+            
+
+            <code class="ruby">end</code>
+          </li>
+        </div>
+      
+    </ol>
+  </pre>
+</div>
+
+      
+        <div class="source_table" id="5f45f818fa39cfc14da6aa4552189d6330d665da">
+  <div class="header">
+    <h3>app/controllers/home_controller.rb</h3>
+    <h4>
+      <span class="green">
+  100.0%
+</span>
+
+      lines covered
+    </h4>
+
+    
+      <h4>
+        <span class="green">
+  100.0%
+</span>
+
+        branches covered
+      </h4>
+    
+
+    <div class="t-line-summary">
+      <b>2</b> relevant lines.
+      <span class="green"><b>2</b> lines covered</span> and
+      <span class="red"><b>0</b> lines missed.</span>
+    </div>
+
+    
+      <div class="t-branch-summary">
+          <span><b>0</b> total branches, </span>
+          <span class="green"><b>0</b> branches covered</span> and
+          <span class="red"><b>0</b> branches missed.</span>
+      </div>
+    
+
+  </div>
+
+  <pre>
+    <ol>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="1">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">class HomeController &lt; ApplicationController</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="2">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">  def index</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="3">
+            
+
+            
+              
+            
+
+            <code class="ruby">  end</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="4">
+            
+
+            
+              
+            
+
+            <code class="ruby">end</code>
+          </li>
+        </div>
+      
+    </ol>
+  </pre>
+</div>
+
+      
+        <div class="source_table" id="af64ee842db3e7f1490693dfb42064dedaa63a9e">
+  <div class="header">
+    <h3>app/helpers/application_helper.rb</h3>
+    <h4>
+      <span class="green">
+  100.0%
+</span>
+
+      lines covered
+    </h4>
+
+    
+      <h4>
+        <span class="green">
+  100.0%
+</span>
+
+        branches covered
+      </h4>
+    
+
+    <div class="t-line-summary">
+      <b>1</b> relevant lines.
+      <span class="green"><b>1</b> lines covered</span> and
+      <span class="red"><b>0</b> lines missed.</span>
+    </div>
+
+    
+      <div class="t-branch-summary">
+          <span><b>0</b> total branches, </span>
+          <span class="green"><b>0</b> branches covered</span> and
+          <span class="red"><b>0</b> branches missed.</span>
+      </div>
+    
+
+  </div>
+
+  <pre>
+    <ol>
+      
+        <div>
+          <li class="covered" data-hits="1" data-linenumber="1">
+            
+              <span class="hits">1</span>
+            
+
+            
+              
+            
+
+            <code class="ruby">module ApplicationHelper</code>
+          </li>
+        </div>
+      
+        <div>
+          <li class="never" data-hits="" data-linenumber="2">
+            
+
+            
+              
+            
+
+            <code class="ruby">end</code>
+          </li>
+        </div>
+      
+    </ol>
+  </pre>
+</div>
+
       
         <div class="source_table" id="143047d3aada2029241be0948127ea74dd328d83">
   <div class="header">

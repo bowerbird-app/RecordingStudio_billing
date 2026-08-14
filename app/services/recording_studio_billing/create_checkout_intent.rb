@@ -26,21 +26,21 @@ module RecordingStudioBilling
     def call
       intent = nil
       created = false
+      root = canonical_root
+      account = direct_account(root)
+      fingerprint = request_fingerprint(root)
       CheckoutIntent.transaction do
-        root = canonical_root
-        account = direct_account(root)
-        fingerprint = request_fingerprint(root)
         existing = CheckoutIntent.lock.find_by(root_recording_id: root.id, local_idempotency_key:)
         if existing
           return Result.new(status: existing.request_fingerprint == fingerprint ? :existing : :conflict,
                             intent: existing)
         end
 
+        resolved = resolved_items(root, account)
         intent = CheckoutIntent.create!(root_recording: root, account_recording: account.recording,
                                         local_idempotency_key:, request_fingerprint: fingerprint,
                                         state: "validated", advisory_country_code: normalized_country,
                                         advisory_currency_code: normalized_currency, presentation_preference: presentation)
-        resolved = resolved_items(root, account)
         validate_composition!(resolved)
         resolved.each do |item|
           intent.items.create!(item.attributes.except("id", "checkout_intent_id", "created_at", "updated_at"))
@@ -50,7 +50,10 @@ module RecordingStudioBilling
       enqueue_command!(intent) if created
       Result.new(status: :created, intent: intent.reload)
     rescue ActiveRecord::RecordNotUnique
-      retry
+      existing = CheckoutIntent.find_by(root_recording_id: root.id, local_idempotency_key:)
+      raise unless existing
+
+      Result.new(status: existing.request_fingerprint == fingerprint ? :existing : :conflict, intent: existing)
     end
 
     def verify_final_market!(intent:, account_country: nil, provider_country: nil, host_country: nil)
@@ -103,8 +106,11 @@ module RecordingStudioBilling
     def resolved_items(root, account)
       raise ArgumentError, "at least one commercial item is required" if items.empty?
 
+      option_ids = items.map { |input| input.to_h.stringify_keys.fetch("billing_option_recording_id") }
+      raise ArgumentError, "duplicate checkout option" unless option_ids.uniq.size == option_ids.size
+
       resolved = items.map { |input| resolve_item(root, account, input.to_h.stringify_keys).first }
-      validate_product_rules!(resolved)
+      validate_product_rules!(resolved, account)
       resolved
     end
 
@@ -114,7 +120,7 @@ module RecordingStudioBilling
       raise ArgumentError, "unsupported checkout input" unless (input.keys - permitted).empty?
 
       option = BillingOption.with_current_recording.find_by!(
-        recording_studio_recordings: { id: input.fetch("billing_option_recording_id") }, state: "published"
+        recording_studio_recordings: { id: input.fetch("billing_option_recording_id") }, state: "published", checkout_policy: "allowed"
       )
       product = option.product_recording.recordable
       raise ActiveRecord::RecordNotFound, "commercial item not found" unless product.is_a?(Product)
@@ -236,11 +242,21 @@ module RecordingStudioBilling
       raise ArgumentError, capability.reason unless capability.supported?
     end
 
-    def validate_product_rules!(resolved)
-      products = resolved.map(&:product_recording).map(&:recordable)
+    def validate_product_rules!(resolved, account)
+      active_products = active_subscription_products(account)
+      products = active_products + resolved.map(&:product_recording).map(&:recordable)
       products.each do |product|
-        result = ProductRuleEvaluator.new(product:, selected_products: products).evaluate
+        result = ProductRuleEvaluator.new(product:, selected_products: products,
+                                          current_product: active_products.find { |active_product| active_product.kind == "plan" }).evaluate
         raise ArgumentError, "commercial item is ineligible: #{result.violations.join(',')}" unless result.eligible
+      end
+    end
+
+    def active_subscription_products(account)
+      Subscription.for_root(canonical_root).where(account_recording: account.recording, state: %w[trialing active]).flat_map do |subscription|
+        subscription.item_versions.where(effective_ends_at: nil).filter_map do |version|
+          RecordingStudio::Recording.unscoped.find_by(id: version.product_recording_id)&.recordable
+        end
       end
     end
 

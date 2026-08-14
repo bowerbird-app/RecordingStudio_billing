@@ -58,7 +58,79 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
                  result.command.canonical_request.dig("request", "window_starts_at")
     assert_equal [rated_usage.manifest_digest],
                  result.command.canonical_request.dig("authority", "commercial_manifest_digests")
-    assert_equal 0, RecordingStudioBilling::FinancialCommandAttempt.count
+    assert_equal 0, financial_command_attempts_for(root).count
+  end
+
+  test "executes a committed settlement outside transactions and projects it to invoiced" do
+    root, _account, rated_usage, = rated_usage_authority
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    RecordingStudioBilling.register_provider(:test, adapter)
+    close_period_for(rated_usage)
+    created = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
+
+    settlement = RecordingStudioBilling.execute_rated_usage_settlement(rated_usage_settlement: created.settlement)
+
+    assert_equal created.settlement.id, settlement.id
+    assert_equal "succeeded", created.command.reload.state
+    assert_equal "invoiced", created.settlement.usage_period.reload.state
+    assert_equal [false], adapter.transaction_open_during_calls
+    assert_equal [created.command.provider_idempotency_key], adapter.idempotency_keys
+  end
+
+  test "replays uncertain settlement work with its durable provider key and reconciles the period" do
+    root, _account, rated_usage, = rated_usage_authority
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :timeout_after_possible_success)
+    RecordingStudioBilling.register_provider(:test, adapter)
+    close_period_for(rated_usage)
+    created = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
+
+    assert_raises(RecordingStudioBilling::FakeFinancialAdapter::TimeoutAfterPossibleSuccess) do
+      RecordingStudioBilling.execute_rated_usage_settlement(rated_usage_settlement: created.settlement)
+    end
+    assert_equal "requires_reconciliation", created.command.reload.state
+    assert_equal "submitted", created.settlement.usage_period.reload.state
+
+    RecordingStudioBilling.reconcile_rated_usage_settlement(rated_usage_settlement: created.settlement)
+
+    assert_equal "succeeded", created.command.reload.state
+    assert_equal "reconciled", created.command.reconciliation_state
+    assert_equal "reconciled", created.settlement.usage_period.reload.state
+    assert_equal 2, adapter.calls
+    assert_equal [created.command.provider_idempotency_key] * 2, adapter.idempotency_keys
+  end
+
+  test "does not submit a settlement when the adapter lacks a safe representation" do
+    root, _account, rated_usage, = rated_usage_authority
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(
+      outcome: :success,
+      capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["collect_usage"])
+    )
+    RecordingStudioBilling.register_provider(:test, adapter)
+    close_period_for(rated_usage)
+    created = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
+
+    RecordingStudioBilling.execute_rated_usage_settlement(rated_usage_settlement: created.settlement)
+
+    assert_equal 0, adapter.calls
+    assert_equal "requires_reconciliation", created.command.reload.state
+    assert_equal "unsupported", created.command.normalized_result.fetch("status")
+    assert_equal "submitted", created.settlement.usage_period.reload.state
+  end
+
+  test "does not submit an already invoiced settlement a second time" do
+    root, _account, rated_usage, = rated_usage_authority
+    adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
+    RecordingStudioBilling.register_provider(:test, adapter)
+    close_period_for(rated_usage)
+    created = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
+
+    RecordingStudioBilling.execute_rated_usage_settlement(rated_usage_settlement: created.settlement)
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.execute_rated_usage_settlement(rated_usage_settlement: created.settlement)
+    end
+
+    assert_equal 1, adapter.calls
+    assert_equal "invoiced", created.settlement.usage_period.reload.state
   end
 
   test "is idempotent and database authority rejects forged or mutable settlement history" do
@@ -107,7 +179,7 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
 
     assert_equal %i[created existing], 2.times.map { results.pop.status }.sort
     assert_equal 1, RecordingStudioBilling::RatedUsageSettlement.count
-    assert_equal 1, RecordingStudioBilling::FinancialCommand.count
+    assert_equal 1, financial_commands_for(root).count
   end
 
   test "allocates expiring allowances in order into an append-only period ledger" do
@@ -138,6 +210,23 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) { early.update_column(:remaining_quantity, 1) }
   end
 
+  test "settles fully credited usage without creating or resolving an overage liability" do
+    root, account, rated_usage, = rated_usage_authority
+    RecordingStudioBilling::UsageCreditGrant.create!(
+      root_recording: root, account_recording: account.recording, credit_key: "settlement", quantity: 6,
+      remaining_quantity: 6, effective_at: rated_usage.window_starts_at - 1.hour, expires_at: rated_usage.window_ends_at,
+      source_key: "covered-#{SecureRandom.uuid}", safe_metadata: {}
+    )
+    register_adapter(capabilities: supported_capabilities)
+    period = close_period_for(rated_usage)
+
+    result = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, usage_period: period)
+
+    assert result.created?, result.inspect
+    assert_equal 0, result.command.canonical_request.dig("request", "amount_minor")
+    assert_nil RecordingStudioBilling::UsageAllocation.find_by!(rated_usage:).overage_calculation
+  end
+
   test "closes a period under lock after allocation and retains idempotent close semantics" do
     _root, _account, rated_usage, = rated_usage_authority
     allocation = RecordingStudioBilling.allocate_rated_usage(rated_usage:).allocation
@@ -154,23 +243,27 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     assert existing.existing?
   end
 
-  test "calculates 3,400 excess units at two minor units per thousand as 680 minor units" do
-    _root, _account, rated_usage, = rated_usage_authority
+  test "calculates and binds a published package overage price" do
+    catalogue = published_settlement_catalogue(amount_minor: 200, pricing_model: "package", package_size: 1000)
+    _root, _account, rated_usage = published_rated_usage(catalogue:, quantity: 3400)
     allocation = RecordingStudioBilling.allocate_rated_usage(rated_usage:).allocation
-    allocation.update!(measured_quantity: 3400, credited_quantity: 0, excess_quantity: 3400)
-
-    overage = RecordingStudioBilling.calculate_overage(
-      allocation:,
-      rate: { "amount_minor" => 200, "package_size" => 1000, "currency_code" => "USD", "currency_exponent" => 2 }
-    )
+    overage = RecordingStudioBilling.calculate_overage(allocation:)
 
     assert_equal 3400, overage.excess_quantity
     assert_equal 680, overage.amount_minor
+    assert_equal catalogue.fetch(:overage_price).id, overage.overage_price_recording_id
+    assert_equal catalogue.fetch(:market).id, overage.rate_snapshot.fetch("market_recording_id")
+    assert_equal catalogue.fetch(:overage_price).id, overage.rate_snapshot.fetch("overage_price_recording_id")
+
+    forged = overage.attributes.except("id", "created_at", "updated_at").merge("id" => SecureRandom.uuid,
+                                                                               "amount_minor" => 1)
+    assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::OverageCalculation.insert_all!([forged]) }
   end
 
   test "uses the frozen settled rate for cumulative usage correction amounts" do
     root, _account, rated_usage, = rated_usage_authority(customer_rate: {
-                                                           "amount_minor" => 200, "package_size" => 1000, "currency_code" => "USD", "currency_exponent" => 2
+                                                           "amount_minor" => 200, "package_size" => 1000,
+                                                           "pricing_model" => "package", "currency_code" => "USD", "currency_exponent" => 2
                                                          })
     register_adapter(capabilities: supported_capabilities)
     close_period_for(rated_usage)
@@ -255,7 +348,7 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     denied = RecordingStudioBilling.create_rated_usage_settlement(root_recording: other_root, rated_usage:)
     assert denied.denied?
     assert_equal 0, RecordingStudioBilling::RatedUsageSettlement.count
-    assert_equal 0, RecordingStudioBilling::FinancialCommand.count
+    assert_equal 0, financial_commands_for(root).count
 
     close_period_for(rated_usage)
     unavailable = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
@@ -269,14 +362,30 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     assert_equal 0, RecordingStudioBilling::RatedUsageSettlement.count
   end
 
+  test "requires review for a frozen published review threshold" do
+    assert_overage_safety_limit("review_threshold_minor", :overage_review_threshold_exceeded)
+  end
+
+  test "requires review for a frozen published hard threshold" do
+    assert_overage_safety_limit("hard_threshold_minor", :overage_hard_threshold_exceeded)
+  end
+
+  test "requires review for a frozen published period liability limit" do
+    assert_overage_safety_limit("maximum_period_liability_minor", :overage_period_liability_exceeded)
+  end
+
+  test "requires review for a frozen published submission limit" do
+    assert_overage_safety_limit("maximum_submission_minor", :overage_submission_limit_exceeded)
+  end
+
   test "settles from published frozen usage terms after live catalogue revisions" do
     root, account = account_authority
     catalogue = published_settlement_catalogue
     usage_starts_at = Time.utc(2026, 8, 12, 12)
     usage_ends_at = usage_starts_at + 1.hour
     RecordingStudioBilling::UsageEvent.create!(
-      root_recording: root, account_recording: account.recording, usage_key: "published_settlement",
-      feature_key: "published_settlement", quantity: 4, occurred_at: usage_starts_at,
+      root_recording: root, account_recording: account.recording, usage_key: "settlement",
+      feature_key: "settlement", quantity: 4, occurred_at: usage_starts_at,
       idempotency_key: SecureRandom.uuid, safe_metadata: {}
     )
 
@@ -288,10 +397,7 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
       ).rated_usage
     end
     allocation = RecordingStudioBilling.allocate_rated_usage(rated_usage:).allocation
-    overage = RecordingStudioBilling.calculate_overage(
-      allocation:,
-      rate: rated_usage.rate_snapshot.fetch("customer_rate")
-    )
+    overage = RecordingStudioBilling.calculate_overage(allocation:)
     frozen_terms = {
       amount_minor: overage.amount_minor, currency: overage.currency_code,
       exponent: overage.currency_exponent, manifest_digest: rated_usage.manifest_digest,
@@ -327,7 +433,7 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     assert_equal frozen_terms.fetch(:collection_method), request.fetch("collection_method")
     assert_equal 0, adapter.calls
     assert_equal 1, RecordingStudioBilling::RatedUsageSettlement.count
-    assert_equal 1, RecordingStudioBilling::FinancialCommand.count
+    assert_equal 1, financial_commands_for(root, command_type: "usage_settlement").count
   end
 
   private
@@ -337,11 +443,11 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
   end
 
   def acquire_database_lock!
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(1_208_120_200)")
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
   end
 
   def release_database_lock!
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(1_208_120_200)")
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
   end
 
   def account_authority
@@ -357,54 +463,17 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     allocation.usage_period.reload
   end
 
-  def rated_usage_authority(customer_rate: nil)
-    root, account = account_authority
-    provider = provider_authority
-    meter_id = SecureRandom.uuid
-    unit_id = SecureRandom.uuid
-    rate_card_id = SecureRandom.uuid
-    rate_id = SecureRandom.uuid
-    price_id = SecureRandom.uuid
-    starts_at = 1.day.from_now.change(min: 0, sec: 0)
-    ends_at = starts_at + 1.hour
+  def rated_usage_authority(customer_rate: nil, overage_policy: {})
     customer_rate = {
-      "customer_price_recording_id" => price_id, "usage_unit_recording_id" => unit_id, "amount_minor" => 2,
+      "amount_minor" => 2,
       "currency_code" => "USD", "currency_exponent" => 2, "pricing_model" => "per_unit", "package_size" => nil
     }.merge(customer_rate || {})
-    canonical_data = {
-      "tax_policy" => { "enabled" => false, "presentation" => "provider_default", "calculator_key" => nil,
-                        "policy_version" => "v1", "semantic_categories" => [] },
-      "usage_settlement" => { "provider_account_recording_id" => provider.id, "provider_adapter_key" => "test",
-                              "market_recording_id" => SecureRandom.uuid, "resolved_country_code" => "US", "resolution_tier" => "exact", "market_geography" => { "country_codes" => ["US"], "country_groups" => {}, "regional_country_codes" => [], "global_fallback" => false }, "collection_method" => "automatic", "operation" => "collect_usage" },
-      "usage_rating" => {
-        "meters" => { meter_id => { "meter_recording_id" => meter_id, "usage_unit_recording_id" => unit_id, "aggregation" => "sum", "usage_key" => "settlement" } },
-        "rate_cards" => { rate_card_id => { "key" => "rates" } },
-        "rates" => { rate_id => { "rate_recording_id" => rate_id, "rate_card_recording_id" => rate_card_id, "usage_unit_recording_id" => unit_id, "conversion_numerator" => 1, "conversion_denominator" => 1, "conversion_decimal" => nil } },
-        "cost_cards" => {}, "cost_rates" => {},
-        "customer_rates" => { price_id => customer_rate }
-      }
-    }
-    snapshots = [{ "fixture" => true }]
-    references = { "fixture" => { "fixture" => true } }
-    envelope = { "schema_version" => "v1", "resolver_version" => "v1", "root_recording_id" => root.id,
-                 "canonical_data" => canonical_data, "recording_snapshots" => snapshots, "snapshot_references" => references }
-    manifest = RecordingStudioBilling::CommercialManifest.create!(root_recording_id: root.id, schema_version: "v1",
-                                                                  resolver_version: "v1", canonical_data:, recording_snapshots: snapshots, snapshot_references: references, manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope))
-    manifest.mark_used!
-    access = Struct.new(:allowed) do
-      def has_feature?(_key) = allowed
-      def limit(_key) = nil
-      def allowance(_key) = nil
-    end.new(true)
-    rated_usage = RecordingStudioBilling::EntitlementAccess.stub(:for, access) do
-      RecordingStudioBilling.record_usage(
-        root_recording: root, usage_key: "settlement", quantity: 6,
-        idempotency_key: SecureRandom.uuid, occurred_at: starts_at
-      )
-      RecordingStudioBilling.rate_usage(root_recording: root, meter_recording: meter_id,
-                                        manifest_digest: manifest.manifest_digest, window_starts_at: starts_at, window_ends_at: ends_at).rated_usage
-    end
-    [root, account, rated_usage, provider]
+    catalogue = published_settlement_catalogue(amount_minor: customer_rate.fetch("amount_minor"),
+                                               pricing_model: customer_rate.fetch("pricing_model"),
+                                               package_size: customer_rate.fetch("package_size"),
+                                               safety_limits: overage_policy)
+    root, account, rated_usage = published_rated_usage(catalogue:, quantity: 6)
+    [root, account, rated_usage, catalogue.fetch(:provider)]
   end
 
   def provider_authority
@@ -414,7 +483,7 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
                             recordable: RecordingStudioBilling::ProviderAccount.new(billing_admin_recording: admin.recording, key: "test", adapter_key: "test", name: "Test", environment: "production", configuration: {}, capabilities: [], supported_markets: ["US"], supported_currencies: ["USD"]), root_recording: catalogue_root, parent_recording: admin.recording).recording
   end
 
-  def published_settlement_catalogue
+  def published_settlement_catalogue(amount_minor: 2, pricing_model: "per_unit", package_size: nil, safety_limits: {})
     RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
     actor = User.create!(email: "settlement-publisher-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
                          password_confirmation: "Password1!")
@@ -434,20 +503,20 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     )
     option = record_catalogue(
       RecordingStudioBilling::BillingOption.new(product_recording: product, key: "usage", recurrence: "one_time",
-                                                quantity_mode: "fixed", default_quantity: 1, pricing_model: "per_unit", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), root, product
+                                                quantity_mode: "fixed", default_quantity: 1, pricing_model:, collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), root, product
     )
     price = record_catalogue(
       RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "base",
-                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"), root, option
+                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "default"), root, option
     )
     unit = record_catalogue(RecordingStudioBilling::UsageUnit.new(provider_account_recording: provider, key: "unit"),
                             root, billing_admin.recording)
     overage_price = record_catalogue(
       RecordingStudioBilling::OveragePrice.new(billing_option_recording: option, market_recording: market,
-                                               usage_unit_recording: unit, key: "overage", amount_minor: 2, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"), root, option
+                                               usage_unit_recording: unit, key: "overage", amount_minor:, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "default", **safety_limits), root, option
     )
     meter = record_catalogue(
-      RecordingStudioBilling::Meter.new(usage_unit_recording: unit, key: "published_settlement",
+      RecordingStudioBilling::Meter.new(usage_unit_recording: unit, key: "settlement",
                                         aggregation: "sum"), root, billing_admin.recording
     )
     rate_card = record_catalogue(
@@ -470,6 +539,45 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
                                                                      price_recording_ids: [price.id], actor:)
 
     { root:, manifest: RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: candidate.manifest_digests.sole), provider:, market:, overage_price:, meter:, rate: }
+  end
+
+  def published_rated_usage(catalogue:, quantity:, starts_at: 1.day.from_now.change(min: 0, sec: 0))
+    root, account = account_authority
+    ends_at = starts_at + 1.hour
+    RecordingStudioBilling::UsageEvent.create!(root_recording: root, account_recording: account.recording,
+                                               usage_key: "settlement", feature_key: "settlement",
+                                               quantity:, occurred_at: starts_at, idempotency_key: SecureRandom.uuid, safe_metadata: {})
+    rated = with_entitlement do
+      RecordingStudioBilling.rate_usage(root_recording: root, meter_recording: catalogue.fetch(:meter),
+                                        manifest_digest: catalogue.fetch(:manifest).manifest_digest,
+                                        window_starts_at: starts_at, window_ends_at: ends_at).rated_usage
+    end
+    [root, account, rated]
+  end
+
+  def assert_overage_safety_limit(limit, reason)
+    catalogue = published_settlement_catalogue(safety_limits: { limit => 11 })
+    root, _account, rated_usage = published_rated_usage(catalogue:, quantity: 6)
+    register_adapter(capabilities: supported_capabilities)
+    close_period_for(rated_usage)
+
+    result = RecordingStudioBilling.create_rated_usage_settlement(root_recording: root, rated_usage:)
+
+    assert result.requires_review?, limit
+    assert_equal reason, result.reason
+    assert_equal "requires_review", RecordingStudioBilling::UsageAllocation.find_by!(rated_usage:).usage_period.reload.state
+    assert_equal 0, financial_commands_for(root).count
+  end
+
+  def financial_commands_for(root, command_type: nil)
+    scope = RecordingStudioBilling::FinancialCommand.where(root_recording: root)
+    command_type ? scope.where(command_type:) : scope
+  end
+
+  def financial_command_attempts_for(root)
+    RecordingStudioBilling::FinancialCommandAttempt.joins(:financial_command).where(
+      recording_studio_billing_financial_commands: { root_recording_id: root.id }
+    )
   end
 
   def record_catalogue(recordable, root, parent)

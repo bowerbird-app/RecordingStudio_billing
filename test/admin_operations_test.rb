@@ -14,6 +14,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
   parallelize(workers: 1)
 
   setup do
+    acquire_database_lock!
     BillingTestDatabaseCleanup.clear!
     @user = User.create!(email: "admin-operation-#{SecureRandom.hex(4)}@example.test", password: "Password1!",
                          password_confirmation: "Password1!")
@@ -21,9 +22,17 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     @plan_update, @plan_update_run = plan_update_fixture
     @financial_command = reconciliation_command
     sign_in @user
+  rescue StandardError
+    BillingTestDatabaseCleanup.clear!
+    release_database_lock!
+    raise
   end
 
-  teardown { BillingTestDatabaseCleanup.clear! }
+  teardown do
+    BillingTestDatabaseCleanup.clear! if @database_lock_held
+  ensure
+    release_database_lock!
+  end
 
   test "publication endpoint rejects a signed-in actor without site-admin access" do
     RecordingStudioAccessible.stub(:authorized?, false) do
@@ -31,6 +40,33 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :forbidden
+  end
+
+  test "RecordingStudioAdmin denies an actor without the registered admin action role" do
+    requested_roles = []
+
+    RecordingStudioAccessible.stub(:authorized?, lambda { |role:, **|
+      requested_roles << role
+      role == :view
+    }) do
+      post "/billing/admin/operations/publish_price/#{@price.id}"
+    end
+
+    assert_response :forbidden
+    assert_includes requested_roles, :admin
+  end
+
+  test "an AdminRoot A actor cannot operate on an AdminRoot B record" do
+    foreign_price, foreign_billing_admin = draft_price
+
+    RecordingStudioAccessible.stub(:authorized?, lambda { |recording:, **|
+      recording == @billing_admin_recording.root_recording
+    }) do
+      post "/billing/admin/operations/publish_price/#{foreign_price.id}"
+    end
+
+    assert_response :forbidden
+    assert_equal foreign_billing_admin.root_recording, foreign_price.recording.root_recording
   end
 
   test "publication endpoint authorizes the registered site action and calls CommercialPublisher" do
@@ -48,6 +84,28 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/admin/screens/billing_prices"
   end
 
+  test "admin action audit identifies the AdminRoot, resource, action, and actor" do
+    audit_events = []
+
+    with_site_admin do
+      RecordingStudioBilling::CommercialPublisher.stub(:publish!, ->(**) {}) do
+        ActiveSupport::Notifications.subscribed(
+          ->(*arguments) { audit_events << ActiveSupport::Notifications::Event.new(*arguments).payload },
+          RecordingStudioAdmin::AdminActionAudit::NOTIFICATION_NAME
+        ) do
+          post "/billing/admin/operations/publish_price/#{@price.id}"
+        end
+      end
+    end
+
+    event = audit_events.find { |payload| payload[:outcome] == "performed" }
+    assert_equal @billing_admin_recording.root_recording, event.fetch(:access_recording)
+    assert_equal @price, event.fetch(:record)
+    assert_equal @user, event.fetch(:actor)
+    assert_equal "billing_prices", event.fetch(:resource_key)
+    assert_equal "publish", event.fetch(:action_key)
+  end
+
   test "every mutation endpoint rejects an unauthenticated request" do
     sign_out @user
 
@@ -58,11 +116,11 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
   end
 
   test "every mutation endpoint forbids an actor without site-admin access" do
-    RecordingStudioAccessible.stub(:authorized?, false) do
-      operation_paths.each do |path|
+    operation_paths.each do |path|
+      RecordingStudioAccessible.stub(:authorized?, false) do
         post path
-        assert_response :forbidden, path
       end
+      assert_response :forbidden, path
     end
   end
 
@@ -104,6 +162,205 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
     assert_equal [{ command: @financial_command }], calls
     assert_redirected_to "/admin/screens/billing_financial_commands"
+  end
+
+  test "commercial draft revision and retirement use Recording Studio and CommercialPublisher" do
+    provider_key = "provider_#{SecureRandom.hex(4)}"
+    product_key = "product_#{SecureRandom.hex(4)}"
+    option_key = "option_#{SecureRandom.hex(4)}"
+    price_key = "price_#{SecureRandom.hex(4)}"
+    billing_admin = @billing_admin_recording
+    assert_predicate billing_admin, :persisted?
+    provider_attributes = provider_account_attributes.merge(billing_admin_recording_id: billing_admin.id, key: provider_key)
+
+    with_site_admin do
+      post "/billing/admin/operations/create_draft_provider_account", params: {
+        parent_recording_id: billing_admin.id,
+        attributes: provider_attributes
+      }
+      assert_redirected_to "/admin/screens/billing_provider_accounts"
+      provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: provider_key)
+      post "/billing/admin/operations/revise_provider_account/#{provider.id}", params: { attributes: { name: "Revised provider" } }
+      provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: provider_key)
+      assert_equal "Revised provider", provider.name
+      provider_recording = recording_for(provider)
+
+      post "/billing/admin/operations/create_draft_product", params: {
+        parent_recording_id: billing_admin.id,
+        attributes: { key: product_key, kind: "service", provider_account_recording_id: provider_recording.id }
+      }
+      product = RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key)
+      post "/billing/admin/operations/revise_product/#{product.id}", params: { attributes: { kind: "addon" } }
+      product = RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key)
+      assert_equal "addon", product.kind
+      product_recording = recording_for(product)
+
+      post "/billing/admin/operations/create_draft_billing_option", params: {
+        parent_recording_id: product_recording.id,
+        attributes: billing_option_attributes(key: option_key, product_recording: product_recording)
+      }
+      option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_key)
+      post "/billing/admin/operations/revise_billing_option/#{option.id}", params: { attributes: { checkout_policy: "required" } }
+      option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_key)
+      assert_equal "required", option.checkout_policy
+      option_recording = recording_for(option)
+
+      post "/billing/admin/operations/create_draft_price", params: {
+        parent_recording_id: option_recording.id,
+        attributes: price_attributes(key: price_key, billing_option_recording: option_recording)
+      }
+      price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key)
+      post "/billing/admin/operations/revise_price/#{price.id}", params: { attributes: { amount_minor: 1_200 } }
+      price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key)
+      assert_equal 1_200, price.amount_minor
+
+      [price, option, product, provider].each do |record|
+        post "/billing/admin/operations/retire_#{commercial_operation_name_for(record)}/#{record.id}"
+        assert_redirected_to "/admin/screens/#{resource_key_for(record)}"
+        assert_equal "retired", record.class.with_current_recording.find_by!(key: record.key).state
+      end
+    end
+  end
+
+  test "commercial draft creation requires an explicit allowed parent in the current AdminRoot" do
+    original_count = RecordingStudioBilling::Product.count
+    assert_predicate @billing_admin_recording, :persisted?
+
+    sign_in @user
+    with_site_admin do
+      post "/billing/admin/operations/create_draft_product", params: { attributes: { key: "missing_parent", kind: "service" } }
+      assert_response :not_found
+      assert_predicate controller.current_user, :present?
+      sign_in @user
+      post "/billing/admin/operations/create_draft_product", params: {
+        parent_recording_id: @price.billing_option_recording.id,
+        attributes: { key: "wrong_parent", kind: "service", provider_account_recording_id: catalogue_provider_recording.id }
+      }
+      assert_response :not_found
+    end
+
+    assert_equal original_count, RecordingStudioBilling::Product.count
+    foreign_price, foreign_admin = draft_price
+    sign_in @user
+    RecordingStudioAccessible.stub(:authorized?, ->(recording:, **) { recording == @billing_admin_recording.root_recording }) do
+      post "/billing/admin/operations/create_draft_provider_account", params: {
+        parent_recording_id: foreign_admin.id, attributes: provider_account_attributes.merge(key: "foreign_provider")
+      }
+    end
+    assert_response :forbidden
+    assert_equal foreign_admin.root_recording, foreign_price.recording.root_recording
+  end
+
+  test "Account-root feature override administration uses FeatureOverrideReviser with audit attribution" do
+    override, account_root = feature_override_fixture
+    audit_events = []
+    select_root(account_root)
+
+    with_site_admin do
+      ActiveSupport::Notifications.subscribed(
+        ->(*arguments) { audit_events << ActiveSupport::Notifications::Event.new(*arguments).payload },
+        RecordingStudioAdmin::AdminActionAudit::NOTIFICATION_NAME
+      ) do
+        post "/billing/admin/operations/revise_feature_override/#{override.id}", params: { attributes: { value: true } }
+      end
+      current = RecordingStudioBilling::FeatureOverride.with_current_recording.find_by!(key: override.key)
+      assert_equal true, current.value
+      post "/billing/admin/operations/supersede_feature_override/#{current.id}", params: { attributes: { value: false } }
+      current = RecordingStudioBilling::FeatureOverride.with_current_recording.find_by!(key: override.key)
+      assert_equal false, current.value
+      post "/billing/admin/operations/revoke_feature_override/#{current.id}"
+    end
+
+    current = RecordingStudioBilling::FeatureOverride.with_current_recording.find_by!(key: override.key)
+    assert_equal "retired", current.state
+    event = audit_events.find { |payload| payload[:outcome] == "performed" }
+    assert_equal account_root, event.fetch(:access_recording)
+    assert_equal @user, event.fetch(:actor)
+    assert_equal "billing_feature_overrides", event.fetch(:resource_key)
+    assert_equal "revise", event.fetch(:action_key)
+  end
+
+  test "feature override operations deny a selected foreign Account root without disclosure" do
+    override, account_root = feature_override_fixture
+    foreign_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Foreign #{SecureRandom.hex(4)}"))
+    RecordingStudioBilling.ensure_account(root_recording: foreign_root, name: "Billing")
+    select_root(foreign_root)
+
+    with_site_admin do
+      post "/billing/admin/operations/revise_feature_override/#{override.id}", params: { attributes: { value: true } }
+    end
+
+    assert_response :forbidden
+    assert_equal false, RecordingStudioBilling::FeatureOverride.with_current_recording.find_by!(key: override.key).value
+    assert_not_equal account_root, foreign_root
+  end
+
+  test "feature override reviser failure creates no revision" do
+    override, account_root = feature_override_fixture
+    select_root(account_root)
+    original_recording = recording_for(override)
+    original_event_count = RecordingStudio::Event.where(recording: original_recording).count
+
+    with_site_admin do
+      RecordingStudioBilling::FeatureOverrideReviser.stub(:call, ->(**) { raise ArgumentError, "override rejected" }) do
+        post "/billing/admin/operations/revise_feature_override/#{override.id}", params: { attributes: { value: true } }
+      end
+    end
+
+    assert_redirected_to "/admin/screens/billing_feature_overrides"
+    assert_equal original_recording.id, recording_for(override.reload).id
+    assert_equal original_event_count, RecordingStudio::Event.where(recording: original_recording).count
+  end
+
+  test "refund and adjustment actions create intents through their services with audit actor attribution" do
+    payment, invoice = financial_projection_fixture
+    refund_calls = []
+    adjustment_calls = []
+
+    with_site_admin do
+      RecordingStudioBilling::CreateRefundIntent.stub(:call, ->(**attributes) { refund_calls << attributes }) do
+        post "/billing/admin/operations/create_refund_intent/#{payment.id}", params: {
+          attributes: { local_idempotency_key: "refund-admin", amount_minor: 25, reason: "customer request",
+                        line_allocation: { payment: payment.id } }
+        }
+      end
+      RecordingStudioBilling::CreateAdjustmentIntent.stub(:call, ->(**attributes) { adjustment_calls << attributes }) do
+        post "/billing/admin/operations/create_adjustment_intent/#{invoice.id}", params: {
+          attributes: { local_idempotency_key: "adjustment-admin", kind: "credit", amount_minor: 25,
+                        reason: "billing correction", affected_reference: { invoice: invoice.id } }
+        }
+      end
+    end
+
+    assert_equal @user.id.to_s, refund_calls.sole.fetch(:actor_reference)
+    assert_equal @user.id.to_s, adjustment_calls.sole.fetch(:actor_reference)
+    assert_equal payment.root_recording, refund_calls.sole.fetch(:root_recording)
+    assert_equal invoice.root_recording, adjustment_calls.sole.fetch(:root_recording)
+    assert_equal 0, RecordingStudioBilling::Refund.count
+    assert_equal 0, RecordingStudioBilling::FinancialAdjustment.count
+  end
+
+  test "new service failures redirect without mutating protected commercial or financial projections" do
+    payment, invoice = financial_projection_fixture
+
+    with_site_admin do
+      RecordingStudioBilling::CommercialPublisher.stub(:retire!, ->(**) { raise ArgumentError, "retirement rejected" }) do
+        post "/billing/admin/operations/retire_price/#{@price.id}"
+      end
+      assert_redirected_to "/admin/screens/billing_prices"
+      RecordingStudioBilling::CreateRefundIntent.stub(:call, ->(**) { raise ArgumentError, "refund rejected" }) do
+        post "/billing/admin/operations/create_refund_intent/#{payment.id}", params: { attributes: refund_request_attributes }
+      end
+      assert_redirected_to "/admin/screens/billing_payments"
+      RecordingStudioBilling::CreateAdjustmentIntent.stub(:call, ->(**) { raise ArgumentError, "adjustment rejected" }) do
+        post "/billing/admin/operations/create_adjustment_intent/#{invoice.id}", params: { attributes: adjustment_request_attributes }
+      end
+    end
+
+    assert_redirected_to "/admin/screens/billing_invoices"
+    assert_equal "draft", @price.reload.state
+    assert_equal 0, RecordingStudioBilling::Refund.count
+    assert_equal 0, RecordingStudioBilling::FinancialAdjustment.count
   end
 
   test "operation failure redirects safely without mutating the price" do
@@ -173,7 +430,10 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
                            billing_option_recording: option, market_recording: market, key: "price_#{SecureRandom.hex(4)}", amount_minor: 1_000,
                            currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default"
                          ), root, option).recordable
-    [price, admin.recording]
+    billing_admin_recording = RecordingStudio::Recording.unscoped.find_by!(
+      root_recording_id: root.id, recordable_type: "RecordingStudioBilling::BillingAdmin"
+    )
+    [price, billing_admin_recording]
   end
 
   def plan_update_fixture
@@ -199,6 +459,93 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     ).command
   end
 
+  def feature_override_fixture
+    feature = record_child(RecordingStudioBilling::Feature.new(
+                             product_recording: @price.billing_option_recording.recordable.product_recording,
+                             key: "feature_#{SecureRandom.hex(4)}", kind: "boolean"
+                           ), @billing_admin_recording.root_recording, @price.billing_option_recording.recordable.product_recording)
+    root = RecordingStudio.root_recording_for(Workspace.create!(name: "Override #{SecureRandom.hex(4)}"))
+    account = RecordingStudioBilling.ensure_account(root_recording: root, name: "Billing")
+    override = record_child(RecordingStudioBilling::FeatureOverride.new(
+                              account_recording: account.recording, feature_recording: feature, key: "override_#{SecureRandom.hex(4)}", value: false
+                            ), root, account.recording).recordable
+    [override, root]
+  end
+
+  def financial_projection_fixture
+    root = RecordingStudio.root_recording_for(Workspace.create!(name: "Finance #{SecureRandom.hex(4)}"))
+    account = RecordingStudioBilling.ensure_account(root_recording: root, name: "Billing")
+    provider = @price.billing_option_recording.recordable.product_recording.recordable.provider_account_recording
+    command = RecordingStudioBilling.create_financial_command(
+      root_recording: root, account_recording: account.recording, command_type: "capture_funds",
+      local_idempotency_key: SecureRandom.uuid, provider_account_recording: provider, provider_adapter_key: "fake", request: { amount_minor: 100 }
+    ).command
+    now = Time.current
+    payment = RecordingStudioBilling::Payment.create!(root_recording: root, account_recording: account.recording, financial_command: command,
+                                                      provider_reference: "payment-#{SecureRandom.uuid}", currency_code: "USD", amount_minor: 100,
+                                                      state: "captured", safe_snapshot: {}, recorded_at: now)
+    invoice = RecordingStudioBilling::Invoice.create!(root_recording: root, account_recording: account.recording, financial_command: command,
+                                                      provider_reference: "invoice-#{SecureRandom.uuid}", currency_code: "USD", total_minor: 100,
+                                                      state: "issued", safe_snapshot: {}, issued_at: now)
+    [payment, invoice]
+  end
+
+  def provider_account_attributes
+    { key: "provider_#{SecureRandom.hex(4)}", adapter_key: "fake", name: "Fake", environment: "test",
+      supported_markets: ["US"], supported_currencies: ["USD"], billing_admin_recording_id: catalogue_billing_admin.id }
+  end
+
+  def billing_option_attributes(key:, product_recording:)
+    { key:, product_recording_id: product_recording.id, recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1,
+      pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none",
+      lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive" }
+  end
+
+  def price_attributes(key:, billing_option_recording:)
+    { key:, billing_option_recording_id: billing_option_recording.id, market_recording_id: @price.market_recording_id, amount_minor: 1_000,
+      currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default" }
+  end
+
+  def catalogue_billing_admin
+    RecordingStudio::Recording.unscoped.find_by!(root_recording_id: @price.recording.root_recording_id,
+                                                 recordable_type: "RecordingStudioBilling::BillingAdmin")
+  end
+
+  def catalogue_provider_recording
+    RecordingStudio::Recording.unscoped.find_by!(root_recording_id: @price.recording.root_recording_id,
+                                                 recordable_type: "RecordingStudioBilling::ProviderAccount")
+  end
+
+  def resource_key_for(record)
+    {
+      "ProviderAccount" => "billing_provider_accounts",
+      "Product" => "billing_products",
+      "BillingOption" => "billing_options",
+      "Price" => "billing_prices"
+    }.fetch(record.class.name.demodulize)
+  end
+
+  def commercial_operation_name_for(record)
+    {
+      "ProviderAccount" => "provider_account",
+      "Product" => "product",
+      "BillingOption" => "billing_option",
+      "Price" => "price"
+    }.fetch(record.class.name.demodulize)
+  end
+
+  def recording_for(recordable)
+    RecordingStudio::Recording.unscoped.find_by!(recordable_type: recordable.class.name, recordable_id: recordable.id)
+  end
+
+  def refund_request_attributes
+    { local_idempotency_key: SecureRandom.uuid, amount_minor: 25, reason: "customer request", line_allocation: {} }
+  end
+
+  def adjustment_request_attributes
+    { local_idempotency_key: SecureRandom.uuid, kind: "credit", amount_minor: 25, reason: "billing correction", affected_reference: { invoice: "invoice" } }
+  end
+
   def used_manifest(root)
     canonical_data = { "fixture" => true }
     snapshots = [{ "fixture" => true }]
@@ -213,6 +560,15 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     RecordingStudioAccessible.stub(:authorized?, true, &)
   end
 
+  def select_root(root)
+    patch "/recording_studio_root_switchable/v1/root_switch", params: {
+      scope: "all_workspaces", root_switch: { root_recording_id: root.id, return_to: "/" }
+    }
+    assert_response :redirect
+    get "/"
+    assert_response :success
+  end
+
   def operation_paths
     [
       "/billing/admin/operations/publish_price/#{@price.id}",
@@ -221,6 +577,18 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
       "/billing/admin/operations/apply_plan_update/#{@plan_update_run.id}",
       "/billing/admin/operations/reconcile_command/#{@financial_command.id}"
     ]
+  end
+
+  def acquire_database_lock!
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    @database_lock_held = true
+  end
+
+  def release_database_lock!
+    return unless @database_lock_held
+
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    @database_lock_held = false
   end
 
   def record_child(recordable, root, parent)

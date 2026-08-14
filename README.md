@@ -55,7 +55,7 @@ engine templates:
 ```ruby
 RecordingStudioBilling.configure do |config|
   config.billing_presenter_override(:usage, HostBilling::UsagePresenter)
-  config.billing_provider_component(:checkout, HostBilling::CheckoutComponent)
+  config.billing_provider_component(:primary, :checkout, HostBilling::CheckoutComponent)
   config.billing_copy = { usage_title: "Metering", support_label: "Contact support" }
   config.support_url = "https://support.example.test/billing"
 
@@ -70,10 +70,13 @@ end
 
 Navigation hooks return `{ label:, href:, icon: }` hashes and page-content
 hooks return a renderable ViewComponent or safe view content. Lower priorities
-run first. Provider components receive `presenter:`. Presenter overrides may be
-classes or callables that receive the default presenter class and return a
-replacement class. Hooks run only during rendering; they must not make billing
-state changes.
+run first. Provider components are selected by the financial command's provider
+key and receive `presenter:`. Stripe Embedded Checkout is registered only for
+the built-in `:stripe` key; register a component for each custom provider that
+needs browser presentation. Its JavaScript is packaged as an engine asset, so
+hosts do not need an import-map pin. Presenter overrides may be classes or
+callables that receive the default presenter class and return a replacement
+class. Hooks run only during rendering; they must not make billing state changes.
 
 ## Recording Studio integration
 
@@ -94,6 +97,24 @@ The capability metadata uses Recording Studio's public
 APIs. Capability ownership derives the correct parent types, so `Account`
 belongs below a billing-enabled workspace and `BillingAdmin` below a
 billing-admin-enabled root.
+
+### Administrative workflows
+
+The registered RecordingStudioAdmin resources provide the V1 site-scoped
+inventory screens, filters, capability and tax diagnostics, and audit-backed
+POST actions for price publication, plan-update preview/confirmation/apply, and
+provider-command reconciliation. Each action authorizes the actor through the
+resolved `AdminRoot` RecordingStudioAdmin context before dispatching to the
+corresponding domain service; it does not update billing rows directly.
+
+RecordingStudioAdmin cannot generate safe CRUD forms for these recording-backed
+models. Hosts that expose create or edit controls for provider accounts,
+catalogue records, tax/usage configuration, feature overrides, or plan updates
+must create drafts with `RecordingStudio.record!` and revise existing records
+with the relevant Recording Studio revision API. They must not mutate published
+or historical recordables in place. Catalogue publication remains exclusively
+with `CommercialPublisher`, and account-scoped feature overrides remain with
+`FeatureOverrideReviser`.
 
 ## V1 commercial catalogue contract
 
@@ -419,7 +440,16 @@ The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Its credential-free demonstration catalogue
 includes fake-provider checkout prices across US, UK, Italy, Germany, and a
 global fallback, plus a metered API-call product with rates, costs, and US
-overage pricing. It does not contact Stripe or any other network provider.
+overage pricing. It creates one named Workspace/Billing Account and one named
+AdminRoot/BillingAdmin for root-switch demonstrations, as well as free,
+monthly, annual, quantity-addon, credit-pack, product-rule, and published
+plan-update examples. It does not contact Stripe or any other network provider.
+
+The dummy suite exercises seeded hierarchy and catalogue assertions, root
+switching, permitted customer billing, restricted customer/admin access, and
+provider-projected hybrid subscription, invoice, payment, refund, adjustment,
+and FeatureOverride journeys. These fixtures use the same command,
+reconciliation, projection, and revision services as production code.
 
 The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage &
 Credits, Invoices, Payments, Billing Settings, and Checkout presentation.

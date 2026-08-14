@@ -6,5 +6,9 @@ module RecordingStudioBilling
       super()
       @presenter = presenter
     end
+
+    private
+
+    attr_reader :presenter
   end
 end

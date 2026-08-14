@@ -97,6 +97,8 @@ module RecordingStudioBilling
       after_adapter_call&.call(command, response)
       persist_response!(claim, response)
       command.reload
+    rescue WorkerCrash
+      raise
     rescue StandardError => e
       persist_uncertain_error!(claim, e) if claim
       raise
@@ -110,9 +112,20 @@ module RecordingStudioBilling
       requirements = request_capability_requirements.merge(capability_requirements)
       return if requirements.empty?
 
+      representations = requirements.delete(:usage_settlement_representations)
       evaluation = adapter.capabilities.evaluate(**requirements)
+      return unsupported_capability_response(evaluation) unless evaluation.supported?
+      return unless representations
+
+      evaluation = adapter.capabilities.evaluate_any(
+        dimension: :usage_settlement_representations, values: representations
+      )
       return if evaluation.supported?
 
+      unsupported_capability_response(evaluation)
+    end
+
+    def unsupported_capability_response(evaluation)
       AdapterResponse.new(
         status: normalized_unsupported_status(evaluation.reason),
         result: { "reason" => evaluation.reason, "explanation" => evaluation.explanation,
@@ -139,6 +152,8 @@ module RecordingStudioBilling
           operations: "subscription_change",
           subscription_change_kinds: request["change_kind"]
         }.compact
+      when "usage_settlement"
+        { operations: "collect_usage" }
       else
         {}
       end
@@ -149,6 +164,9 @@ module RecordingStudioBilling
       FinancialCommand.transaction do
         command.lock!
         verify_claim!(claim)
+        reconciliation_state = normalized.fetch(:reconciliation_state)
+        reconciliation_state = "reconciled" if command.reconciliation_state == "processing" &&
+                                               normalized.fetch(:command_state) == "succeeded"
         attempt = claim.attempt.reload
         attempt.update!(
           state: normalized.fetch(:attempt_state),
@@ -163,7 +181,7 @@ module RecordingStudioBilling
           provider_reference: normalized.fetch(:provider_reference),
           normalized_result: normalized.fetch(:result),
           safe_error_details: normalized.fetch(:error_details),
-          reconciliation_state: normalized.fetch(:reconciliation_state),
+          reconciliation_state:,
           claim_token: nil, claimed_at: nil, lease_expires_at: nil
         )
         create_provider_reference!(normalized.fetch(:provider_reference)) if persist_provider_reference?(normalized)
@@ -254,7 +272,8 @@ module RecordingStudioBilling
       status = response.status
       uncertain = response.uncertain_outcome || %w[pending unknown].include?(status)
       successful = %w[success duplicate].include?(status)
-      requires_reconciliation = uncertain || status == "requires_review"
+      retryable_usage_settlement = command.command_type == "usage_settlement" && !successful
+      requires_reconciliation = uncertain || status == "requires_review" || retryable_usage_settlement
       command_state = if requires_reconciliation
                         "requires_reconciliation"
                       elsif successful

@@ -10,18 +10,18 @@ module RecordingStudioBilling
     end
 
     def call
-        terminal_outcome = nil
-        result = SubscriptionChangeIntent.transaction do
+      terminal_outcome = nil
+      result = SubscriptionChangeIntent.transaction do
         intent = SubscriptionChangeIntent.joins(:subscription).where(recording_studio_billing_subscriptions: {
                                                                        root_recording_id: RecordingStudio.root_recording_or_self(root_recording_input).id
                                                                      }).lock.find(intent_id)
         return intent if intent.state == "applied"
 
         record_provider_outcome!(intent)
-          if %w[failed requires_review].include?(intent.state)
-            terminal_outcome = intent.state
-            next intent
-          end
+        if %w[failed requires_review].include?(intent.state)
+          terminal_outcome = intent.state
+          next intent
+        end
 
         raise ArgumentError, "subscription change is not ready" unless %w[pending_provider
                                                                           scheduled].include?(intent.state)
@@ -82,8 +82,8 @@ module RecordingStudioBilling
     def resume!(intent)
       return if intent.subscription.state == "active"
 
-      SubscriptionLifecycle.resume(subscription: intent.subscription,
-                                   root_recording: intent.subscription.root_recording)
+      SubscriptionLifecycle.resume_from_change(subscription: intent.subscription,
+                                               root_recording: intent.subscription.root_recording)
       snapshots = intent.frozen_terms.fetch("current_items", {})
       intent.subscription.items.where(state: "cancelled").lock.find_each do |item|
         snapshot = snapshots.fetch(item.line_key)

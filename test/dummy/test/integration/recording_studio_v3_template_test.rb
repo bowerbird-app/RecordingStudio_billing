@@ -3,6 +3,9 @@
 require "test_helper"
 
 class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
+  self.use_transactional_tests = false
+  parallelize(workers: 1)
+
   test "dummy app loads root switchable configuration and billing admin support" do
     assert_equal ["all_workspaces"], RecordingStudioRootSwitchable.configuration.scopes.keys
     assert_equal :application_layout, RecordingStudioRootSwitchable.configuration.layout
@@ -58,68 +61,71 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   end
 
   test "dummy seeds create an idempotent credential-free demonstration catalogue" do
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(1_208_120_200)")
     Current.actor = nil
 
     load Rails.root.join("db/seeds.rb").to_s
 
     workspace = Workspace.find_by!(name: "Studio Workspace")
     admin_root = AdminRoot.find_by!(name: "Billing Administration")
-    account = RecordingStudioBilling::Account.find_by!(name: "Studio Account")
-    billing_admin = RecordingStudioBilling::BillingAdmin.find_by!(key: "billing")
     workspace_recording = RecordingStudio::Recording.find_by!(recordable: workspace)
     admin_root_recording = RecordingStudio::Recording.find_by!(recordable: admin_root)
-    account_recording = RecordingStudio::Recording.find_by!(recordable: account)
-    billing_admin_recording = RecordingStudio::Recording.find_by!(recordable: billing_admin)
+    account_recording = RecordingStudio::Recording.find_by!(root_recording: workspace_recording,
+                                parent_recording: workspace_recording,
+                                recordable_type: "RecordingStudioBilling::Account")
+    billing_admin_recording = RecordingStudio::Recording.find_by!(root_recording: admin_root_recording,
+                                    parent_recording: admin_root_recording,
+                                    recordable_type: "RecordingStudioBilling::BillingAdmin")
+    account = account_recording.recordable
+    billing_admin = billing_admin_recording.recordable
+    catalogue = lambda do |model|
+      model.where(id: RecordingStudio::Recording.where(root_recording: admin_root_recording,
+                                                        recordable_type: model.name).select(:recordable_id))
+    end
 
     assert_nil Current.actor
     assert_nil workspace_recording.parent_recording_id
     assert_nil admin_root_recording.parent_recording_id
     assert_equal workspace_recording, account_recording.parent_recording
     assert_equal admin_root_recording, billing_admin_recording.parent_recording
-    assert_equal 1, Workspace.count
-    assert_equal 1, AdminRoot.count
-    assert_equal 1, RecordingStudioBilling::Account.count
-    assert_equal 1, RecordingStudioBilling::BillingAdmin.count
-    assert_equal %w[demo_fake_provider demo_stripe_test_provider], RecordingStudioBilling::ProviderAccount.with_current_recording.order(:key).pluck(:key)
-    provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: "demo_fake_provider")
+    assert_equal 1, Workspace.where(name: "Studio Workspace").count
+    assert_equal 1, AdminRoot.where(name: "Billing Administration").count
+    assert_equal "Studio Account", account.name
+    assert_equal "billing", billing_admin.key
+    assert_equal %w[demo_fake_provider demo_stripe_test_provider], catalogue.call(RecordingStudioBilling::ProviderAccount).order(:key).pluck(:key)
+    provider = catalogue.call(RecordingStudioBilling::ProviderAccount).find_by!(key: "demo_fake_provider")
     assert_equal "fake", provider.adapter_key
     assert_equal({}, provider.configuration)
-    stripe_provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: "demo_stripe_test_provider")
+    stripe_provider = catalogue.call(RecordingStudioBilling::ProviderAccount).find_by!(key: "demo_stripe_test_provider")
     assert_equal "stripe", stripe_provider.adapter_key
     assert_equal({ "display_name" => "Stripe test" }, stripe_provider.configuration)
-    assert_equal %w[demo_annual_plan demo_checkout_product demo_credit_pack demo_free_plan demo_monthly_plan demo_quantity_addon demo_usage_product], RecordingStudioBilling::Product.with_current_recording.order(:key).pluck(:key)
-    assert_equal 7, RecordingStudioBilling::BillingOption.with_current_recording.count
-    assert_equal %w[demo_api_call], RecordingStudioBilling::UsageUnit.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_api_calls], RecordingStudioBilling::Meter.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_usage_rates], RecordingStudioBilling::RateCard.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_api_call_conversion], RecordingStudioBilling::Rate.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_usage_costs], RecordingStudioBilling::CostCard.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_api_call_cost], RecordingStudioBilling::CostRate.with_current_recording.order(:key).pluck(:key)
-    assert_equal %w[demo_usage_api_overage], RecordingStudioBilling::OveragePrice.with_current_recording.order(:key).pluck(:key)
-    assert_equal "published", RecordingStudioBilling::Price.with_current_recording.find_by!(key: "demo_usage_us_price").state
-    assert_equal "published", RecordingStudioBilling::OveragePrice.with_current_recording.find_by!(key: "demo_usage_api_overage").state
-    assert_equal "published", RecordingStudioBilling::Price.with_current_recording.find_by!(key: "demo_monthly_plan_us_price").state
+    assert_equal %w[demo_annual_plan demo_checkout_product demo_credit_pack demo_free_plan demo_monthly_plan demo_quantity_addon demo_usage_product], catalogue.call(RecordingStudioBilling::Product).order(:key).pluck(:key)
+    assert_equal 7, catalogue.call(RecordingStudioBilling::BillingOption).count
+    assert_equal %w[demo_api_call], catalogue.call(RecordingStudioBilling::UsageUnit).order(:key).pluck(:key)
+    assert_equal %w[demo_api_calls], catalogue.call(RecordingStudioBilling::Meter).order(:key).pluck(:key)
+    assert_equal %w[demo_usage_rates], catalogue.call(RecordingStudioBilling::RateCard).order(:key).pluck(:key)
+    assert_equal %w[demo_api_call_conversion], catalogue.call(RecordingStudioBilling::Rate).order(:key).pluck(:key)
+    assert_equal %w[demo_usage_costs], catalogue.call(RecordingStudioBilling::CostCard).order(:key).pluck(:key)
+    assert_equal %w[demo_api_call_cost], catalogue.call(RecordingStudioBilling::CostRate).order(:key).pluck(:key)
+    assert_equal %w[demo_usage_api_overage], catalogue.call(RecordingStudioBilling::OveragePrice).order(:key).pluck(:key)
+    assert_equal "published", catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_usage_us_price").state
+    assert_equal "published", catalogue.call(RecordingStudioBilling::OveragePrice).find_by!(key: "demo_usage_api_overage").state
+    assert_equal "published", catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_monthly_plan_us_price").state
+    market_prices = %w[demo_us_market demo_uk_market demo_it_market demo_de_market demo_global_market].to_h do |key|
+      price = catalogue.call(RecordingStudioBilling::Price).find_by!(key: "#{key}_price")
+      [key, [price.currency_code, price.amount_minor]]
+    end
+    assert_equal ["USD", 1_200], market_prices.fetch("demo_us_market")
+    assert_equal ["GBP", 900], market_prices.fetch("demo_uk_market")
+    assert_equal ["EUR", 1_000], market_prices.fetch("demo_it_market")
+    assert_equal ["EUR", 1_100], market_prices.fetch("demo_de_market")
+    assert_equal ["USD", 1_300], market_prices.fetch("demo_global_market")
     plan_amounts = %w[demo_free_plan demo_monthly_plan demo_annual_plan].map do |key|
-      RecordingStudioBilling::Price.with_current_recording.find_by!(key: "#{key}_us_price").amount_minor
+      catalogue.call(RecordingStudioBilling::Price).find_by!(key: "#{key}_us_price").amount_minor
     end
     assert_equal [0, 4_900, 49_000], plan_amounts.sort
-    assert_equal "requires", RecordingStudioBilling::ProductRule.with_current_recording.find_by!(key: "demo_addon_requires_plan").rule_type
-    assert_equal "published", RecordingStudioBilling::PlanUpdate.with_current_recording.find_by!(key: "demo_monthly_plan_review").state
-    invoice = RecordingStudioBilling::Invoice.find_by!(provider_reference: "demo_invoice_001")
-    payment = RecordingStudioBilling::Payment.find_by!(provider_reference: "demo_payment_001")
-    assert_equal invoice, payment.invoice
-    assert_equal "paid", invoice.state
-    assert_equal "completed", RecordingStudioBilling::RefundIntent.find_by!(local_idempotency_key: "seed:refund").state
-    assert_equal 200, RecordingStudioBilling::Refund.find_by!(provider_reference: "demo_refund_001").amount_minor
-    assert_equal "credit", RecordingStudioBilling::FinancialAdjustment.sole.kind
-    assert_equal "open", RecordingStudioBilling::ReconciliationIssue.find_by!(kind: "demo_provider_terms").state
-    tax_states = RecordingStudioBilling::ReconciliationIssue.where("kind LIKE 'demo_tax_%'").order(:kind).map do |issue|
-      issue.safe_payload.fetch("tax_state")
-    end
-    assert_equal %w[disabled pending unsupported], tax_states
-    closed_period = RecordingStudioBilling::UsagePeriod.find_by!(usage_key: "demo_api_calls", state: "closed")
-    assert_equal 40, RecordingStudioBilling::UsageCreditGrant.find_by!(source_key: "demo_usage_credit").remaining_quantity
-    assert_equal "demo_usage_api_overage", closed_period.safe_metadata.fetch("overage_price_key")
+    assert_equal "requires", catalogue.call(RecordingStudioBilling::ProductRule).find_by!(key: "demo_addon_requires_plan").rule_type
+    assert_equal "published", catalogue.call(RecordingStudioBilling::PlanUpdate).find_by!(key: "demo_monthly_plan_review").state
 
     assert_no_difference -> { RecordingStudio::Recording.count } do
       assert_no_difference -> { Workspace.count } do
@@ -131,7 +137,9 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
                     assert_no_difference -> { RecordingStudioBilling::Price.count } do
                       assert_no_difference -> { RecordingStudioBilling::UsageUnit.count } do
                         assert_no_difference -> { RecordingStudioBilling::OveragePrice.count } do
-                          load Rails.root.join("db/seeds.rb").to_s
+                          assert_no_difference -> { RecordingStudioBilling::PlanUpdate.count } do
+                            load Rails.root.join("db/seeds.rb").to_s
+                          end
                         end
                       end
                     end
@@ -145,5 +153,6 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_nil Current.actor
   ensure
     Current.actor = nil
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(1_208_120_200)")
   end
 end

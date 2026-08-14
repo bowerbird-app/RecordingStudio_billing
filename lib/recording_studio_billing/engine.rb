@@ -91,6 +91,12 @@ module RecordingStudioBilling
       end
     end
 
+    initializer "recording_studio_billing.assets" do |app|
+      next unless app.config.respond_to?(:assets)
+
+      app.config.assets.precompile += %w[recording_studio_billing/stripe_checkout.js]
+    end
+
     initializer "recording_studio_billing.register_capabilities", before: "recording_studio.load_config" do
       RecordingStudioBilling.register_capabilities!
     end
@@ -101,7 +107,8 @@ module RecordingStudioBilling
       [
         RecordingStudioBilling::BillingCommercialSection,
         RecordingStudioBilling::BillingFinancialSection,
-        RecordingStudioBilling::BillingOperationsSection
+        RecordingStudioBilling::BillingOperationsSection,
+        RecordingStudioBilling::BillingAccountOperationsSection
       ].each { |section| RecordingStudioAdmin.register_section(section) }
 
       [

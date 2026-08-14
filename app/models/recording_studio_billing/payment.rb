@@ -16,7 +16,8 @@ module RecordingStudioBilling
     private
 
     def safe_snapshot
-      SafeFinancialPayload.validate!(self[:safe_snapshot])
+      SafeFinancialPayload.validate!(self[:safe_snapshot],
+                                     allow_authoritative_totals: financial_command&.command_type == "checkout")
     rescue SafeFinancialPayload::UnsafeValue => e
       errors.add(:safe_snapshot, e.message)
     end

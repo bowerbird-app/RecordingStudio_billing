@@ -16,16 +16,18 @@ module RecordingStudioBilling
 
       @outcome = outcome
       @capabilities = capabilities || ProviderCapabilities.new(
-        operations: %w[charge checkout subscription subscription_change refund adjustment tax],
+        operations: %w[charge checkout subscription subscription_change refund adjustment tax collect_usage],
         currencies: %w[EUR GBP USD], markets: %w[CA GB US],
         collection_methods: %w[automatic manual], checkout_modes: %w[payment setup subscription],
         tax_modes: %w[external provider], quantities: %w[fixed adjustable],
         composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit],
-        subscription_change_kinds: %w[plan interval addon quantity cancellation resumption]
+        subscription_change_kinds: %w[plan interval addon quantity cancellation resumption],
+        usage_settlement_representations: %w[invoice_line]
       )
       @calls = 0
       @idempotency_keys = []
       @transaction_open_during_calls = []
+      @provider_effects = {}
       @mutex = Mutex.new
     end
 
@@ -41,9 +43,17 @@ module RecordingStudioBilling
         @transaction_open_during_calls << ActiveRecord::Base.connection.transaction_open?
       end
       raise ArgumentError, "adapter received a noncanonical request" unless request == command.canonical_request
-      raise TimeoutAfterPossibleSuccess, "provider outcome is uncertain" if outcome == :timeout_after_possible_success
 
-      response_for(outcome)
+      return duplicate_response_for(idempotency_key) if @provider_effects.key?(idempotency_key)
+
+      if outcome == :timeout_after_possible_success
+        @provider_effects[idempotency_key] = "fake-operation"
+        raise TimeoutAfterPossibleSuccess, "provider outcome is uncertain"
+      end
+
+      response = response_for(outcome)
+      @provider_effects[idempotency_key] = response.provider_reference if %w[success duplicate].include?(response.status)
+      response
     end
 
     def provider_reference_type(command:, provider_reference:)
@@ -67,6 +77,10 @@ module RecordingStudioBilling
       else
         response(value.to_s)
       end
+    end
+
+    def duplicate_response_for(idempotency_key)
+      response("duplicate", provider_reference: @provider_effects.fetch(idempotency_key), outcome_name: "duplicate")
     end
 
     def response(status, provider_reference: nil, error: {}, outcome_name: status)

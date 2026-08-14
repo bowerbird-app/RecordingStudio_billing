@@ -29,6 +29,9 @@ module RecordingStudioBilling
       raise ArgumentError, "checkout items must be present" if items.empty?
 
       normalized_items = items.each_value.map { |item| normalize_item(item) }
+      option_ids = normalized_items.pluck("billing_option_recording_id")
+      raise ArgumentError, "checkout options must be unique" unless option_ids.uniq.size == option_ids.size
+
       request_key = params.require(:checkout_request_key).to_s
       raise ArgumentError, "checkout request key is invalid" unless request_key.match?(/\A[0-9a-f]{32}\z/)
 

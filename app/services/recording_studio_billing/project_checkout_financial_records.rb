@@ -10,17 +10,24 @@ module RecordingStudioBilling
     end
 
     def call
+      rejection = nil
       CheckoutIntent.transaction do
         intent = CheckoutIntent.for_root(root_recording_input).lock.find(intent_id)
         command = intent.financial_command
         raise ArgumentError, "checkout has not completed" unless command&.state == "succeeded"
 
         result = command.normalized_result
-        authoritative = authoritative_result(result, command:)
-        unless reconciles?(intent, authoritative)
-          create_reconciliation!(command, intent, result)
-          intent.update!(state: "requires_review") unless intent.state == "requires_review"
-          raise ArgumentError, "checkout provider financial result requires reconciliation"
+        authoritative = begin
+          authoritative_result(result, command:)
+        rescue ArgumentError
+          reject_projection!(command, intent)
+          rejection = "checkout provider financial result requires reconciliation"
+          next
+        end
+        unless native_checkout_authoritative?(intent, command, authoritative) && reconciles?(intent, authoritative)
+          reject_projection!(command, intent)
+          rejection = "checkout provider financial result requires reconciliation"
+          next
         end
 
         persist_native_tax!(intent, command, authoritative)
@@ -43,11 +50,17 @@ module RecordingStudioBilling
         payment.allocations.find_or_create_by!(invoice:) { |allocation| allocation.amount_minor = payment.amount_minor }
         payment
       end
+      raise ArgumentError, rejection if rejection
     end
 
     private
 
     attr_reader :checkout_intent_input, :root_recording_input
+
+    def reject_projection!(command, intent)
+      create_reconciliation!(command, intent)
+      intent.update!(state: "requires_review") unless intent.state == "requires_review"
+    end
 
     def intent_id = checkout_intent_input.respond_to?(:id) ? checkout_intent_input.id : checkout_intent_input
 
@@ -85,6 +98,23 @@ module RecordingStudioBilling
         command.canonical_request.dig("request", "tax", "mode") == "provider_native"
     end
 
+    def native_checkout_authoritative?(intent, command, result)
+      return true unless native_tax_enabled?(result, command:)
+
+      command.normalized_result["authority"] == "verified_webhook" && result["payment_state"] == "paid" &&
+        purchased_provider_manifests?(intent, command)
+    end
+
+    def purchased_provider_manifests?(intent, command)
+      digests = manifest_digests(intent)
+      CommercialManifest.where(
+        root_recording_id: command.provider_account_recording.root_recording_id,
+        manifest_digest: digests
+      ).where.not(used_at: nil)
+                        .where("recording_snapshots @> ?", [{ "recording_id" => command.provider_account_recording_id }].to_json)
+                        .count == digests.size
+    end
+
     def reconciles?(intent, result)
       expected_subtotal = intent.items.sum do |item|
         item.commercial_manifest.dig("canonical_data", "price", "amount_minor") * item.quantity
@@ -113,14 +143,14 @@ module RecordingStudioBilling
       end
     end
 
-    def create_reconciliation!(command, intent, result)
+    def create_reconciliation!(command, intent)
       return unless defined?(ReconciliationIssue)
 
       ReconciliationIssue.find_or_create_by!(financial_command: command, authority: "checkout_financial_projection",
                                              kind: "provider_terms_mismatch") do |issue|
         issue.state = "open"
-        issue.safe_payload = { "checkout_intent_id" => intent.id, "provider_result" => result,
-                               "manifest_digests" => intent.items.map(&:manifest_digest) }
+        issue.safe_payload = { "checkout_intent_id" => intent.id,
+                               "manifest_digests" => manifest_digests(intent) }
       end
     end
 
@@ -128,7 +158,12 @@ module RecordingStudioBilling
       tax = command.canonical_request.dig("request", "tax").to_h.stringify_keys
       return unless tax["enabled"] == true && tax["mode"] == "provider_native"
 
-      manifest = CommercialManifest.find_by!(manifest_digest: intent.items.first.manifest_digest)
+      digests = manifest_digests(intent)
+      manifest = CommercialManifest.find_by!(
+        root_recording_id: command.provider_account_recording.root_recording_id,
+        manifest_digest: digests.first,
+        used_at: ..Time.current
+      )
       TaxCalculation.find_or_create_by!(financial_command: command, revision_number: 1) do |calculation|
         calculation.root_recording = intent.root_recording
         calculation.account_recording = intent.account_recording
@@ -136,6 +171,7 @@ module RecordingStudioBilling
         calculation.calculator_key = tax.fetch("calculator_key")
         calculation.calculator_mode = "provider_calculation"
         calculation.manifest_digest = manifest.manifest_digest
+        calculation.manifest_digests = digests
         calculation.transaction_type = "sale"
         calculation.operation_reference = command.operation_id
         calculation.request_fingerprint = command.request_fingerprint
@@ -152,6 +188,10 @@ module RecordingStudioBilling
         calculation.calculated_at = result.fetch("calculated_at")
         calculation.safe_metadata = command.attempts.order(:attempt_number).last.safe_metadata
       end
+    end
+
+    def manifest_digests(intent)
+      intent.items.map(&:manifest_digest).uniq.sort
     end
 
     def project_invoice!(intent, command, result)

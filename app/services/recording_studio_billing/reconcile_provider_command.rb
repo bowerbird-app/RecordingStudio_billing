@@ -8,7 +8,7 @@ module RecordingStudioBilling
       command.reload
       return command if command.state.in?(%w[failed cancelled])
       return command if command.state == "succeeded" && command.command_type != "checkout"
-      return command if command.state == "succeeded" && checkout_result_authoritative?(command)
+      return command if command.state == "succeeded" && paid_checkout_result?(command)
 
       adapter = RecordingStudioBilling.configuration.provider_registry.fetch(command.provider_adapter_key)
       unless adapter.respond_to?(:retrieve)
@@ -25,11 +25,12 @@ module RecordingStudioBilling
       record_unavailable(command, e)
     end
 
-    def self.checkout_result_authoritative?(command)
+    def self.paid_checkout_result?(command)
       result = command.normalized_result
-      %w[subtotal_minor discount_minor tax_minor total_minor currency lines].all? { |key| result.key?(key) }
+      %w[subtotal_minor discount_minor tax_minor total_minor currency lines].all? { |key| result.key?(key) } &&
+        result["payment_state"] == "paid"
     end
-    private_class_method :checkout_result_authoritative?
+    private_class_method :paid_checkout_result?
 
     def self.retrieve_response(adapter, command)
       adapter.retrieve(command: command.reload)
@@ -57,7 +58,9 @@ module RecordingStudioBilling
         remote_id = response.fetch("remote_id")
         ProviderReference.find_by!(financial_command: command, provider_adapter_key: command.provider_adapter_key,
                                    remote_type:, remote_id:)
-        return command if command.state.in?(%w[succeeded failed cancelled])
+        return command if command.state.in?(%w[failed cancelled]) ||
+                          (command.state == "succeeded" &&
+                           (command.command_type != "checkout" || paid_checkout_result?(command)))
 
         record = reconciliation_record(command, outcome:, payload: {
                                          "remote_type" => remote_type, "remote_id" => remote_id, "normalized_result" => normalized_result

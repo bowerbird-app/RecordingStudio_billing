@@ -9,7 +9,12 @@ module RecordingStudioBilling
       presenter_class = RecordingStudioBilling.configuration.billing_presenter_for(
         :invoice, RecordingStudioBilling::InvoicePresenter
       )
-      @presenter = presenter_class.new(root_recording:, invoice: @invoice)
+      @presenter = presenter_class.new(
+        root_recording:, invoice: @invoice,
+        adjustments: FinancialAdjustment.where(invoice: @invoice).includes(:financial_command),
+        refunds: Refund.joins(:payment).merge(Payment.where(invoice: @invoice)),
+        payments: @invoice.payments.includes(:financial_command)
+      )
     end
 
     def download

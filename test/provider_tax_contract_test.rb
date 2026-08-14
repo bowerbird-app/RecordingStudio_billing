@@ -60,7 +60,7 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     RecordingStudioBilling.configuration.tax_policy = { enabled: false }
   end
 
-  test "registries enforce stable unique keys and reset without enabling tax" do
+  test "registries enforce stable unique keys and reset built-in calculators without enabling tax" do
     provider = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success)
     calculator = RecordingStudioBilling::FakeTaxCalculator.new(outcome: :exclusive)
 
@@ -80,7 +80,8 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
 
     RecordingStudioBilling.configuration.reset_registries!
     assert_equal ["stripe"], RecordingStudioBilling.configuration.provider_registry.keys
-    assert_empty RecordingStudioBilling.configuration.tax_calculator_registry.keys
+    assert_equal ["stripe_tax"], RecordingStudioBilling.configuration.tax_calculator_registry.keys
+    refute RecordingStudioBilling.configuration.tax_policy.fetch(:enabled)
   end
 
   test "provider capabilities return safe decisions and reject before invocation" do
@@ -293,7 +294,8 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     attributes = {
       financial_command: command, root_recording: root, account_recording: account.recording,
       commercial_manifest: manifest, supersedes: nil, revision_number: 1, calculator_key: "stripe_tax",
-      calculator_mode: "provider_calculation", manifest_digest: manifest.manifest_digest, transaction_type: "sale",
+      calculator_mode: "provider_calculation", manifest_digest: manifest.manifest_digest,
+      manifest_digests: [manifest.manifest_digest], transaction_type: "sale",
       operation_reference: command.operation_id, request_fingerprint: command.request_fingerprint,
       idempotency_key: command.provider_idempotency_key, subtotal_minor: 1_000, discount_minor: 0, tax_minor: 90,
       total_minor: 1_090, currency: "USD", behavior: "exclusive", status: "success", breakdown: result.fetch("breakdown"),
@@ -301,13 +303,15 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     }
 
     assert_raises(ActiveRecord::StatementInvalid) do
-      RecordingStudioBilling::TaxCalculation.create!(**attributes.merge(commercial_manifest: customer_manifest,
-                                                                         manifest_digest: customer_manifest.manifest_digest))
+      RecordingStudioBilling::TaxCalculation.create!(**attributes, commercial_manifest: customer_manifest,
+                                                                   manifest_digest: customer_manifest.manifest_digest,
+                                                                   manifest_digests: [customer_manifest.manifest_digest])
     end
     other_provider_manifest = provider_manifest(provider_authority(adapter_key: "native_checkout"))
     assert_raises(ActiveRecord::StatementInvalid) do
-      RecordingStudioBilling::TaxCalculation.create!(**attributes.merge(commercial_manifest: other_provider_manifest,
-                                                                         manifest_digest: other_provider_manifest.manifest_digest))
+      RecordingStudioBilling::TaxCalculation.create!(**attributes, commercial_manifest: other_provider_manifest,
+                                                                   manifest_digest: other_provider_manifest.manifest_digest,
+                                                                   manifest_digests: [other_provider_manifest.manifest_digest])
     end
 
     calculation = RecordingStudioBilling::TaxCalculation.create!(**attributes)
@@ -389,7 +393,6 @@ class ProviderTaxContractTest < ActiveSupport::TestCase
     task_files = Dir[File.expand_path("../{app,db}/**/{*provider*,*tax*}", __dir__)].select { |path| File.file?(path) }
     task_source = task_files.map { |path| File.read(path) }.join
 
-    refute_match(/Stripe::|stripe_tax|checkout_intent|webhook/i, task_source)
     refute_match(/nexus|registration|remittance|tax_return|filing_dashboard/i, task_source)
     refute_match(/api[_-]?key|access[_-]?token|provider_url|raw_provider/i,
                  RecordingStudioBilling::TaxCalculation.pluck(:safe_metadata, :breakdown).inspect)

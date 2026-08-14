@@ -11,9 +11,10 @@ module RecordingStudioBilling
     has_many :corrections, class_name: "RecordingStudioBilling::TaxCalculation", foreign_key: :supersedes_id,
                            dependent: :restrict_with_error, inverse_of: :supersedes
 
-    validates :calculator_key, :calculator_mode, :manifest_digest, :transaction_type, :operation_reference,
+    validates :calculator_key, :calculator_mode, :manifest_digest, :manifest_digests, :transaction_type, :operation_reference,
               :request_fingerprint, :idempotency_key, :currency, :behavior, :status, :calculated_at, presence: true
     validates :request_fingerprint, :manifest_digest, format: { with: /\A\h{64}\z/ }
+    validate :manifest_set
     validates :currency, format: { with: /\A[A-Z]{3}\z/ }
     validates :calculator_mode, inclusion: { in: TaxCalculatorCapabilities::MODES }
     validates :subtotal_minor, :discount_minor, :tax_minor, :total_minor,
@@ -34,6 +35,14 @@ module RecordingStudioBilling
       SafeFinancialPayload.normalize_reference(calculator_reference, label: "calculator reference")
     rescue SafeFinancialPayload::UnsafeValue => e
       errors.add(:base, e.message)
+    end
+
+    def manifest_set
+      valid = manifest_digests.is_a?(Array) && manifest_digests.any? &&
+              manifest_digests == manifest_digests.map(&:to_s).uniq.sort &&
+              manifest_digests.all? { |digest| digest.match?(/\A\h{64}\z/) } &&
+              manifest_digests.first == manifest_digest
+      errors.add(:manifest_digests, "must be a sorted set anchored by manifest_digest") unless valid
     end
   end
 end

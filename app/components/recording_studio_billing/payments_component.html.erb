@@ -1,11 +1,14 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("payments_title", "Payments"), variant: :h1) %>
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :payments) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::List::Component.new do %>
-  <% @presenter.payments.each do |payment| %><li><%= payment.amount_minor %> <%= payment.currency_code %>: <%= payment.state %></li><% end %>
+  <% @presenter.payments.each do |payment| %><li><%= payment.amount_minor %> <%= payment.currency_code %>: <%= @presenter.payment_state(payment).to_s.humanize %><% if @presenter.payment_details(payment).present? %><br>Source, reason and tax: <%= @presenter.payment_details(payment) %><% end %></li><% end %>
 <% end %>
 <% if @presenter.refunds.present? %>
   <%= render FlatPack::List::Component.new do %>
-    <% @presenter.refunds.each do |refund| %><li>Refund: <%= refund.amount_minor %> <%= refund.currency_code %></li><% end %>
+    <% @presenter.refunds.each do |refund| %><li>Refund: <%= refund.amount_minor %> <%= refund.currency_code %> (<%= @presenter.refund_status(refund).humanize %>)</li><% end %>
   <% end %>
 <% end %>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:payments).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

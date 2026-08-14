@@ -5,6 +5,7 @@ module RecordingStudioBilling
     DIMENSIONS = %i[
       operations currencies markets collection_methods checkout_modes tax_modes
       quantities composition refunds adjustments subscription_change_kinds
+      usage_settlement_representations
     ].freeze
 
     Evaluation = Data.define(:supported, :reason, :explanation, :constraints) do
@@ -53,6 +54,21 @@ module RecordingStudioBilling
 
     def to_h
       @values.merge(constraints:).transform_values { |value| value.is_a?(Array) ? value.dup : value }
+    end
+
+    def evaluate_any(dimension:, values:)
+      dimension = dimension.to_sym
+      raise ArgumentError, "unknown capability dimension: #{dimension}" unless DIMENSIONS.include?(dimension)
+
+      supported = normalize(values).find { |value| @values.fetch(dimension).include?(value) }
+      return Evaluation.new(supported: true, reason: "supported", explanation: "The provider supports the requested operation.", constraints:) if supported
+
+      Evaluation.new(
+        supported: false,
+        reason: "unsupported_#{dimension.to_s.singularize}",
+        explanation: "The provider does not support a safe #{dimension.to_s.tr('_', ' ')}.",
+        constraints:
+      )
     end
 
     private
