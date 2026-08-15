@@ -103,7 +103,9 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     root, _account, rated_usage, = rated_usage_authority
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(
       outcome: :success,
-      capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["collect_usage"])
+      capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+        operations: ["collect_usage"], currencies: ["USD"], markets: ["US"], collection_methods: ["automatic"]
+      )
     )
     RecordingStudioBilling.register_provider(:test, adapter)
     close_period_for(rated_usage)

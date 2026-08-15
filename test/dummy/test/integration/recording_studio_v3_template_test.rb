@@ -16,20 +16,28 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   end
 
   test "billing admin definitions are registered at site scope" do
-    keys = %w[billing_commercial billing_financial billing_operations]
+    section_keys = %w[billing_account_operations billing_commercial billing_financial billing_operations]
+    screen_section_keys = %w[billing_commercial billing_financial billing_operations]
     operation_keys = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s)
+    account_operation_keys = %w[billing_feature_overrides]
+    site_operation_keys = operation_keys - account_operation_keys
 
-    assert_equal keys, RecordingStudioAdmin.sections.keys.grep(/^billing_/).sort
-    assert_equal (keys + operation_keys).sort, RecordingStudioAdmin.screens.keys.grep(/^billing_/).sort
-    assert_equal (keys + operation_keys).sort, RecordingStudioAdmin.resources.keys.grep(/^billing_/).sort
+    assert_equal section_keys, RecordingStudioAdmin.sections.keys.grep(/^billing_/).sort
+    assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.screens.keys.grep(/^billing_/).sort
+    assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.resources.keys.grep(/^billing_/).sort
 
-    keys.each do |key|
+    assert_equal :root, RecordingStudioAdmin.section_for("billing_account_operations").blast_radius
+    screen_section_keys.each do |key|
       assert_equal :site, RecordingStudioAdmin.section_for(key).blast_radius
     end
 
-    (keys + operation_keys).each do |key|
+    (screen_section_keys + site_operation_keys).each do |key|
       assert_equal :site, RecordingStudioAdmin.screen_for(key).blast_radius
       assert_equal :site, RecordingStudioAdmin.resource_for(key).blast_radius
+    end
+    account_operation_keys.each do |key|
+      assert_equal :root, RecordingStudioAdmin.screen_for(key).blast_radius
+      assert_equal :root, RecordingStudioAdmin.resource_for(key).blast_radius
     end
 
     RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |key, definition|

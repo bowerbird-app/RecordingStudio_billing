@@ -47,7 +47,9 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   test "admin operations reject an actor without Recording Studio Admin access" do
     price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: "demo_monthly_plan_us_price")
 
-    post "/billing/admin/operations/publish_price/#{price.id}"
+    with_billing_access(false) do
+      post "/billing/admin/operations/publish_price/#{price.id}"
+    end
 
     assert_response :forbidden
   end
@@ -171,7 +173,14 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   end
 
   def with_billing_access(allowed)
-    RecordingStudioAccessible.stub(:authorized?, allowed) { yield }
+    singleton_class = RecordingStudioAccessible.singleton_class
+    original = singleton_class.instance_method(:authorized?)
+    singleton_class.define_method(:authorized?) do |*arguments, **keywords|
+      allowed.respond_to?(:call) ? allowed.call(*arguments, **keywords) : allowed
+    end
+    yield
+  ensure
+    singleton_class.define_method(:authorized?, original) if original
   end
 
   def acquire_database_lock!

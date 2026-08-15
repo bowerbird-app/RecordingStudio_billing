@@ -234,8 +234,10 @@ module RecordingStudioBilling
       features = Feature.with_current_recording.where(
         product_recording_id: products.map { |item| item.recording.id }
       ).where.not(state: "retired").order(:id).to_a
+      product_recording_ids = products.map { |item| item.recording.id }
       rules = ProductRule.with_current_recording.where(
-        product_recording_id: products.map { |item| item.recording.id }
+        "product_recording_id IN (:product_recording_ids) OR target_product_recording_id IN (:product_recording_ids)",
+        product_recording_ids:
       ).where.not(state: "retired").order(:id).to_a
       target_products = records_for(Product, rules.filter_map(&:target_product_recording_id))
       providers = records_for(
