@@ -16,7 +16,7 @@ module RecordingStudioBilling
     private
 
     def billing_host_layout
-      return "application" unless request&.format&.html?
+      return "application" if non_html_format?
 
       if host_layout?("recording_studio/default_layout")
         "recording_studio/default_layout"
@@ -25,6 +25,15 @@ module RecordingStudioBilling
       else
         "application"
       end
+    end
+
+    def non_html_format?
+      format = request&.format
+      return false if format.nil?
+      return false if format.html?
+      return false if format.symbol == :all
+
+      true
     end
 
     def host_layout?(name)

@@ -25,7 +25,7 @@ class RecordingStudioBillingTest < Minitest::Test
     [sidebar, default_layout].each do |layout|
       assert_includes layout, '<html data-theme="rounded"'
       assert_includes layout, "FlatPack::SidebarLayout::Component"
-      assert_includes layout, 'side: :left'
+      assert_includes layout, "side: :left"
       assert_includes layout, 'stylesheet_link_tag "flat_pack/application"'
       assert_match(/data-billing-layout="(flat-pack-sidebar|recording-studio-default)"/, layout)
     end
