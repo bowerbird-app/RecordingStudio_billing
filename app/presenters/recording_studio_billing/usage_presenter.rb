@@ -25,9 +25,7 @@ module RecordingStudioBilling
           window: "#{period.starts_at.to_fs(:long)} - #{period.ends_at.to_fs(:long)}",
           state: money_state(period.state),
           included: period.usage_allowance_policies.map do |policy|
-            copy("usage_included", "%{used} of %{limit} included this period")
-              .sub("%{used}", policy.consumed_quantity.to_s)
-              .sub("%{limit}", policy.limit_quantity.to_s)
+            "#{policy.consumed_quantity} of #{policy.limit_quantity} included this period"
           end.join("; ")
         }
       end

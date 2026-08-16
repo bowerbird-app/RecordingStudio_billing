@@ -30,10 +30,10 @@ module RecordingStudioBilling
 
     def financial_rows
       Array(payments).map do |payment|
-        "#{copy("payments_title", "Payments")} #{display_amount(payment.amount_minor, payment.currency_code)}: #{money_state(payment.financial_command&.state || payment.state)}"
+        "#{copy('payments_title', 'Payments')} #{display_amount(payment.amount_minor, payment.currency_code)}: #{money_state(payment.financial_command&.state || payment.state)}"
       end +
         Array(refunds).map do |refund|
-          "#{copy("refund_title", "Refund")} #{display_amount(refund.amount_minor, refund.currency_code)}: #{money_state(refund.financial_command.state)}"
+          "#{copy('refund_title', 'Refund')} #{display_amount(refund.amount_minor, refund.currency_code)}: #{money_state(refund.financial_command.state)}"
         end +
         Array(adjustments).map do |adjustment|
           "#{money_state(adjustment.kind)} #{display_amount(adjustment.amount_minor, adjustment.currency_code)}: #{money_state(adjustment.financial_command.state)}"

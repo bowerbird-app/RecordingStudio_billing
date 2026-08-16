@@ -53,7 +53,7 @@ module RecordingStudioBilling
       nested.is_a?(Hash) ? nested : snapshot
     end
 
-    def offer_label(kind:, interval: nil, recurrence: nil, name: nil, amount_minor: nil)
+    def offer_label(kind:, interval: nil, name: nil, amount_minor: nil, **)
       return name if name.present?
 
       case kind.to_s

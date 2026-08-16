@@ -19,7 +19,7 @@ module RecordingStudioBilling
     end
 
     def refund_label(refund)
-      "#{copy("refund_title", "Refund")}: #{display_amount(refund.amount_minor, refund.currency_code)}"
+      "#{copy('refund_title', 'Refund')}: #{display_amount(refund.amount_minor, refund.currency_code)}"
     end
   end
 end

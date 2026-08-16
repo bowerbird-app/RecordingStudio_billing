@@ -13,6 +13,8 @@ The billing snapshot SQL lives at `db/schema/install_recording_studio_billing.sq
 
 Webhook tables come from `recording_studio_webhooks`. Install that gem first, or at least apply its webhook migrations before billing if your host keeps a foreign key. This engine stores webhook event ids without a billing-side foreign key.
 
+Customer billing also needs RecordingStudio Accessible tables. After Recording Studio v3 removed core access tables, hosts install Accessible migrations so `grant_access` can persist workspace roles.
+
 ## After copying migrations
 
 1. `bin/rails db:migrate`
@@ -25,4 +27,4 @@ Do not edit copied engine migrations in the host. Schema changes belong in this 
 
 `test/dummy` uses the same install migration. Reset it with `bin/rails db:drop db:create db:migrate` from `test/dummy`, then commit `test/dummy/db/structure.sql`.
 
-The dummy host uses FlatPack. Signed-in dummy pages use the gem-template left sidebar layout. Billing engine pages use `app/views/layouts/recording_studio/default_layout.html.erb`. Dummy seeds rebuild the V1 demonstration catalogue and grant the seeded admin Accessible `edit` on Studio Workspace; reset the dummy database if published records were created by an older seed.
+The dummy host uses FlatPack. Signed-in dummy pages use the gem-template left sidebar layout. Billing engine pages use `app/views/layouts/recording_studio/default_layout.html.erb`. Dummy seeds rebuild the V1 demonstration catalogue and grant the seeded admin Accessible `edit` on Studio Workspace; reset the dummy database if published records were created by an older seed. Customer billing needs the Accessible `recording_studio_accesses` table, which dummy restores after Recording Studio v3 removed core access tables.

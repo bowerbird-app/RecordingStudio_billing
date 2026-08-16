@@ -259,9 +259,10 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing/billing/addons", params: { root_recording_id: root.id }
 
     assert_response :success
-    assert_includes response.body, "One off credit pack"
+    assert_includes response.body, "Credit pack"
     assert_includes response.body, "2 x 1000 EUR"
-    assert_includes response.body, "Quantity: 2"
+    assert_includes response.body, "one-time"
+    refute_includes response.body, "One off credit pack"
     addons_list = response.body[%r{<ul class="space-y-3".*?</ul>}m]
     assert addons_list.present?
     refute_includes addons_list, other_root.id

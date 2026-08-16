@@ -1208,6 +1208,19 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: recording_studio_accesses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_accesses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    actor_type character varying NOT NULL,
+    actor_id uuid NOT NULL,
+    role integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: recording_studio_billing_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2868,6 +2881,14 @@ ALTER TABLE ONLY public.admin_roots
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: recording_studio_accesses recording_studio_accesses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_accesses
+    ADD CONSTRAINT recording_studio_accesses_pkey PRIMARY KEY (id);
 
 
 --
@@ -4814,6 +4835,20 @@ CREATE INDEX idx_rs_root_switchable_root_recording ON public.recording_studio_ro
 --
 
 CREATE UNIQUE INDEX index_admin_roots_on_name ON public.admin_roots USING btree (name);
+
+
+--
+-- Name: index_recording_studio_accesses_on_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_recording_studio_accesses_on_actor ON public.recording_studio_accesses USING btree (actor_type, actor_id);
+
+
+--
+-- Name: index_recording_studio_accesses_on_actor_and_role; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_recording_studio_accesses_on_actor_and_role ON public.recording_studio_accesses USING btree (actor_type, actor_id, role);
 
 
 --
@@ -6912,6 +6947,8 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260817000002'),
+('20260817000001'),
 ('20260816000001'),
 ('20260813014124'),
 ('20260809999999'),

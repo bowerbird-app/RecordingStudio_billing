@@ -48,5 +48,7 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_match(/scope\)::text = 'default'/, structure)
     refute_includes structure, "('20260810000000')"
     assert_includes structure, "('20260816000001')"
+    assert_includes structure, "('20260817000001')"
+    assert_includes structure, "CREATE TABLE public.recording_studio_accesses"
   end
 end

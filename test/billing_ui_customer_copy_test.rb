@@ -1,10 +1,24 @@
 # frozen_string_literal: true
 
-require "ostruct"
 require "test_helper"
 require_relative "dummy/config/environment"
 
 class BillingUiCustomerCopyTest < Minitest::Test
+  Root = Struct.new(:id)
+  Product = Struct.new(:kind, :name)
+  Recording = Struct.new(:id, :recordable)
+  Option = Struct.new(:key, :recurrence, :interval, :lifecycle_policy, :checkout_policy, :quantity_mode,
+                      :default_quantity, :minimum_quantity, :maximum_quantity, :recording, :product_recording,
+                      keyword_init: true)
+  Version = Struct.new(:line_key, :mode, :quantity, :amount_minor, :currency_code, :interval, :commercial_snapshot,
+                       keyword_init: true)
+  Subscription = Struct.new(:identifier, :state, :currency_code, :item_versions, keyword_init: true)
+  Period = Struct.new(:usage_key, :starts_at, :ends_at, :state, :usage_allowance_policies, keyword_init: true)
+  Policy = Struct.new(:consumed_quantity, :limit_quantity, keyword_init: true)
+  Invoice = Struct.new(:id, :total_minor, :currency_code, :state, :issued_at, keyword_init: true)
+  Payment = Struct.new(:amount_minor, :currency_code, :state, :financial_command, :safe_snapshot, keyword_init: true)
+  Command = Struct.new(:state)
+
   def test_overview_uses_plan_labels_instead_of_identifiers_and_markets
     presenter = RecordingStudioBilling::OverviewPresenter.new(
       root_recording: root, subscriptions: [subscription], checkout_intents: []
@@ -36,11 +50,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
   end
 
   def test_usage_hides_raw_keys_and_internal_hashes
-    period = OpenStruct.new(
+    period = Period.new(
       usage_key: "demo_api_calls", starts_at: Time.utc(2026, 8, 1), ends_at: Time.utc(2026, 8, 31),
-      state: "open", usage_allowance_policies: [
-        OpenStruct.new(consumed_quantity: 5, limit_quantity: 10)
-      ]
+      state: "open", usage_allowance_policies: [Policy.new(consumed_quantity: 5, limit_quantity: 10)]
     )
     html = render_component(
       RecordingStudioBilling::UsageComponent,
@@ -58,14 +70,15 @@ class BillingUiCustomerCopyTest < Minitest::Test
   end
 
   def test_invoice_and_payment_copy_avoids_ids_and_snapshot_dumps
-    invoice = OpenStruct.new(
+    invoice = Invoice.new(
       id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", total_minor: 1_000, currency_code: "USD",
       state: "captured", issued_at: Time.utc(2026, 8, 16)
     )
-    payment = OpenStruct.new(amount_minor: 1_000, currency_code: "USD", state: "captured",
-                             financial_command: OpenStruct.new(state: "succeeded"))
+    payment = Payment.new(amount_minor: 1_000, currency_code: "USD", state: "captured",
+                          financial_command: Command.new("succeeded"),
+                          safe_snapshot: { "source" => "card", "tax" => { "status" => "final" } })
     payment.define_singleton_method(:[]) do |key|
-      key == :safe_snapshot ? { "source" => "card", "tax" => { "status" => "final" } } : nil
+      key == :safe_snapshot ? safe_snapshot : nil
     end
     invoices = RecordingStudioBilling::InvoicesPresenter.new(
       root_recording: root, invoices: [invoice], adjustments: [], refunds: []
@@ -83,11 +96,11 @@ class BillingUiCustomerCopyTest < Minitest::Test
   private
 
   def root
-    @root ||= OpenStruct.new(id: "root-1")
+    @root ||= Root.new("root-1")
   end
 
   def subscription
-    version = OpenStruct.new(
+    version = Version.new(
       line_key: "item-1", mode: "monthly_subscription", quantity: 1, amount_minor: 4_900,
       currency_code: "USD", interval: "month",
       commercial_snapshot: { "canonical_data" => { "product" => { "kind" => "plan" },
@@ -96,13 +109,13 @@ class BillingUiCustomerCopyTest < Minitest::Test
     versions = [version]
     versions.define_singleton_method(:where) { |**| versions }
     versions.define_singleton_method(:order) { |*| versions }
-    OpenStruct.new(identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
+    Subscription.new(identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
   end
 
   def offer_option(kind:, interval:, recurrence:)
-    product = OpenStruct.new(kind:, name: nil)
-    recording = OpenStruct.new(id: "option-recording-1", recordable: product)
-    OpenStruct.new(
+    product = Product.new(kind, nil)
+    recording = Recording.new("option-recording-1", product)
+    Option.new(
       key: "demo_secret_option_key", recurrence:, interval:, lifecycle_policy: "immediate",
       checkout_policy: "allowed", quantity_mode: "fixed", default_quantity: 1,
       minimum_quantity: 1, maximum_quantity: 1, recording:, product_recording: recording

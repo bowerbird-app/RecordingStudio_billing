@@ -377,7 +377,14 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     )
   end
 
-  def with_authorization(allowed, &)
-    RecordingStudioAccessible.stub(:authorized?, allowed, &)
+  def with_authorization(allowed)
+    singleton_class = RecordingStudioAccessible.singleton_class
+    original = singleton_class.instance_method(:authorized?)
+    singleton_class.define_method(:authorized?) do |*arguments, **keywords|
+      allowed.respond_to?(:call) ? allowed.call(*arguments, **keywords) : allowed
+    end
+    yield
+  ensure
+    singleton_class.define_method(:authorized?, original) if original
   end
 end
