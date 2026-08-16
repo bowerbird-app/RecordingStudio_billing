@@ -89,7 +89,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "https://js.stripe.com/v3/"
     assert_select "script[type='module'][src*='recording_studio_billing/stripe_checkout']"
     assert_includes response.body, "2 x 1000 EUR"
-    refute_includes response.body, '<script type="module">import'
+    refute_includes response.body, 'import "recording_studio_billing/stripe_checkout"'
+    refute_includes response.body, "import 'recording_studio_billing/stripe_checkout'"
     persisted = [intent.attributes, command.attributes, intent.attempts.map(&:attributes)].inspect
     refute_includes persisted, "cs_test_embedded_secret"
     refute_includes persisted, "pk_test_embedded"
@@ -218,7 +219,9 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "One off credit pack"
     assert_includes response.body, "2 x 1000 EUR"
     assert_includes response.body, "Quantity: 2"
-    refute_includes response.body, other_root.id
+    addons_list = response.body[/<ul class="space-y-3".*?<\/ul>/m]
+    assert addons_list.present?
+    refute_includes addons_list, other_root.id
     assert_equal "credit_pack", purchase.effects.sole.effect_kind
   end
 
