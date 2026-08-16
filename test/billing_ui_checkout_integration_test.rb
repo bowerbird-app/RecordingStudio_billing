@@ -264,9 +264,9 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "2 x 1000 EUR"
     assert_includes response.body, "one-time"
     refute_includes response.body, "One off credit pack"
-    addons_list = response.body[%r{<ul class="space-y-3".*?</ul>}m]
-    assert addons_list.present?
-    refute_includes addons_list, other_root.id
+    main = response.body[%r{<main class="p-6">.*?</main>}m]
+    assert main.present?
+    refute_includes main, other_root.id
     assert_equal "credit_pack", purchase.effects.sole.effect_kind
   end
 

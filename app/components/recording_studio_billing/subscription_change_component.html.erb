@@ -1,6 +1,16 @@
 <% if @presenter.result? %>
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_result_title", "Plan change"), variant: :h1) %>
 	<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+		<% card.header do %>
+			<div class="flex flex-wrap items-center gap-2">
+				<h3 class="text-lg font-semibold"><%= @presenter.change_kind_label(@presenter.intent.change_kind) %></h3>
+				<%= render FlatPack::Badge::Component.new(
+					text: @presenter.money_state(@presenter.intent.state),
+					style: status_badge_style(@presenter.money_state(@presenter.intent.state)),
+					size: :sm
+				) %>
+			</div>
+		<% end %>
 		<% card.body do %>
 			<%= render FlatPack::List::Component.new(divider: true) do %>
 				<% @presenter.current_terms.each do |term| %>
@@ -18,7 +28,7 @@
 		<% end %>
 	<% end %>
 	<div class="mt-4">
-		<%= render FlatPack::Alert::Component.new(title: @presenter.change_kind_label(@presenter.intent.change_kind), description: @presenter.result_notice, style: :info) %>
+		<%= render FlatPack::Alert::Component.new(description: @presenter.result_notice, style: :info) %>
 	</div>
 <% elsif @presenter.selection? %>
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_select_title", "Change plan"), variant: :h1) %>
