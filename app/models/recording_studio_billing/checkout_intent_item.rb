@@ -2,7 +2,8 @@
 
 module RecordingStudioBilling
   class CheckoutIntentItem < RecordingStudioBilling::ApplicationRecord
-    PRESENTATIONS = %w[embedded redirect payment_link invoice no_charge].freeze
+    PRESENTATIONS = RecordingStudioBilling::V1Contract::CHECKOUT_MODES
+    COLLECTION_METHODS = RecordingStudioBilling::V1Contract::COLLECTION_METHODS
 
     belongs_to :checkout_intent, inverse_of: :items
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
@@ -13,6 +14,7 @@ module RecordingStudioBilling
     validates :quantity, numericality: { only_integer: true, greater_than: 0 }
     validates :currency_code, format: { with: /\A[A-Z]{3}\z/ }
     validates :presentation, inclusion: { in: PRESENTATIONS }
+    validates :collection_method, inclusion: { in: COLLECTION_METHODS }
     validates :manifest_digest, format: { with: /\A\h{64}\z/ }
     validate :safe_manifest
 

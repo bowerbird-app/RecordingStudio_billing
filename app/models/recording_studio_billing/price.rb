@@ -5,7 +5,7 @@ module RecordingStudioBilling
     include CommercialRecordable
 
     PRICING_MODELS = %w[flat per_unit package].freeze
-    V1_SCOPE = "default"
+    V1_SCOPE = RecordingStudioBilling::V1Contract::PRICE_SCOPE
 
     commercial_recordable label: "Price", allowed_parent_types: "RecordingStudioBilling::BillingOption"
 

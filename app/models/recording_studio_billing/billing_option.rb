@@ -8,11 +8,11 @@ module RecordingStudioBilling
     INTERVALS = %w[day week month year].freeze
     QUANTITY_MODES = %w[fixed adjustable].freeze
     PRICING_MODELS = %w[flat per_unit package].freeze
-    COLLECTION_METHODS = %w[automatic invoice].freeze
+    COLLECTION_METHODS = RecordingStudioBilling::V1Contract::COLLECTION_METHODS
     PRORATION_POLICIES = %w[none prorate].freeze
     LIFECYCLE_POLICIES = %w[immediate scheduled].freeze
     CHECKOUT_POLICIES = %w[allowed required disabled].freeze
-    TAX_POLICIES = %w[exclusive inclusive automatic].freeze
+    TAX_POLICIES = RecordingStudioBilling::V1Contract::TAX_POLICIES
 
     commercial_recordable label: "Billing option", allowed_parent_types: "RecordingStudioBilling::Product"
 

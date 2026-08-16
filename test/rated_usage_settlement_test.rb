@@ -509,13 +509,13 @@ class RatedUsageSettlementTest < ActiveSupport::TestCase
     )
     price = record_catalogue(
       RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "base",
-                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "default"), root, option
+                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "market"), root, option
     )
     unit = record_catalogue(RecordingStudioBilling::UsageUnit.new(provider_account_recording: provider, key: "unit"),
                             root, billing_admin.recording)
     overage_price = record_catalogue(
       RecordingStudioBilling::OveragePrice.new(billing_option_recording: option, market_recording: market,
-                                               usage_unit_recording: unit, key: "overage", amount_minor:, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "default", **safety_limits), root, option
+                                               usage_unit_recording: unit, key: "overage", amount_minor:, currency_code: "USD", currency_exponent: 2, pricing_model:, package_size:, version: 1, scope: "market", **safety_limits), root, option
     )
     meter = record_catalogue(
       RecordingStudioBilling::Meter.new(usage_unit_recording: unit, key: "settlement",

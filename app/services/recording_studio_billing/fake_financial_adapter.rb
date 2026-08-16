@@ -15,13 +15,9 @@ module RecordingStudioBilling
       raise ArgumentError, "unsupported fake adapter outcome" unless OUTCOMES.include?(outcome)
 
       @outcome = outcome
-      @capabilities = capabilities || ProviderCapabilities.new(
-        operations: %w[charge checkout subscription subscription_change refund adjustment tax collect_usage],
-        currencies: %w[EUR GBP USD], markets: %w[CA GB US],
-        collection_methods: %w[automatic manual], checkout_modes: %w[payment setup subscription],
-        tax_modes: %w[external provider], quantities: %w[fixed adjustable],
-        composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit],
-        subscription_change_kinds: %w[plan interval addon quantity cancellation resumption],
+      @capabilities = capabilities || V1Contract.provider_capabilities(
+        operations: %w[checkout subscription_change refund adjustment collect_usage usage_settlement usage_correction],
+        tax_modes: %w[external provider],
         usage_settlement_representations: %w[invoice_line]
       )
       @calls = 0

@@ -5,12 +5,9 @@ require File.expand_path("../../../../app/services/recording_studio_billing/fake
 module RecordingStudioBilling
   class DummyFinancialAdapter < FakeFinancialAdapter
     def initialize(outcome: :success)
-      super(outcome:, capabilities: ProviderCapabilities.new(
-        operations: %w[charge checkout subscription subscription_change refund adjustment tax],
-        currencies: %w[EUR GBP USD], markets: %w[DE GB IT US], collection_methods: %w[automatic],
-        checkout_modes: %w[payment redirect subscription], tax_modes: %w[external provider], quantities: %w[fixed adjustable],
-        composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit],
-        subscription_change_kinds: %w[plan interval addon quantity cancellation resumption]
+      super(outcome:, capabilities: V1Contract.provider_capabilities(
+        operations: %w[checkout subscription_change refund adjustment],
+        tax_modes: %w[external provider]
       ))
     end
 

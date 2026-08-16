@@ -271,7 +271,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       currency_exponent: 2,
       pricing_model: "flat",
       version: 1,
-      scope: "default"
+      scope: "market"
     )
     assert_predicate price, :valid?
     record_child(price, admin_root, option_recording)
@@ -481,7 +481,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
         name: "Cleanup provider",
         environment: "test",
         configuration: {},
-        capabilities: ["catalogue"],
+        capabilities: ["commercial_configuration"],
         supported_markets: ["US"],
         supported_currencies: ["USD"]
       ),
@@ -547,7 +547,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
         currency_exponent: 2,
         pricing_model: "flat",
         version: 1,
-        scope: "default"
+        scope: "market"
       ),
       catalogue_root,
       option

@@ -113,7 +113,7 @@ begin
       record_child.call(
         RecordingStudioBilling::Price.new(
           billing_option_recording: option.recording, market_recording: market.recording, key: price_key,
-          amount_minor: spec[:amount], currency_code: spec[:currency], currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default"
+          amount_minor: spec[:amount], currency_code: spec[:currency], currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market"
         ), admin_root_recording, option.recording
       )
   end
@@ -172,7 +172,7 @@ begin
                 record_child.call(
                   RecordingStudioBilling::Price.new(
                     billing_option_recording: usage_option.recording, market_recording: usage_market.recording, key: "demo_usage_us_price",
-                    amount_minor: 100, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"
+                    amount_minor: 100, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "market"
                   ), admin_root_recording, usage_option.recording
                 )
   overage_price = RecordingStudioBilling::OveragePrice.with_current_recording.find_by(key: "demo_usage_api_overage") ||
@@ -180,7 +180,7 @@ begin
                     RecordingStudioBilling::OveragePrice.new(
                       billing_option_recording: usage_option.recording, market_recording: usage_market.recording,
                       usage_unit_recording: usage_unit.recording, key: "demo_usage_api_overage", amount_minor: 5,
-                      currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"
+                      currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "market"
                     ), admin_root_recording, usage_option.recording
                   )
   usage_recording_ids = {
@@ -216,7 +216,7 @@ begin
             record_child.call(
         RecordingStudioBilling::Price.new(billing_option_recording: option.recording, market_recording: usage_market.recording,
                                           key: "#{key}_us_price", amount_minor: spec[:amount], currency_code: "USD", currency_exponent: 2,
-                                          pricing_model: "flat", version: 1, scope: "default"), admin_root_recording, option.recording
+                                          pricing_model: "flat", version: 1, scope: "market"), admin_root_recording, option.recording
       )
     [key, { product_recording_id: product.recording.id, option_recording_id: option.recording.id, price_recording_id: price.recording.id }]
   end

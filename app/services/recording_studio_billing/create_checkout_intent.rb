@@ -196,7 +196,7 @@ module RecordingStudioBilling
     end
 
     def default_presentation(option, price, adapter)
-      return "invoice" if option.collection_method == "invoice"
+      return "invoice" if option.collection_method == "send_invoice"
       return "no_charge" if price.amount_minor.zero? && adapter.capabilities.evaluate(checkout_modes: "no_charge").supported?
 
       adapter.capabilities.evaluate(checkout_modes: "embedded").supported? ? "embedded" : "redirect"

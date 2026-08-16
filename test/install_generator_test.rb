@@ -58,12 +58,12 @@ class InstallGeneratorTest < Minitest::Test
     Dir.mktmpdir do |destination_root|
       migrations = File.join(destination_root, "db/migrate")
       FileUtils.mkdir_p(migrations)
-      File.write(File.join(migrations, "20260810000000_create_host_table.rb"), "class CreateHostTable; end\n")
+      File.write(File.join(migrations, "20260816000001_create_host_table.rb"), "class CreateHostTable; end\n")
       generator = RecordingStudioBilling::Generators::MigrationsGenerator.new([], {}, destination_root:)
 
       error = assert_raises(Thor::Error) { generator.copy_migrations }
 
-      assert_match(/20260810000000 is already used/, error.message)
+      assert_match(/20260816000001 is already used/, error.message)
     end
   end
 end

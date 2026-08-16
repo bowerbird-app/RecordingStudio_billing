@@ -4,6 +4,7 @@ require "net/http"
 require "stripe"
 require "stringio"
 require "uri"
+require "recording_studio_billing/v1_contract"
 
 module RecordingStudioBilling
   class StripeAdapter
@@ -16,12 +17,7 @@ module RecordingStudioBilling
     DOWNLOAD_OPEN_TIMEOUT = 5
     DOWNLOAD_READ_TIMEOUT = 15
 
-    CAPABILITIES = ProviderCapabilities.new(
-      operations: %w[checkout subscription_change refund adjustment],
-      currencies: %w[usd eur gbp], collection_methods: %w[automatic], checkout_modes: %w[embedded redirect payment_link no_charge],
-      tax_modes: %w[provider], quantities: %w[fixed adjustable], composition: %w[single mixed], refunds: %w[full partial], adjustments: %w[credit debit],
-      subscription_change_kinds: %w[cancellation resumption plan interval addon quantity]
-    ).freeze
+    CAPABILITIES = V1Contract.provider_capabilities.freeze
 
     attr_reader :capabilities
 
@@ -165,9 +161,10 @@ module RecordingStudioBilling
       return AdapterResponse.new(status: "invalid", result: { "reason" => "checkout_items_missing" }) if items.empty?
 
       presentation = checkout["presentation"].to_s
+      collection_method = (checkout["collection_method"] || checkout[:collection_method]).to_s
       capability = capabilities.evaluate(
         operations: "checkout", currencies: checkout["currency"] || checkout[:currency],
-        collection_methods: checkout["collection_method"] || checkout[:collection_method],
+        collection_methods: collection_method.presence || "automatic",
         checkout_modes: presentation, composition: items.one? ? "single" : "mixed"
       )
       return unsupported_checkout_response(capability) unless capability.supported?
@@ -179,14 +176,18 @@ module RecordingStudioBilling
                         "recording_studio_billing_presentation" => presentation }
       }
       apply_native_tax!(params, checkout.fetch("tax", {}), command)
-      params["ui_mode"] = presentation unless presentation == "payment_link"
+      apply_collection_method!(params, collection_method, checkout, recurring?(items))
+      params["ui_mode"] = presentation unless %w[payment_link invoice].include?(presentation)
       if presentation == "embedded" && credential[:return_url].present?
         assign_trusted_url!(params, "return_url",
                             credential[:return_url])
       end
-      if %w[redirect payment_link].include?(presentation)
+      if %w[redirect payment_link invoice].include?(presentation)
         assign_trusted_url!(params, "success_url", credential[:success_url]) if credential[:success_url].present?
         assign_trusted_url!(params, "cancel_url", credential[:cancel_url]) if credential[:cancel_url].present?
+      end
+      if presentation == "invoice" && !recurring?(items)
+        params["invoice_creation"] ||= { "enabled" => true }
       end
       session = stripe_client(credential).v1.checkout.sessions.create(params, { idempotency_key: })
       reference = session.id
@@ -427,6 +428,25 @@ module RecordingStudioBilling
       end
 
       tax.merge("semantic_categories" => categories)
+    end
+
+    def apply_collection_method!(params, collection_method, checkout, recurring)
+      return unless collection_method == "send_invoice"
+
+      days = Integer(checkout["payment_terms_days"] || checkout[:payment_terms_days] || 30)
+      raise ArgumentError unless days >= 0
+
+      if recurring
+        params["subscription_data"] = (params["subscription_data"] || {}).merge(
+          "collection_method" => "send_invoice", "days_until_due" => [days, 1].max
+        )
+      else
+        invoice_creation = params["invoice_creation"] || { "enabled" => true }
+        invoice_data = (invoice_creation["invoice_data"] || {}).merge(
+          "collection_method" => "send_invoice", "days_until_due" => [days, 1].max
+        )
+        params["invoice_creation"] = invoice_creation.merge("enabled" => true, "invoice_data" => invoice_data)
+      end
     end
 
     def apply_native_tax!(params, tax, command)

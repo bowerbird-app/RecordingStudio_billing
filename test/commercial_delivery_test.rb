@@ -499,7 +499,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     price = RecordingStudioBilling::Price.new(
       billing_option_recording: graph[:italy_market].recording, market_recording: graph[:italy_market].recording,
       key: "wrong_recordable_type", amount_minor: 100, currency_code: "EUR", currency_exponent: 2,
-      pricing_model: "flat", version: 1, scope: "default"
+      pricing_model: "flat", version: 1, scope: "market"
     )
 
     assert_not price.valid?
@@ -566,7 +566,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
         currency_exponent: 2,
         pricing_model: "flat",
         version: 2,
-        scope: "default"
+        scope: "market"
       ),
       graph[:root],
       option_recording
@@ -593,7 +593,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       billing_option_recording_id: option_recording.id,
       market_recording_id: market_recording.id,
       currency_code: "EUR",
-      scope: "default",
+      scope: "market",
       state: "published"
     ).count
     assert_operator RecordingStudioBilling::Price.where(state: "published").count, :>=, 2
@@ -642,7 +642,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
         currency_exponent: 2,
         pricing_model: "flat",
         version: 1,
-        scope: "default"
+        scope: "market"
       ),
       graph[:root],
       graph[:option].recording
@@ -663,7 +663,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
         currency_exponent: 2,
         pricing_model: "flat",
         version: 2,
-        scope: "default"
+        scope: "market"
       ),
       graph[:root],
       graph[:option].recording
@@ -692,7 +692,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       market_recording_id: graph[:italy_market].recording.id,
       usage_unit_recording_id: usage_unit.id,
       currency_code: "EUR",
-      scope: "default",
+      scope: "market",
       state: "published"
     ).count
   end
@@ -1289,7 +1289,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     assert_includes price.errors[:scope], "is not included in the list"
     assert_not overage.valid?
     assert_includes overage.errors[:scope], "is not included in the list"
-    assert_equal 0, RecordingStudioBilling::Price.new(scope: "default", amount_minor: 0).amount_minor
+    assert_equal 0, RecordingStudioBilling::Price.new(scope: "market", amount_minor: 0).amount_minor
   end
 
   test "product rules fail closed and require every selected condition" do
@@ -1418,7 +1418,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     RecordingStudioBilling::MarketResolver.new(markets:).tap { |resolver| resolver.define_singleton_method(:eligible?) { |_| true } }
   end
 
-  def price(name, option, market, amount, root, scope: "default", version: 1)
+  def price(name, option, market, amount, root, scope: "market", version: 1)
     record_child(
       RecordingStudioBilling::Price.new(
         billing_option_recording: option, market_recording: market, key: "#{name}_eur_price",

@@ -428,7 +428,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
                           ), root, product)
     price = record_child(RecordingStudioBilling::Price.new(
                            billing_option_recording: option, market_recording: market, key: "price_#{SecureRandom.hex(4)}", amount_minor: 1_000,
-                           currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default"
+                           currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market"
                          ), root, option).recordable
     billing_admin_recording = RecordingStudio::Recording.unscoped.find_by!(
       root_recording_id: root.id, recordable_type: "RecordingStudioBilling::BillingAdmin"
@@ -503,7 +503,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   def price_attributes(key:, billing_option_recording:)
     { key:, billing_option_recording_id: billing_option_recording.id, market_recording_id: @price.market_recording_id, amount_minor: 1_000,
-      currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default" }
+      currency_code: "USD", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market" }
   end
 
   def catalogue_billing_admin

@@ -220,10 +220,37 @@ class StripeAdapterTest < Minitest::Test
     response = adapter.call(command:, request: { "request" => base.merge("collection_method" => "manual") },
                             idempotency_key: "key-manual")
     assert_equal "unsupported", response.status
-    response = adapter.call(command:, request: { "request" => base.merge("presentation" => "invoice") },
-                            idempotency_key: "key-invoice")
+    response = adapter.call(command:, request: { "request" => base.merge("presentation" => "elements") },
+                            idempotency_key: "key-elements")
     assert_equal "unsupported_checkout_mode", response.status
     assert_equal 0, calls
+  end
+
+  def test_invoice_presentation_uses_hosted_checkout_with_invoice_creation
+    captured = []
+    sessions = Object.new
+    sessions.define_singleton_method(:create) do |params, _options|
+      captured << params
+      Struct.new(:id).new("cs_invoice_123")
+    end
+    client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
+    adapter = RecordingStudioBilling::StripeAdapter.new(credential_resolver: lambda {
+      { secret_key: "sk_test", success_url: "https://app.example.test/success",
+        cancel_url: "https://app.example.test/cancel" }
+    }, client_factory: lambda { |_secret|
+         client
+       }, trusted_origins_resolver: -> { ["https://app.example.test"] })
+    command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
+    request = { "request" => { "presentation" => "invoice", "currency" => "USD", "collection_method" => "send_invoice",
+                               "payment_terms_days" => 14,
+                               "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1 } } } }
+
+    response = adapter.call(command:, request:, idempotency_key: "durable-invoice")
+
+    assert_equal "pending", response.status
+    refute captured.last.key?("ui_mode")
+    assert_equal({ "enabled" => true, "invoice_data" => { "collection_method" => "send_invoice", "days_until_due" => 14 } },
+                 captured.last.fetch("invoice_creation"))
   end
 
   def test_no_charge_requires_zero_frozen_lines_and_never_constructs_a_stripe_client
@@ -286,10 +313,11 @@ class StripeAdapterTest < Minitest::Test
   def test_capabilities_advertise_only_executable_checkout_modes_and_subscription_kinds
     adapter = RecordingStudioBilling::StripeAdapter.new
 
-    %w[embedded redirect payment_link no_charge].each do |mode|
+    %w[embedded redirect payment_link invoice no_charge].each do |mode|
       assert_predicate adapter.capabilities.evaluate(operation: "checkout", checkout_mode: mode), :supported?, mode
     end
-    refute adapter.capabilities.evaluate(operation: "checkout", checkout_mode: "invoice").supported?
+    assert_predicate adapter.capabilities.evaluate(operation: "checkout", collection_method: "send_invoice"), :supported?
+    refute adapter.capabilities.evaluate(operation: "checkout", checkout_mode: "elements").supported?
     %w[cancellation resumption plan interval addon quantity].each do |kind|
       assert_predicate adapter.capabilities.evaluate(operation: "subscription_change", subscription_change_kind: kind),
                        :supported?, kind

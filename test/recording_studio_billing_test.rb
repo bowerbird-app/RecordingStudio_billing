@@ -3,8 +3,8 @@
 require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
-  def test_version_matches_the_initial_billing_foundation_release
-    assert_equal "0.1.2", RecordingStudioBilling::VERSION
+  def test_version_matches_the_current_release
+    assert_equal "0.2.0", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_keeps_only_the_billing_title_and_subtitle
@@ -34,5 +34,10 @@ class RecordingStudioBillingTest < Minitest::Test
     assert_includes structure, "CREATE UNIQUE INDEX idx_rs_billing_one_admin_per_root"
     assert_includes structure,
                     "rs_billing_protect_commercial_history('RecordingStudioBilling::Price')"
+    assert_includes structure, "DEFAULT 'market'::character varying"
+    assert_includes structure, "send_invoice"
+    refute_match(/scope\)::text = 'default'/, structure)
+    refute_includes structure, "('20260810000000')"
+    assert_includes structure, "('20260816000001')"
   end
 end

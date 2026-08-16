@@ -6,12 +6,12 @@ module RecordingStudioBilling
   class BillingCommercialSection < RecordingStudioAdmin::Section
     key "billing_commercial"
     icon :shopping_bag
-    title "Commercial catalogue"
-    subtitle "Products, pricing, markets, and providers"
+    title "Products and pricing"
+    subtitle "Products, prices, markets, and providers"
     blast_radius :site
     availability_scope :all
 
-    link :catalogue, text: "View catalogue", url: ->(context) { context.admin_screen_path("billing_commercial") }
+    link :products, text: "View products and pricing", url: ->(context) { context.admin_screen_path("billing_commercial") }
   end
 
   class BillingFinancialSection < RecordingStudioAdmin::Section
@@ -29,7 +29,7 @@ module RecordingStudioBilling
     key "billing_operations"
     icon :credit_card
     title "Billing operations"
-    subtitle "Commercial catalogue, providers, tax, usage, and reconciliation"
+    subtitle "Products, providers, tax, usage, and reconciliation"
     blast_radius :site
     availability_scope :all
 
@@ -53,7 +53,7 @@ module RecordingStudioBilling
 
   class BillingCommercialScreen < RecordingStudioAdmin::Screen
     key "billing_commercial"
-    title "Commercial catalogue"
+    title "Products and pricing"
     blast_radius :site
     query { |_context| CommercialManifest.order(created_at: :desc) }
     filter :manifest_digest, label: "Manifest"
@@ -339,7 +339,7 @@ module RecordingStudioBilling
   class BillingCommercialResource < RecordingStudioAdmin::Resource
     key "billing_commercial"
     section "billing_commercial"
-    title "Commercial catalogue"
+    title "Products and pricing"
     blast_radius :site
   end
 

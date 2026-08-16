@@ -1340,7 +1340,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     incompatible_manifests = {
       currency: forged_manifest(current_manifest) { |terms| terms.fetch("price")["currency_code"] = "USD" },
       collection_method: forged_manifest(current_manifest) do |terms|
-        terms.fetch("billing_option")["collection_method"] = "invoice"
+        terms.fetch("billing_option")["collection_method"] = "send_invoice"
       end,
       payment_terms: forged_manifest(current_manifest) do |terms|
         terms.fetch("billing_option")["payment_terms_days"] = 30
@@ -1542,7 +1542,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   def price(key, option, market, amount, root, feature_values = {})
     record_child(
       RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "#{key}_price",
-                                        amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values:), root, option
+                                        amount_minor: amount, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market", feature_values:), root, option
     )
   end
 

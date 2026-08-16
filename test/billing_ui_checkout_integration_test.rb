@@ -285,7 +285,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     )
     price = record_child(
       RecordingStudioBilling::Price.new(billing_option_recording: option_recording, market_recording: market,
-                                        key: "price_#{SecureRandom.hex(4)}", amount_minor: 1_000, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values: {}), provider_root, option_recording
+                                        key: "price_#{SecureRandom.hex(4)}", amount_minor: 1_000, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market", feature_values: {}), provider_root, option_recording
     )
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: provider_root,
                                                          price_recording_ids: [price.id], actor: @user)

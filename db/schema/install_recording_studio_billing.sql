@@ -1,3 +1,6 @@
+-- Clean-install Recording Studio Billing schema.
+-- This file is the canonical PostgreSQL install for a new host. It is not an
+-- upgrade path from earlier development snapshots.
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -9,21 +12,6 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
---
--- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
-
-
---
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
-
-
---
 -- Name: rs_billing_country_code_array_valid(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -37,8 +25,6 @@ CREATE FUNCTION public.rs_billing_country_code_array_valid(value jsonb) RETURNS 
     );
 $_$;
 
-
---
 -- Name: rs_billing_protect_candidate_history(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -58,8 +44,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_checkout_attempt(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -82,8 +66,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_checkout_item(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -93,8 +75,6 @@ CREATE FUNCTION public.rs_billing_protect_checkout_item() RETURNS trigger
 BEGIN RAISE EXCEPTION 'checkout intent items are immutable'; END;
 $$;
 
-
---
 -- Name: rs_billing_protect_command_attempt(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -145,8 +125,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_commercial_history(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -185,8 +163,6 @@ END IF;
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_commercial_projection(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -198,8 +174,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_credit_ledger_entry(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -251,8 +225,6 @@ END IF;
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_entitlement_projection(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -297,8 +269,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_financial_command(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -327,8 +297,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_manifest_history(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -348,8 +316,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_meter_aggregation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -399,8 +365,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_overage_calculation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -444,8 +408,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_purchase(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -460,8 +422,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_purchase_effect(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -475,8 +435,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_rated_usage(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -502,8 +460,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_rated_usage_settlement(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -529,8 +485,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_reconciliation_history(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -543,8 +497,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_subscription_item_version(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -587,8 +539,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_tax_calculation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -600,8 +550,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_usage_correction(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -614,8 +562,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_usage_credit_grant(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -628,8 +574,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_usage_event(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -650,8 +594,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_protect_usage_ledger_entry(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -664,8 +606,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_safe_financial_json(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -695,8 +635,6 @@ BEGIN
 END;
 $_$;
 
-
---
 -- Name: rs_billing_sorted_manifest_set(jsonb, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -726,8 +664,6 @@ BEGIN
 END;
 $_$;
 
-
---
 -- Name: rs_billing_subscription_lifecycle(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -742,8 +678,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_checkout_attempt_command_correlation(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -764,8 +698,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_checkout_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -783,8 +715,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_checkout_command_binding(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -805,8 +735,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_checkout_execution_state(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -824,8 +752,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_command_attempt_consistency(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -860,8 +786,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_command_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -926,8 +850,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_commercial_lifecycle_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -959,8 +881,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_commercial_publication(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1030,8 +950,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_financial_lifecycle_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1065,8 +983,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_lifecycle_projection(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1085,8 +1001,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_provider_reference(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1111,8 +1025,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_tax_authority(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1145,8 +1057,6 @@ BEGIN
 END;
 $$;
 
-
---
 -- Name: rs_billing_validate_tax_manifest_set(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1183,31 +1093,6 @@ SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
---
--- Name: admin_roots; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.admin_roots (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name character varying NOT NULL,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.ar_internal_metadata (
-    key character varying NOT NULL,
-    value character varying,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
 -- Name: recording_studio_billing_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1227,8 +1112,6 @@ CREATE TABLE public.recording_studio_billing_accounts (
     tax_location_postal_code character varying(32)
 );
 
-
---
 -- Name: recording_studio_billing_adjustment_intents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1255,8 +1138,6 @@ CREATE TABLE public.recording_studio_billing_adjustment_intents (
     CONSTRAINT rs_billing_adjustment_intent_kind CHECK ((((kind)::text = ANY (ARRAY[('credit'::character varying)::text, ('debit'::character varying)::text, ('write_off'::character varying)::text])) AND (amount_minor > 0)))
 );
 
-
---
 -- Name: recording_studio_billing_billing_admins; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1268,8 +1149,6 @@ CREATE TABLE public.recording_studio_billing_billing_admins (
     root_recording_id uuid NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_billing_options; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1317,8 +1196,6 @@ CREATE TABLE public.recording_studio_billing_billing_options (
     CONSTRAINT rs_billing_options_trial_days CHECK ((trial_days >= 0))
 );
 
-
---
 -- Name: recording_studio_billing_checkout_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1341,8 +1218,6 @@ CREATE TABLE public.recording_studio_billing_checkout_attempts (
     CONSTRAINT rs_billing_checkout_attempts_state CHECK (((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('processing'::character varying)::text, ('succeeded'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('unknown'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_checkout_intent_items; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1373,8 +1248,6 @@ CREATE TABLE public.recording_studio_billing_checkout_intent_items (
     CONSTRAINT rs_billing_checkout_items_quantity CHECK ((quantity > 0))
 );
 
-
---
 -- Name: recording_studio_billing_checkout_intents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1395,8 +1268,6 @@ CREATE TABLE public.recording_studio_billing_checkout_intents (
     CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('validated'::character varying)::text, ('awaiting_confirmation'::character varying)::text, ('pending_provider'::character varying)::text, ('requires_requote'::character varying)::text, ('completed'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('requires_review'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_commercial_manifests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1414,8 +1285,6 @@ CREATE TABLE public.recording_studio_billing_commercial_manifests (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_commercial_publication_candidates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1432,8 +1301,6 @@ CREATE TABLE public.recording_studio_billing_commercial_publication_candidates (
     snapshot_envelope jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_cost_cards; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1447,8 +1314,6 @@ CREATE TABLE public.recording_studio_billing_cost_cards (
     CONSTRAINT recording_studio_billing_cost_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_cost_rates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1469,8 +1334,6 @@ CREATE TABLE public.recording_studio_billing_cost_rates (
     CONSTRAINT recording_studio_billing_cost_rates_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1496,8 +1359,6 @@ CREATE TABLE public.recording_studio_billing_credit_ledger_entries (
     CONSTRAINT rs_billing_credit_ledger_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text))
 );
 
-
---
 -- Name: recording_studio_billing_entitlement_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1522,8 +1383,6 @@ CREATE TABLE public.recording_studio_billing_entitlement_grants (
     CONSTRAINT rs_billing_entitlement_grant_value CHECK ((jsonb_typeof(value) IS NOT NULL))
 );
 
-
---
 -- Name: recording_studio_billing_feature_overrides; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1539,8 +1398,6 @@ CREATE TABLE public.recording_studio_billing_feature_overrides (
     CONSTRAINT recording_studio_billing_feature_overrides_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_features; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1557,8 +1414,6 @@ CREATE TABLE public.recording_studio_billing_features (
     CONSTRAINT rs_billing_features_kind CHECK (((kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_financial_adjustments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1576,8 +1431,6 @@ CREATE TABLE public.recording_studio_billing_financial_adjustments (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_financial_command_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1604,8 +1457,6 @@ CREATE TABLE public.recording_studio_billing_financial_command_attempts (
     CONSTRAINT rs_billing_command_attempts_times CHECK (((completed_at IS NULL) OR (completed_at >= started_at)))
 );
 
-
---
 -- Name: recording_studio_billing_financial_commands; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1648,8 +1499,6 @@ CREATE TABLE public.recording_studio_billing_financial_commands (
     CONSTRAINT rs_billing_commands_type_format CHECK (((command_type)::text ~ '^[a-z][a-z0-9_]*$'::text))
 );
 
-
---
 -- Name: recording_studio_billing_invoice_lines; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1667,8 +1516,6 @@ CREATE TABLE public.recording_studio_billing_invoice_lines (
     CONSTRAINT rs_billing_invoice_line_amount CHECK (((amount_minor >= 0) AND (quantity > 0) AND ((currency_code)::text ~ '^[A-Z]{3}$'::text)))
 );
 
-
---
 -- Name: recording_studio_billing_invoices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1693,8 +1540,6 @@ CREATE TABLE public.recording_studio_billing_invoices (
     CONSTRAINT rs_billing_invoice_amount CHECK (((total_minor >= 0) AND ((currency_code)::text ~ '^[A-Z]{3}$'::text)))
 );
 
-
---
 -- Name: recording_studio_billing_markets; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1724,8 +1569,6 @@ CREATE TABLE public.recording_studio_billing_markets (
     CONSTRAINT rs_billing_markets_specificity CHECK ((specificity >= 0))
 );
 
-
---
 -- Name: recording_studio_billing_meter_aggregations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1756,8 +1599,6 @@ CREATE TABLE public.recording_studio_billing_meter_aggregations (
     CONSTRAINT rs_billing_meter_aggregation_window CHECK ((window_ends_at > window_starts_at))
 );
 
-
---
 -- Name: recording_studio_billing_meters; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1773,8 +1614,6 @@ CREATE TABLE public.recording_studio_billing_meters (
     CONSTRAINT rs_billing_meters_aggregation CHECK (((aggregation)::text = ANY (ARRAY[('sum'::character varying)::text, ('count'::character varying)::text, ('maximum'::character varying)::text, ('latest'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_overage_calculations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1792,8 +1631,6 @@ CREATE TABLE public.recording_studio_billing_overage_calculations (
     CONSTRAINT rs_billing_overage_calculation_amount CHECK (((excess_quantity >= 0) AND (amount_minor >= 0)))
 );
 
-
---
 -- Name: recording_studio_billing_overage_prices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1831,8 +1668,6 @@ CREATE TABLE public.recording_studio_billing_overage_prices (
     CONSTRAINT rs_billing_overage_submission_limit CHECK (((maximum_submission_minor IS NULL) OR (maximum_submission_minor >= 0)))
 );
 
-
---
 -- Name: recording_studio_billing_payment_allocations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1846,8 +1681,6 @@ CREATE TABLE public.recording_studio_billing_payment_allocations (
     CONSTRAINT rs_billing_payment_allocation_amount CHECK ((amount_minor > 0))
 );
 
-
---
 -- Name: recording_studio_billing_payments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1871,8 +1704,6 @@ CREATE TABLE public.recording_studio_billing_payments (
     CONSTRAINT rs_billing_payment_amount CHECK (((amount_minor >= 0) AND ((currency_code)::text ~ '^[A-Z]{3}$'::text)))
 );
 
-
---
 -- Name: recording_studio_billing_plan_update_applications; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1887,8 +1718,6 @@ CREATE TABLE public.recording_studio_billing_plan_update_applications (
     plan_update_run_id uuid NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_plan_update_runs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1907,8 +1736,6 @@ CREATE TABLE public.recording_studio_billing_plan_update_runs (
     CONSTRAINT rs_billing_plan_update_run_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('previewed'::character varying)::text, ('awaiting_confirmation'::character varying)::text, ('scheduled'::character varying)::text, ('applying'::character varying)::text, ('applied'::character varying)::text, ('failed'::character varying)::text, ('requires_review'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_plan_updates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1934,8 +1761,6 @@ CREATE TABLE public.recording_studio_billing_plan_updates (
     CONSTRAINT rs_billing_plan_update_execution_state CHECK (((execution_state)::text = ANY (ARRAY[('draft'::character varying)::text, ('previewed'::character varying)::text, ('confirmed'::character varying)::text, ('scheduled'::character varying)::text, ('applying'::character varying)::text, ('completed'::character varying)::text, ('requires_review'::character varying)::text, ('failed'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_prices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1965,8 +1790,6 @@ CREATE TABLE public.recording_studio_billing_prices (
     CONSTRAINT recording_studio_billing_prices_version CHECK ((version >= 1))
 );
 
-
---
 -- Name: recording_studio_billing_product_rules; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1983,8 +1806,6 @@ CREATE TABLE public.recording_studio_billing_product_rules (
     CONSTRAINT recording_studio_billing_product_rules_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_products; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2001,8 +1822,6 @@ CREATE TABLE public.recording_studio_billing_products (
     CONSTRAINT rs_billing_products_kind CHECK (((kind)::text = ANY (ARRAY[('plan'::character varying)::text, ('addon'::character varying)::text, ('credit_pack'::character varying)::text, ('service'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_provider_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2026,8 +1845,6 @@ CREATE TABLE public.recording_studio_billing_provider_accounts (
     CONSTRAINT rs_billing_provider_accounts_provider_format CHECK (((adapter_key)::text ~ '^[a-z][a-z0-9_]*$'::text))
 );
 
-
---
 -- Name: recording_studio_billing_provider_references; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2046,8 +1863,6 @@ CREATE TABLE public.recording_studio_billing_provider_references (
     CONSTRAINT rs_billing_provider_reference_safe_remote_identity CHECK ((((remote_type)::text ~ '^[a-zA-Z0-9_.:-]+$'::text) AND ((remote_id)::text ~ '^[a-zA-Z0-9_.:-]+$'::text)))
 );
 
-
---
 -- Name: recording_studio_billing_purchase_effects; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2068,8 +1883,6 @@ CREATE TABLE public.recording_studio_billing_purchase_effects (
     CONSTRAINT rs_billing_purchase_effect_metadata_object CHECK ((jsonb_typeof(safe_metadata) = 'object'::text))
 );
 
-
---
 -- Name: recording_studio_billing_purchases; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2100,8 +1913,6 @@ CREATE TABLE public.recording_studio_billing_purchases (
     CONSTRAINT rs_billing_purchase_snapshot_object CHECK ((jsonb_typeof(commercial_snapshot) = 'object'::text))
 );
 
-
---
 -- Name: recording_studio_billing_rate_cards; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2115,8 +1926,6 @@ CREATE TABLE public.recording_studio_billing_rate_cards (
     CONSTRAINT recording_studio_billing_rate_cards_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2140,8 +1949,6 @@ CREATE TABLE public.recording_studio_billing_rated_usage_settlements (
     CONSTRAINT rs_billing_settlement_request_object CHECK ((jsonb_typeof(canonical_request) = 'object'::text))
 );
 
-
---
 -- Name: recording_studio_billing_rated_usages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2180,8 +1987,6 @@ CREATE TABLE public.recording_studio_billing_rated_usages (
     CONSTRAINT rs_billing_rated_usage_window CHECK ((window_ends_at > window_starts_at))
 );
 
-
---
 -- Name: recording_studio_billing_rates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2202,8 +2007,6 @@ CREATE TABLE public.recording_studio_billing_rates (
     CONSTRAINT rs_billing_rates_conversion_present CHECK ((NOT ((conversion_numerator IS NULL) AND (conversion_denominator IS NULL) AND (conversion_decimal IS NULL))))
 );
 
-
---
 -- Name: recording_studio_billing_reconciliation_issues; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2226,8 +2029,6 @@ CREATE TABLE public.recording_studio_billing_reconciliation_issues (
     CONSTRAINT rs_billing_reconciliation_issue_state CHECK (((state)::text = ANY (ARRAY[('open'::character varying)::text, ('resolved'::character varying)::text, ('ignored'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_reconciliation_records; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2241,8 +2042,6 @@ CREATE TABLE public.recording_studio_billing_reconciliation_records (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_refund_intents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2268,8 +2067,6 @@ CREATE TABLE public.recording_studio_billing_refund_intents (
     line_allocation jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_refunds; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2287,8 +2084,6 @@ CREATE TABLE public.recording_studio_billing_refunds (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2317,8 +2112,6 @@ CREATE TABLE public.recording_studio_billing_subscription_change_intents (
     CONSTRAINT rs_billing_subscription_change_timing CHECK (((timing)::text = ANY (ARRAY[('immediate'::character varying)::text, ('next_period'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2363,8 +2156,6 @@ CREATE TABLE public.recording_studio_billing_subscription_item_versions (
     CONSTRAINT rs_billing_subscription_item_version_source CHECK (((((source_type)::text = 'checkout'::text) AND (checkout_intent_id IS NOT NULL) AND (checkout_intent_item_id IS NOT NULL) AND (source_id IS NOT NULL)) OR (((source_type)::text = 'subscription_change'::text) AND (source_id IS NOT NULL))))
 );
 
-
---
 -- Name: recording_studio_billing_subscription_items; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2380,8 +2171,6 @@ CREATE TABLE public.recording_studio_billing_subscription_items (
     CONSTRAINT rs_billing_subscription_item_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2405,8 +2194,6 @@ CREATE TABLE public.recording_studio_billing_subscriptions (
     CONSTRAINT rs_billing_subscriptions_state CHECK (((state)::text = ANY (ARRAY[('trialing'::character varying)::text, ('active'::character varying)::text, ('past_due'::character varying)::text, ('paused'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_tax_calculations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2453,8 +2240,6 @@ CREATE TABLE public.recording_studio_billing_tax_calculations (
     CONSTRAINT rs_billing_tax_status CHECK (((status)::text = ANY (ARRAY[('success'::character varying)::text, ('duplicate'::character varying)::text, ('invalid'::character varying)::text, ('unauthorized'::character varying)::text, ('unsupported'::character varying)::text, ('unsupported_tax_calculation'::character varying)::text, ('unsupported_checkout_mode'::character varying)::text, ('unsupported_checkout_composition'::character varying)::text, ('unsupported_subscription_composition'::character varying)::text, ('unsupported_market'::character varying)::text, ('unsupported_currency'::character varying)::text, ('charge_market_verification_unavailable'::character varying)::text, ('conflict'::character varying)::text, ('provider_unavailable'::character varying)::text, ('provider_rejected'::character varying)::text, ('pending'::character varying)::text, ('stale'::character varying)::text, ('rate_missing'::character varying)::text, ('rate_ambiguous'::character varying)::text, ('requires_review'::character varying)::text, ('failed'::character varying)::text, ('unknown'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_usage_allocations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2476,8 +2261,6 @@ CREATE TABLE public.recording_studio_billing_usage_allocations (
     CONSTRAINT rs_billing_usage_allocation_state CHECK (((state)::text = ANY (ARRAY[('closing'::character varying)::text, ('closed'::character varying)::text, ('reversed'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_usage_allowance_policies; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2500,8 +2283,6 @@ CREATE TABLE public.recording_studio_billing_usage_allowance_policies (
     CONSTRAINT rs_billing_usage_allowance_policy_quantities CHECK ((((policy_kind)::text = ANY (ARRAY[('hard_limit'::character varying)::text, ('prepaid_only'::character varying)::text, ('prepaid_then_block'::character varying)::text, ('prepaid_then_overage'::character varying)::text, ('automatic_overage'::character varying)::text, ('unlimited'::character varying)::text, ('addon_required'::character varying)::text])) AND (limit_quantity >= 0) AND (consumed_quantity >= 0) AND (consumed_quantity <= limit_quantity)))
 );
 
-
---
 -- Name: recording_studio_billing_usage_corrections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2520,8 +2301,6 @@ CREATE TABLE public.recording_studio_billing_usage_corrections (
     CONSTRAINT rs_billing_usage_correction_delta CHECK ((((correction_kind)::text = ANY (ARRAY[('credit'::character varying)::text, ('debit'::character varying)::text, ('void'::character varying)::text])) AND (quantity_delta <> 0)))
 );
 
-
---
 -- Name: recording_studio_billing_usage_credit_allocations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2535,8 +2314,6 @@ CREATE TABLE public.recording_studio_billing_usage_credit_allocations (
     CONSTRAINT rs_billing_usage_credit_allocation_quantity CHECK ((quantity > 0))
 );
 
-
---
 -- Name: recording_studio_billing_usage_credit_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2560,8 +2337,6 @@ CREATE TABLE public.recording_studio_billing_usage_credit_grants (
     CONSTRAINT rs_billing_usage_grant_kind CHECK (((grant_kind)::text = ANY (ARRAY[('allowance'::character varying)::text, ('credit'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_usage_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2586,8 +2361,6 @@ CREATE TABLE public.recording_studio_billing_usage_events (
     CONSTRAINT rs_billing_usage_event_quantity CHECK ((quantity > 0))
 );
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2608,8 +2381,6 @@ CREATE TABLE public.recording_studio_billing_usage_ledger_entries (
     CONSTRAINT rs_billing_usage_ledger_entry_shape CHECK ((((entry_kind)::text = ANY (ARRAY[('grant'::character varying)::text, ('consume'::character varying)::text, ('expire'::character varying)::text, ('reverse'::character varying)::text, ('adjustment'::character varying)::text, ('overage'::character varying)::text])) AND (quantity >= 0) AND (sequence > 0)))
 );
 
-
---
 -- Name: recording_studio_billing_usage_periods; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2629,8 +2400,6 @@ CREATE TABLE public.recording_studio_billing_usage_periods (
     CONSTRAINT rs_billing_usage_period_window CHECK ((ends_at > starts_at))
 );
 
-
---
 -- Name: recording_studio_billing_usage_units; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2644,8 +2413,6 @@ CREATE TABLE public.recording_studio_billing_usage_units (
     CONSTRAINT recording_studio_billing_usage_units_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('published'::character varying)::text, ('retired'::character varying)::text])))
 );
 
-
---
 -- Name: recording_studio_billing_webhook_effects; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2666,4263 +2433,2717 @@ CREATE TABLE public.recording_studio_billing_webhook_effects (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
-
---
--- Name: recording_studio_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_events (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    recording_id uuid NOT NULL,
-    action character varying NOT NULL,
-    recordable_type character varying NOT NULL,
-    recordable_id uuid NOT NULL,
-    previous_recordable_type character varying,
-    previous_recordable_id uuid,
-    actor_type character varying,
-    actor_id uuid,
-    impersonator_type character varying,
-    impersonator_id uuid,
-    occurred_at timestamp(6) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    idempotency_key character varying,
-    created_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: recording_studio_recordings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_recordings (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    recordable_type character varying NOT NULL,
-    recordable_id uuid NOT NULL,
-    trashed_at timestamp(6) without time zone,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL,
-    parent_recording_id uuid,
-    root_recording_id uuid
-);
-
-
---
--- Name: recording_studio_root_switchable_selections; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_root_switchable_selections (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    actor_id character varying,
-    actor_type character varying,
-    created_at timestamp(6) without time zone NOT NULL,
-    device_browser character varying,
-    device_key character varying NOT NULL,
-    device_label character varying,
-    device_platform character varying,
-    device_type character varying,
-    last_used_at timestamp(6) without time zone NOT NULL,
-    root_recording_id uuid NOT NULL,
-    scope_key character varying NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL,
-    user_agent text
-);
-
-
---
--- Name: recording_studio_webhooks_action_attempts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_webhooks_action_attempts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    inbound_event_id uuid NOT NULL,
-    action_name character varying NOT NULL,
-    execution_position integer NOT NULL,
-    status character varying DEFAULT 'pending'::character varying NOT NULL,
-    attempts integer DEFAULT 0 NOT NULL,
-    next_attempt_at timestamp(6) without time zone,
-    queued_at timestamp(6) without time zone,
-    started_at timestamp(6) without time zone,
-    completed_at timestamp(6) without time zone,
-    last_error character varying,
-    endpoint_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    token_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    policy_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    action_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    attempt_history jsonb DEFAULT '[]'::jsonb NOT NULL,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: recording_studio_webhooks_endpoint_tokens; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_webhooks_endpoint_tokens (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    endpoint_id uuid NOT NULL,
-    token character varying,
-    digest character varying NOT NULL,
-    prefix character varying NOT NULL,
-    active_at timestamp(6) without time zone NOT NULL,
-    expires_at timestamp(6) without time zone,
-    revoked_at timestamp(6) without time zone,
-    revoked_by_actor_id character varying,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: recording_studio_webhooks_endpoints; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_webhooks_endpoints (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    recording_studio_recording_id uuid NOT NULL,
-    provider_name character varying NOT NULL,
-    label character varying NOT NULL,
-    identity jsonb DEFAULT '{}'::jsonb NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    policy_overrides jsonb DEFAULT '{}'::jsonb NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: recording_studio_webhooks_inbound_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.recording_studio_webhooks_inbound_events (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    endpoint_id uuid NOT NULL,
-    endpoint_token_id uuid NOT NULL,
-    provider_name character varying NOT NULL,
-    event_type character varying NOT NULL,
-    provider_event_id character varying,
-    payload_digest character varying NOT NULL,
-    deduplication_key character varying NOT NULL,
-    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
-    provenance jsonb DEFAULT '{}'::jsonb NOT NULL,
-    endpoint_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    token_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    policy_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
-    status character varying DEFAULT 'accepted'::character varying NOT NULL,
-    received_at timestamp(6) without time zone NOT NULL,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schema_migrations (
-    version character varying NOT NULL
-);
-
-
---
--- Name: users; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.users (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    email character varying DEFAULT ''::character varying NOT NULL,
-    encrypted_password character varying DEFAULT ''::character varying NOT NULL,
-    reset_password_token character varying,
-    reset_password_sent_at timestamp(6) without time zone,
-    remember_created_at timestamp(6) without time zone,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: workspaces; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.workspaces (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name character varying,
-    created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
-);
-
-
---
--- Name: admin_roots admin_roots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.admin_roots
-    ADD CONSTRAINT admin_roots_pkey PRIMARY KEY (id);
-
-
---
--- Name: ar_internal_metadata ar_internal_metadata_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.ar_internal_metadata
-    ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
-
-
---
 -- Name: recording_studio_billing_accounts recording_studio_billing_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_accounts
     ADD CONSTRAINT recording_studio_billing_accounts_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_adjustment_intents recording_studio_billing_adjustment_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
     ADD CONSTRAINT recording_studio_billing_adjustment_intents_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_billing_admins recording_studio_billing_billing_admins_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_admins
     ADD CONSTRAINT recording_studio_billing_billing_admins_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_billing_options recording_studio_billing_billing_options_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_options
     ADD CONSTRAINT recording_studio_billing_billing_options_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_checkout_attempts recording_studio_billing_checkout_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
     ADD CONSTRAINT recording_studio_billing_checkout_attempts_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_checkout_intent_items recording_studio_billing_checkout_intent_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intent_items
     ADD CONSTRAINT recording_studio_billing_checkout_intent_items_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_checkout_intents recording_studio_billing_checkout_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
     ADD CONSTRAINT recording_studio_billing_checkout_intents_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_commercial_manifests recording_studio_billing_commercial_manifests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
     ADD CONSTRAINT recording_studio_billing_commercial_manifests_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_commercial_publication_candidates recording_studio_billing_commercial_publication_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_commercial_publication_candidates
     ADD CONSTRAINT recording_studio_billing_commercial_publication_candidates_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_cost_cards recording_studio_billing_cost_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_cost_cards
     ADD CONSTRAINT recording_studio_billing_cost_cards_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_cost_rates recording_studio_billing_cost_rates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_cost_rates
     ADD CONSTRAINT recording_studio_billing_cost_rates_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries recording_studio_billing_credit_ledger_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT recording_studio_billing_credit_ledger_entries_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_entitlement_grants recording_studio_billing_entitlement_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT recording_studio_billing_entitlement_grants_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_feature_overrides
     ADD CONSTRAINT recording_studio_billing_feature_overrides_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_features recording_studio_billing_features_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_features
     ADD CONSTRAINT recording_studio_billing_features_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_financial_adjustments recording_studio_billing_financial_adjustments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_adjustments
     ADD CONSTRAINT recording_studio_billing_financial_adjustments_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_financial_command_attempts recording_studio_billing_financial_command_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_command_attempts
     ADD CONSTRAINT recording_studio_billing_financial_command_attempts_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_financial_commands recording_studio_billing_financial_commands_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_commands
     ADD CONSTRAINT recording_studio_billing_financial_commands_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_invoice_lines recording_studio_billing_invoice_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoice_lines
     ADD CONSTRAINT recording_studio_billing_invoice_lines_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_invoices recording_studio_billing_invoices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT recording_studio_billing_invoices_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_markets recording_studio_billing_markets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_markets
     ADD CONSTRAINT recording_studio_billing_markets_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_meter_aggregations recording_studio_billing_meter_aggregations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
     ADD CONSTRAINT recording_studio_billing_meter_aggregations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_meters recording_studio_billing_meters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_meters
     ADD CONSTRAINT recording_studio_billing_meters_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_overage_calculations recording_studio_billing_overage_calculations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_calculations
     ADD CONSTRAINT recording_studio_billing_overage_calculations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_overage_prices recording_studio_billing_overage_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_prices
     ADD CONSTRAINT recording_studio_billing_overage_prices_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_payment_allocations recording_studio_billing_payment_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payment_allocations
     ADD CONSTRAINT recording_studio_billing_payment_allocations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_payments recording_studio_billing_payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payments
     ADD CONSTRAINT recording_studio_billing_payments_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_plan_update_applications recording_studio_billing_plan_update_applications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_applications
     ADD CONSTRAINT recording_studio_billing_plan_update_applications_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_plan_update_runs recording_studio_billing_plan_update_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_runs
     ADD CONSTRAINT recording_studio_billing_plan_update_runs_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_plan_updates recording_studio_billing_plan_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_updates
     ADD CONSTRAINT recording_studio_billing_plan_updates_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_prices recording_studio_billing_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_prices
     ADD CONSTRAINT recording_studio_billing_prices_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_product_rules recording_studio_billing_product_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT recording_studio_billing_product_rules_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_products recording_studio_billing_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_products
     ADD CONSTRAINT recording_studio_billing_products_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_provider_accounts recording_studio_billing_provider_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_provider_accounts
     ADD CONSTRAINT recording_studio_billing_provider_accounts_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_provider_references recording_studio_billing_provider_references_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_provider_references
     ADD CONSTRAINT recording_studio_billing_provider_references_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_purchase_effects recording_studio_billing_purchase_effects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
     ADD CONSTRAINT recording_studio_billing_purchase_effects_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_purchases recording_studio_billing_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchases
     ADD CONSTRAINT recording_studio_billing_purchases_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rate_cards
     ADD CONSTRAINT recording_studio_billing_rate_cards_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements recording_studio_billing_rated_usage_settlements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT recording_studio_billing_rated_usage_settlements_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_rated_usages recording_studio_billing_rated_usages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usages
     ADD CONSTRAINT recording_studio_billing_rated_usages_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_rates recording_studio_billing_rates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rates
     ADD CONSTRAINT recording_studio_billing_rates_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_reconciliation_issues recording_studio_billing_reconciliation_issues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_reconciliation_issues
     ADD CONSTRAINT recording_studio_billing_reconciliation_issues_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_reconciliation_records recording_studio_billing_reconciliation_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_reconciliation_records
     ADD CONSTRAINT recording_studio_billing_reconciliation_records_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_refund_intents recording_studio_billing_refund_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT recording_studio_billing_refund_intents_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_refunds recording_studio_billing_refunds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refunds
     ADD CONSTRAINT recording_studio_billing_refunds_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents recording_studio_billing_subscription_change_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_change_intents
     ADD CONSTRAINT recording_studio_billing_subscription_change_intents_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions recording_studio_billing_subscription_item_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT recording_studio_billing_subscription_item_versions_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_subscription_items recording_studio_billing_subscription_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_items
     ADD CONSTRAINT recording_studio_billing_subscription_items_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_subscriptions recording_studio_billing_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscriptions
     ADD CONSTRAINT recording_studio_billing_subscriptions_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations recording_studio_billing_tax_calculations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT recording_studio_billing_tax_calculations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_allocations recording_studio_billing_usage_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allocations
     ADD CONSTRAINT recording_studio_billing_usage_allocations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_allowance_policies recording_studio_billing_usage_allowance_policies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allowance_policies
     ADD CONSTRAINT recording_studio_billing_usage_allowance_policies_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_corrections recording_studio_billing_usage_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_corrections
     ADD CONSTRAINT recording_studio_billing_usage_corrections_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_credit_allocations recording_studio_billing_usage_credit_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_allocations
     ADD CONSTRAINT recording_studio_billing_usage_credit_allocations_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_credit_grants recording_studio_billing_usage_credit_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_grants
     ADD CONSTRAINT recording_studio_billing_usage_credit_grants_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_events recording_studio_billing_usage_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_events
     ADD CONSTRAINT recording_studio_billing_usage_events_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries recording_studio_billing_usage_ledger_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT recording_studio_billing_usage_ledger_entries_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_periods recording_studio_billing_usage_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_periods
     ADD CONSTRAINT recording_studio_billing_usage_periods_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_units
     ADD CONSTRAINT recording_studio_billing_usage_units_pkey PRIMARY KEY (id);
 
-
---
 -- Name: recording_studio_billing_webhook_effects recording_studio_billing_webhook_effects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_webhook_effects
     ADD CONSTRAINT recording_studio_billing_webhook_effects_pkey PRIMARY KEY (id);
 
-
---
--- Name: recording_studio_events recording_studio_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_events
-    ADD CONSTRAINT recording_studio_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_recordings recording_studio_recordings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_recordings
-    ADD CONSTRAINT recording_studio_recordings_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_root_switchable_selections recording_studio_root_switchable_selections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_root_switchable_selections
-    ADD CONSTRAINT recording_studio_root_switchable_selections_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_webhooks_action_attempts recording_studio_webhooks_action_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_action_attempts
-    ADD CONSTRAINT recording_studio_webhooks_action_attempts_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_webhooks_endpoint_tokens recording_studio_webhooks_endpoint_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_endpoint_tokens
-    ADD CONSTRAINT recording_studio_webhooks_endpoint_tokens_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_webhooks_endpoints recording_studio_webhooks_endpoints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_endpoints
-    ADD CONSTRAINT recording_studio_webhooks_endpoints_pkey PRIMARY KEY (id);
-
-
---
--- Name: recording_studio_webhooks_inbound_events recording_studio_webhooks_inbound_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_inbound_events
-    ADD CONSTRAINT recording_studio_webhooks_inbound_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations
-    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
-
-
---
--- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
-
-
---
--- Name: workspaces workspaces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workspaces
-    ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
-
-
---
 -- Name: idx_on_account_recording_id_10ff0769e5; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_10ff0769e5 ON public.recording_studio_billing_usage_allowance_policies USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_1aba6ba035; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_1aba6ba035 ON public.recording_studio_billing_adjustment_intents USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_2171ed6580; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_2171ed6580 ON public.recording_studio_billing_credit_ledger_entries USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_3932840ef5; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_3932840ef5 ON public.recording_studio_billing_subscription_items USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_3fadc96c0d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_3fadc96c0d ON public.recording_studio_billing_rated_usages USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_40b0a22061; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_40b0a22061 ON public.recording_studio_billing_subscription_item_versions USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_513c128e1f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_513c128e1f ON public.recording_studio_billing_subscriptions USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_52268c115a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_52268c115a ON public.recording_studio_billing_subscription_change_intents USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_530b2ad4ba; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_530b2ad4ba ON public.recording_studio_billing_purchases USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_60eab6e700; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_60eab6e700 ON public.recording_studio_billing_purchase_effects USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_65f04aad25; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_65f04aad25 ON public.recording_studio_billing_usage_ledger_entries USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_6958c7ae61; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_6958c7ae61 ON public.recording_studio_billing_usage_periods USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_6fabd12b88; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_6fabd12b88 ON public.recording_studio_billing_usage_credit_grants USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_734f203c5c; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_734f203c5c ON public.recording_studio_billing_usage_allocations USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_78c80a89c5; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_78c80a89c5 ON public.recording_studio_billing_usage_events USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_8e401e15ba; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_8e401e15ba ON public.recording_studio_billing_checkout_intents USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_937d9dc223; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_937d9dc223 ON public.recording_studio_billing_financial_commands USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_9da7a86b69; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_9da7a86b69 ON public.recording_studio_billing_refund_intents USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_9e348b517e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_9e348b517e ON public.recording_studio_billing_entitlement_grants USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_b17008f7e2; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_b17008f7e2 ON public.recording_studio_billing_rated_usage_settlements USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_bf46d23ae6; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_bf46d23ae6 ON public.recording_studio_billing_feature_overrides USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_cb3ff602b6; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_cb3ff602b6 ON public.recording_studio_billing_meter_aggregations USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_cd6cb724a1; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_cd6cb724a1 ON public.recording_studio_billing_tax_calculations USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_d4af546da8; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_d4af546da8 ON public.recording_studio_billing_invoices USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_account_recording_id_df8c8b4dfc; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_account_recording_id_df8c8b4dfc ON public.recording_studio_billing_payments USING btree (account_recording_id);
 
-
---
 -- Name: idx_on_adjustment_intent_id_1b4251eb93; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_adjustment_intent_id_1b4251eb93 ON public.recording_studio_billing_financial_adjustments USING btree (adjustment_intent_id);
 
-
---
 -- Name: idx_on_billing_admin_recording_id_e9c004ac4f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_billing_admin_recording_id_e9c004ac4f ON public.recording_studio_billing_provider_accounts USING btree (billing_admin_recording_id);
 
-
---
 -- Name: idx_on_billing_option_recording_id_4b4b3a8dfa; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_billing_option_recording_id_4b4b3a8dfa ON public.recording_studio_billing_overage_prices USING btree (billing_option_recording_id);
 
-
---
 -- Name: idx_on_billing_option_recording_id_df8562f2e7; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_billing_option_recording_id_df8562f2e7 ON public.recording_studio_billing_plan_updates USING btree (billing_option_recording_id);
 
-
---
 -- Name: idx_on_billing_option_recording_id_f4dd8ca6e3; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_billing_option_recording_id_f4dd8ca6e3 ON public.recording_studio_billing_prices USING btree (billing_option_recording_id);
 
-
---
 -- Name: idx_on_checkout_intent_id_3bbe25d7ff; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_checkout_intent_id_3bbe25d7ff ON public.recording_studio_billing_checkout_intent_items USING btree (checkout_intent_id);
 
-
---
 -- Name: idx_on_checkout_intent_id_3c0ba4cf49; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_checkout_intent_id_3c0ba4cf49 ON public.recording_studio_billing_checkout_attempts USING btree (checkout_intent_id);
 
-
---
 -- Name: idx_on_checkout_intent_id_60a7fdca1d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_checkout_intent_id_60a7fdca1d ON public.recording_studio_billing_subscription_item_versions USING btree (checkout_intent_id);
 
-
---
 -- Name: idx_on_commercial_manifest_id_c6e0df96a7; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_commercial_manifest_id_c6e0df96a7 ON public.recording_studio_billing_tax_calculations USING btree (commercial_manifest_id);
 
-
---
 -- Name: idx_on_cost_card_recording_id_f59059cf73; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_cost_card_recording_id_f59059cf73 ON public.recording_studio_billing_cost_rates USING btree (cost_card_recording_id);
 
-
---
 -- Name: idx_on_effective_at_7e599d09df; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_effective_at_7e599d09df ON public.recording_studio_billing_commercial_publication_candidates USING btree (effective_at);
 
-
---
 -- Name: idx_on_feature_recording_id_6dcf40615b; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_feature_recording_id_6dcf40615b ON public.recording_studio_billing_feature_overrides USING btree (feature_recording_id);
 
-
---
 -- Name: idx_on_financial_command_attempt_id_0ab43bb24a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_attempt_id_0ab43bb24a ON public.recording_studio_billing_checkout_attempts USING btree (financial_command_attempt_id);
 
-
---
 -- Name: idx_on_financial_command_id_0ee66789ae; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_0ee66789ae ON public.recording_studio_billing_rated_usage_settlements USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_144b6e8c5b; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_144b6e8c5b ON public.recording_studio_billing_checkout_intents USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_17822cb411; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_17822cb411 ON public.recording_studio_billing_reconciliation_issues USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_2a8556545f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_2a8556545f ON public.recording_studio_billing_reconciliation_records USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_3a27e3d203; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_3a27e3d203 ON public.recording_studio_billing_financial_adjustments USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_48ec1b5e2a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_48ec1b5e2a ON public.recording_studio_billing_invoices USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_6b7f641e35; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_6b7f641e35 ON public.recording_studio_billing_checkout_attempts USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_714c40ec67; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_714c40ec67 ON public.recording_studio_billing_usage_corrections USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_7960b6548f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_7960b6548f ON public.recording_studio_billing_provider_references USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_805027e9f2; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_805027e9f2 ON public.recording_studio_billing_webhook_effects USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_81fdfb0193; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_81fdfb0193 ON public.recording_studio_billing_financial_command_attempts USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_97f8b55c4d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_97f8b55c4d ON public.recording_studio_billing_refund_intents USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_ae8a6bd007; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_ae8a6bd007 ON public.recording_studio_billing_subscription_change_intents USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_c5e92b5d40; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_c5e92b5d40 ON public.recording_studio_billing_adjustment_intents USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_df93af6f81; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_df93af6f81 ON public.recording_studio_billing_tax_calculations USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_financial_command_id_efe8bfb786; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_financial_command_id_efe8bfb786 ON public.recording_studio_billing_payments USING btree (financial_command_id);
 
-
---
 -- Name: idx_on_invoice_id_080d3004ae; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_invoice_id_080d3004ae ON public.recording_studio_billing_payment_allocations USING btree (invoice_id);
 
-
---
 -- Name: idx_on_invoice_id_e4d1a9c280; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_invoice_id_e4d1a9c280 ON public.recording_studio_billing_financial_adjustments USING btree (invoice_id);
 
-
---
 -- Name: idx_on_invoice_id_edc1e8c055; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_invoice_id_edc1e8c055 ON public.recording_studio_billing_adjustment_intents USING btree (invoice_id);
 
-
---
 -- Name: idx_on_late_usage_period_id_d90d84058e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_late_usage_period_id_d90d84058e ON public.recording_studio_billing_usage_events USING btree (late_usage_period_id);
 
-
---
 -- Name: idx_on_manifest_digest_b5d415588d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_on_manifest_digest_b5d415588d ON public.recording_studio_billing_commercial_manifests USING btree (manifest_digest);
 
-
---
 -- Name: idx_on_market_recording_id_2ba99ee38f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_market_recording_id_2ba99ee38f ON public.recording_studio_billing_overage_prices USING btree (market_recording_id);
 
-
---
 -- Name: idx_on_meter_aggregation_id_e92f2d7213; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_meter_aggregation_id_e92f2d7213 ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
 
-
---
 -- Name: idx_on_overage_price_recording_id_2ef7fea3a9; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_overage_price_recording_id_2ef7fea3a9 ON public.recording_studio_billing_overage_calculations USING btree (overage_price_recording_id);
 
-
---
 -- Name: idx_on_payment_id_08ef28acb2; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_payment_id_08ef28acb2 ON public.recording_studio_billing_payment_allocations USING btree (payment_id);
 
-
---
 -- Name: idx_on_plan_update_id_6ed2afbda9; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_plan_update_id_6ed2afbda9 ON public.recording_studio_billing_plan_update_runs USING btree (plan_update_id);
 
-
---
 -- Name: idx_on_plan_update_id_9936e2a156; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_plan_update_id_9936e2a156 ON public.recording_studio_billing_plan_update_applications USING btree (plan_update_id);
 
-
---
 -- Name: idx_on_plan_update_run_id_b15568ea7c; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_plan_update_run_id_b15568ea7c ON public.recording_studio_billing_plan_update_applications USING btree (plan_update_run_id);
 
-
---
 -- Name: idx_on_product_recording_id_387e136700; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_product_recording_id_387e136700 ON public.recording_studio_billing_billing_options USING btree (product_recording_id);
 
-
---
 -- Name: idx_on_product_recording_id_b3abe2c34c; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_product_recording_id_b3abe2c34c ON public.recording_studio_billing_features USING btree (product_recording_id);
 
-
---
 -- Name: idx_on_product_recording_id_cca2c7df22; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_product_recording_id_cca2c7df22 ON public.recording_studio_billing_product_rules USING btree (product_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_50c2346f3a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_50c2346f3a ON public.recording_studio_billing_reconciliation_issues USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_56b2cacbb5; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_56b2cacbb5 ON public.recording_studio_billing_provider_references USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_75eb593078; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_75eb593078 ON public.recording_studio_billing_products USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_829622d336; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_829622d336 ON public.recording_studio_billing_rate_cards USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_917bf5f52e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_917bf5f52e ON public.recording_studio_billing_markets USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_9cd826d9a7; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_9cd826d9a7 ON public.recording_studio_billing_rated_usage_settlements USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_b9ff1578aa; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_b9ff1578aa ON public.recording_studio_billing_webhook_effects USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_d0aeb02284; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_d0aeb02284 ON public.recording_studio_billing_usage_units USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_de683655d9; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_de683655d9 ON public.recording_studio_billing_cost_cards USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_account_recording_id_e7e6d6a62d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_account_recording_id_e7e6d6a62d ON public.recording_studio_billing_financial_commands USING btree (provider_account_recording_id);
 
-
---
 -- Name: idx_on_provider_reference_id_877223171a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_provider_reference_id_877223171a ON public.recording_studio_billing_webhook_effects USING btree (provider_reference_id);
 
-
---
 -- Name: idx_on_purchase_effect_id_1cf8fc1656; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_purchase_effect_id_1cf8fc1656 ON public.recording_studio_billing_credit_ledger_entries USING btree (purchase_effect_id);
 
-
---
 -- Name: idx_on_rated_usage_id_7de35e3caa; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_rated_usage_id_7de35e3caa ON public.recording_studio_billing_usage_allocations USING btree (rated_usage_id);
 
-
---
 -- Name: idx_on_rated_usage_id_93c519e44f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_rated_usage_id_93c519e44f ON public.recording_studio_billing_rated_usage_settlements USING btree (rated_usage_id);
 
-
---
 -- Name: idx_on_root_recording_id_107421795e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_107421795e ON public.recording_studio_billing_subscription_item_versions USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_12ea494079; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_12ea494079 ON public.recording_studio_billing_usage_credit_grants USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_162489a73e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_162489a73e ON public.recording_studio_billing_meter_aggregations USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_251c7974b6; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_251c7974b6 ON public.recording_studio_billing_usage_ledger_entries USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_3e16fc4553; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_3e16fc4553 ON public.recording_studio_billing_rated_usage_settlements USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_52395a8cdb; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_52395a8cdb ON public.recording_studio_billing_subscriptions USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_5ca6fd8892; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_5ca6fd8892 ON public.recording_studio_billing_subscription_change_intents USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_60cb5f5f5f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_60cb5f5f5f ON public.recording_studio_billing_refund_intents USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_7a0cf6614f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_7a0cf6614f ON public.recording_studio_billing_subscription_items USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_88b3d7e1ce; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_88b3d7e1ce ON public.recording_studio_billing_usage_allowance_policies USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_90af0f36c2; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_90af0f36c2 ON public.recording_studio_billing_usage_events USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_9d3d42ce71; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_9d3d42ce71 ON public.recording_studio_billing_credit_ledger_entries USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_9fc1094773; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_9fc1094773 ON public.recording_studio_billing_rated_usages USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_c1ebf50973; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_c1ebf50973 ON public.recording_studio_billing_financial_commands USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_c9449b0ded; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_c9449b0ded ON public.recording_studio_billing_tax_calculations USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_cdf921461c; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_cdf921461c ON public.recording_studio_billing_usage_allocations USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_d0e6016597; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_d0e6016597 ON public.recording_studio_billing_usage_periods USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_d63849b28a; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_d63849b28a ON public.recording_studio_billing_commercial_manifests USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_d9bf1cf3de; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_d9bf1cf3de ON public.recording_studio_billing_entitlement_grants USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_e8f7404b06; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_e8f7404b06 ON public.recording_studio_billing_purchase_effects USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_f2e0c629cd; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_f2e0c629cd ON public.recording_studio_billing_adjustment_intents USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_root_recording_id_f7b40e9183; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_root_recording_id_f7b40e9183 ON public.recording_studio_billing_checkout_intents USING btree (root_recording_id);
 
-
---
 -- Name: idx_on_subscription_change_intent_id_31703813d4; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_change_intent_id_31703813d4 ON public.recording_studio_billing_plan_update_applications USING btree (subscription_change_intent_id);
 
-
---
 -- Name: idx_on_subscription_id_0945def460; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_id_0945def460 ON public.recording_studio_billing_plan_update_applications USING btree (subscription_id);
 
-
---
 -- Name: idx_on_subscription_id_8316ef20d6; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_id_8316ef20d6 ON public.recording_studio_billing_subscription_change_intents USING btree (subscription_id);
 
-
---
 -- Name: idx_on_subscription_id_bcde3897cb; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_id_bcde3897cb ON public.recording_studio_billing_subscription_items USING btree (subscription_id);
 
-
---
 -- Name: idx_on_subscription_id_eca2627d32; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_id_eca2627d32 ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_id);
 
-
---
 -- Name: idx_on_subscription_item_id_4e7863dc93; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_subscription_item_id_4e7863dc93 ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_item_id);
 
-
---
 -- Name: idx_on_supersedes_id_23d1badc14; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_supersedes_id_23d1badc14 ON public.recording_studio_billing_usage_corrections USING btree (supersedes_id);
 
-
---
 -- Name: idx_on_supersedes_id_44a28e5061; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_supersedes_id_44a28e5061 ON public.recording_studio_billing_usage_ledger_entries USING btree (supersedes_id);
 
-
---
 -- Name: idx_on_supersedes_id_d934e98c73; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_supersedes_id_d934e98c73 ON public.recording_studio_billing_tax_calculations USING btree (supersedes_id);
 
-
---
 -- Name: idx_on_target_product_recording_id_2d78d41b32; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_target_product_recording_id_2d78d41b32 ON public.recording_studio_billing_product_rules USING btree (target_product_recording_id);
 
-
---
 -- Name: idx_on_tax_calculation_id_957ee81be9; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_tax_calculation_id_957ee81be9 ON public.recording_studio_billing_usage_corrections USING btree (tax_calculation_id);
 
-
---
 -- Name: idx_on_usage_allocation_id_2b30897f0c; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_allocation_id_2b30897f0c ON public.recording_studio_billing_usage_corrections USING btree (usage_allocation_id);
 
-
---
 -- Name: idx_on_usage_allocation_id_796b8d3d79; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_allocation_id_796b8d3d79 ON public.recording_studio_billing_usage_ledger_entries USING btree (usage_allocation_id);
 
-
---
 -- Name: idx_on_usage_allocation_id_d1a92c7097; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_allocation_id_d1a92c7097 ON public.recording_studio_billing_overage_calculations USING btree (usage_allocation_id);
 
-
---
 -- Name: idx_on_usage_allocation_id_db22072467; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_allocation_id_db22072467 ON public.recording_studio_billing_usage_credit_allocations USING btree (usage_allocation_id);
 
-
---
 -- Name: idx_on_usage_credit_grant_id_40ac495e1d; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_credit_grant_id_40ac495e1d ON public.recording_studio_billing_usage_credit_allocations USING btree (usage_credit_grant_id);
 
-
---
 -- Name: idx_on_usage_credit_grant_id_47564c5c68; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_credit_grant_id_47564c5c68 ON public.recording_studio_billing_usage_ledger_entries USING btree (usage_credit_grant_id);
 
-
---
 -- Name: idx_on_usage_event_id_5ee4df7b33; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_event_id_5ee4df7b33 ON public.recording_studio_billing_credit_ledger_entries USING btree (usage_event_id);
 
-
---
 -- Name: idx_on_usage_period_id_3387c0b67f; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_period_id_3387c0b67f ON public.recording_studio_billing_rated_usage_settlements USING btree (usage_period_id);
 
-
---
 -- Name: idx_on_usage_period_id_540044dcc8; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_period_id_540044dcc8 ON public.recording_studio_billing_usage_ledger_entries USING btree (usage_period_id);
 
-
---
 -- Name: idx_on_usage_period_id_94c38fef2e; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_period_id_94c38fef2e ON public.recording_studio_billing_usage_allocations USING btree (usage_period_id);
 
-
---
 -- Name: idx_on_usage_period_id_e3225ce305; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_period_id_e3225ce305 ON public.recording_studio_billing_usage_allowance_policies USING btree (usage_period_id);
 
-
---
 -- Name: idx_on_usage_unit_recording_id_20bbb0eead; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_unit_recording_id_20bbb0eead ON public.recording_studio_billing_meters USING btree (usage_unit_recording_id);
 
-
---
 -- Name: idx_on_usage_unit_recording_id_676a199a57; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_unit_recording_id_676a199a57 ON public.recording_studio_billing_cost_rates USING btree (usage_unit_recording_id);
 
-
---
 -- Name: idx_on_usage_unit_recording_id_737a9cb844; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_unit_recording_id_737a9cb844 ON public.recording_studio_billing_rates USING btree (usage_unit_recording_id);
 
-
---
 -- Name: idx_on_usage_unit_recording_id_9e76a066d4; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_usage_unit_recording_id_9e76a066d4 ON public.recording_studio_billing_overage_prices USING btree (usage_unit_recording_id);
 
-
---
 -- Name: idx_rs_billing_account_root_history; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_account_root_history ON public.recording_studio_billing_accounts USING btree (root_recording_id);
 
-
---
 -- Name: idx_rs_billing_adjustment_intent_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_adjustment_intent_idempotency ON public.recording_studio_billing_adjustment_intents USING btree (root_recording_id, local_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_adjustment_projection; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_adjustment_projection ON public.recording_studio_billing_financial_adjustments USING btree (adjustment_intent_id);
 
-
---
 -- Name: idx_rs_billing_admin_root_history; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_admin_root_history ON public.recording_studio_billing_billing_admins USING btree (root_recording_id);
 
-
---
 -- Name: idx_rs_billing_checkout_attempt_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_checkout_attempt_number ON public.recording_studio_billing_checkout_attempts USING btree (checkout_intent_id, attempt_number);
 
-
---
 -- Name: idx_rs_billing_checkout_intent_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_checkout_intent_idempotency ON public.recording_studio_billing_checkout_intents USING btree (root_recording_id, local_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_checkout_items_option; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_checkout_items_option ON public.recording_studio_billing_checkout_intent_items USING btree (checkout_intent_id, billing_option_recording_id);
 
-
---
 -- Name: idx_rs_billing_command_attempt_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_command_attempt_number ON public.recording_studio_billing_financial_command_attempts USING btree (financial_command_id, attempt_number);
 
-
---
 -- Name: idx_rs_billing_commands_local_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_commands_local_idempotency ON public.recording_studio_billing_financial_commands USING btree (root_recording_id, local_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_commands_operation; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_commands_operation ON public.recording_studio_billing_financial_commands USING btree (operation_id);
 
-
---
 -- Name: idx_rs_billing_commands_pending_work; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_commands_pending_work ON public.recording_studio_billing_financial_commands USING btree (created_at) WHERE ((state)::text = 'pending'::text);
 
-
---
 -- Name: idx_rs_billing_commands_provider_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_commands_provider_idempotency ON public.recording_studio_billing_financial_commands USING btree (provider_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_commands_reconciliation_work; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_commands_reconciliation_work ON public.recording_studio_billing_financial_commands USING btree (updated_at) WHERE (((state)::text = 'requires_reconciliation'::text) OR ((reconciliation_state)::text = 'pending'::text));
 
-
---
 -- Name: idx_rs_billing_commands_stale_processing; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_commands_stale_processing ON public.recording_studio_billing_financial_commands USING btree (lease_expires_at) WHERE ((state)::text = 'processing'::text);
 
-
---
 -- Name: idx_rs_billing_credit_debit_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_credit_debit_idempotency ON public.recording_studio_billing_credit_ledger_entries USING btree (root_recording_id, idempotency_key) WHERE ((direction)::text = 'debit'::text);
 
-
---
 -- Name: idx_rs_billing_credit_ledger_balance; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_credit_ledger_balance ON public.recording_studio_billing_credit_ledger_entries USING btree (root_recording_id, account_recording_id, credit_key);
 
-
---
 -- Name: idx_rs_billing_credit_ledger_effect_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_effect_key ON public.recording_studio_billing_credit_ledger_entries USING btree (purchase_effect_id, credit_key);
 
-
---
 -- Name: idx_rs_billing_credit_ledger_usage_event; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_usage_event ON public.recording_studio_billing_credit_ledger_entries USING btree (usage_event_id);
 
-
---
 -- Name: idx_rs_billing_entitlement_grant_source_feature; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_entitlement_grant_source_feature ON public.recording_studio_billing_entitlement_grants USING btree (root_recording_id, source_type, source_id, feature_key);
 
-
---
 -- Name: idx_rs_billing_entitlement_grants_access; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_entitlement_grants_access ON public.recording_studio_billing_entitlement_grants USING btree (root_recording_id, account_recording_id, feature_key);
 
-
---
 -- Name: idx_rs_billing_meter_aggregation_input; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_meter_aggregation_input ON public.recording_studio_billing_meter_aggregations USING btree (root_recording_id, account_recording_id, meter_recording_id, window_starts_at, window_ends_at, manifest_digest, input_digest);
 
-
---
 -- Name: idx_rs_billing_one_account_per_root; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_one_account_per_root ON public.recording_studio_recordings USING btree (root_recording_id) WHERE ((recordable_type)::text = 'RecordingStudioBilling::Account'::text);
 
-
---
 -- Name: idx_rs_billing_one_admin_per_root; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_one_admin_per_root ON public.recording_studio_recordings USING btree (root_recording_id) WHERE ((recordable_type)::text = 'RecordingStudioBilling::BillingAdmin'::text);
 
-
---
 -- Name: idx_rs_billing_one_processing_attempt; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_one_processing_attempt ON public.recording_studio_billing_financial_command_attempts USING btree (financial_command_id) WHERE (((state)::text = 'processing'::text) AND (completed_at IS NULL));
 
-
---
 -- Name: idx_rs_billing_overage_calculation_allocation; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_overage_calculation_allocation ON public.recording_studio_billing_overage_calculations USING btree (usage_allocation_id);
 
-
---
 -- Name: idx_rs_billing_payment_command; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_payment_command ON public.recording_studio_billing_payments USING btree (financial_command_id);
 
-
---
 -- Name: idx_rs_billing_plan_update_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_plan_update_idempotency ON public.recording_studio_billing_plan_updates USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL);
 
-
---
 -- Name: idx_rs_billing_plan_update_run_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_plan_update_run_idempotency ON public.recording_studio_billing_plan_update_runs USING btree (plan_update_id, idempotency_key);
 
-
---
 -- Name: idx_rs_billing_plan_update_subscription; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_plan_update_subscription ON public.recording_studio_billing_plan_update_applications USING btree (plan_update_id, subscription_id);
 
-
---
 -- Name: idx_rs_billing_provider_reference_scoped_identity; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_provider_reference_scoped_identity ON public.recording_studio_billing_provider_references USING btree (provider_account_recording_id, environment, remote_type, remote_id);
 
-
---
 -- Name: idx_rs_billing_purchase_checkout_item; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_purchase_checkout_item ON public.recording_studio_billing_purchases USING btree (checkout_intent_item_id);
 
-
---
 -- Name: idx_rs_billing_purchase_effect_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_purchase_effect_idempotency ON public.recording_studio_billing_purchase_effects USING btree (root_recording_id, idempotency_key);
 
-
---
 -- Name: idx_rs_billing_rated_usage_aggregation; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_rated_usage_aggregation ON public.recording_studio_billing_rated_usages USING btree (meter_aggregation_id);
 
-
---
 -- Name: idx_rs_billing_reconciliation_issue_history; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_reconciliation_issue_history ON public.recording_studio_billing_reconciliation_issues USING btree (financial_command_id, kind, created_at);
 
-
---
 -- Name: idx_rs_billing_reconciliation_runs; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_reconciliation_runs ON public.recording_studio_billing_reconciliation_records USING btree (financial_command_id, created_at);
 
-
---
 -- Name: idx_rs_billing_refund_intent_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_refund_intent_idempotency ON public.recording_studio_billing_refund_intents USING btree (root_recording_id, local_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_refund_projection; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_refund_projection ON public.recording_studio_billing_refunds USING btree (refund_intent_id);
 
-
---
 -- Name: idx_rs_billing_settlement_command; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_settlement_command ON public.recording_studio_billing_rated_usage_settlements USING btree (financial_command_id);
 
-
---
 -- Name: idx_rs_billing_subscription_change_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_change_idempotency ON public.recording_studio_billing_subscription_change_intents USING btree (root_recording_id, local_idempotency_key);
 
-
---
 -- Name: idx_rs_billing_subscription_execution_group; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_execution_group ON public.recording_studio_billing_subscriptions USING btree (root_recording_id, account_recording_id, execution_group_fingerprint);
 
-
---
 -- Name: idx_rs_billing_subscription_item_checkout_item; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_item_checkout_item ON public.recording_studio_billing_subscription_item_versions USING btree (checkout_intent_item_id);
 
-
---
 -- Name: idx_rs_billing_subscription_item_line; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_item_line ON public.recording_studio_billing_subscription_items USING btree (subscription_id, line_key);
 
-
---
 -- Name: idx_rs_billing_subscription_item_line_version; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_item_line_version ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_id, line_key, version_number);
 
-
---
 -- Name: idx_rs_billing_subscription_item_version; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscription_item_version ON public.recording_studio_billing_subscription_item_versions USING btree (subscription_item_id, version_number);
 
-
---
 -- Name: idx_rs_billing_subscriptions_identifier; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_subscriptions_identifier ON public.recording_studio_billing_subscriptions USING btree (identifier);
 
-
---
 -- Name: idx_rs_billing_tax_command_revision; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_tax_command_revision ON public.recording_studio_billing_tax_calculations USING btree (financial_command_id, revision_number);
 
-
---
 -- Name: idx_rs_billing_tax_fingerprint; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_tax_fingerprint ON public.recording_studio_billing_tax_calculations USING btree (request_fingerprint);
 
-
---
 -- Name: idx_rs_billing_tax_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_tax_idempotency ON public.recording_studio_billing_tax_calculations USING btree (root_recording_id, idempotency_key, revision_number);
 
-
---
 -- Name: idx_rs_billing_unresolved_webhook_receipt; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_unresolved_webhook_receipt ON public.recording_studio_billing_reconciliation_issues USING btree (provider_account_recording_id, environment, inbound_event_id, handler_name, action_version, kind) WHERE (financial_command_id IS NULL);
 
-
---
 -- Name: idx_rs_billing_usage_allocation_rated_usage; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_allocation_rated_usage ON public.recording_studio_billing_usage_allocations USING btree (rated_usage_id);
 
-
---
 -- Name: idx_rs_billing_usage_allowance_policy; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_allowance_policy ON public.recording_studio_billing_usage_allowance_policies USING btree (usage_period_id, usage_key, effective_at);
 
-
---
 -- Name: idx_rs_billing_usage_correction_command; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_correction_command ON public.recording_studio_billing_usage_corrections USING btree (financial_command_id) WHERE (financial_command_id IS NOT NULL);
 
-
---
 -- Name: idx_rs_billing_usage_correction_kind; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_usage_correction_kind ON public.recording_studio_billing_usage_corrections USING btree (usage_allocation_id, correction_kind);
 
-
---
 -- Name: idx_rs_billing_usage_credit_allocation_unique; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_credit_allocation_unique ON public.recording_studio_billing_usage_credit_allocations USING btree (usage_allocation_id, usage_credit_grant_id);
 
-
---
 -- Name: idx_rs_billing_usage_credit_grant_source; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_credit_grant_source ON public.recording_studio_billing_usage_credit_grants USING btree (root_recording_id, source_key);
 
-
---
 -- Name: idx_rs_billing_usage_credit_grants_active; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_usage_credit_grants_active ON public.recording_studio_billing_usage_credit_grants USING btree (root_recording_id, account_recording_id, credit_key, effective_at, expires_at);
 
-
---
 -- Name: idx_rs_billing_usage_event_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_event_idempotency ON public.recording_studio_billing_usage_events USING btree (root_recording_id, idempotency_key);
 
-
---
 -- Name: idx_rs_billing_usage_event_total; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_rs_billing_usage_event_total ON public.recording_studio_billing_usage_events USING btree (root_recording_id, account_recording_id, usage_key, occurred_at);
 
-
---
 -- Name: idx_rs_billing_usage_ledger_allocation_entry; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_ledger_allocation_entry ON public.recording_studio_billing_usage_ledger_entries USING btree (usage_allocation_id, entry_kind, usage_credit_grant_id) WHERE (usage_allocation_id IS NOT NULL);
 
-
---
 -- Name: idx_rs_billing_usage_ledger_period_sequence; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_ledger_period_sequence ON public.recording_studio_billing_usage_ledger_entries USING btree (usage_period_id, sequence);
 
-
---
 -- Name: idx_rs_billing_usage_period_scope; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_period_scope ON public.recording_studio_billing_usage_periods USING btree (root_recording_id, account_recording_id, usage_key, starts_at, ends_at);
 
-
---
 -- Name: idx_rs_billing_usage_settlement_period; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_usage_settlement_period ON public.recording_studio_billing_rated_usage_settlements USING btree (usage_period_id);
 
-
---
 -- Name: idx_rs_billing_webhook_effect_receipt_identity; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_webhook_effect_receipt_identity ON public.recording_studio_billing_webhook_effects USING btree (inbound_event_id, provider_account_recording_id, environment, handler_name, action_version);
 
-
---
--- Name: idx_rs_root_switchable_actor_device_scope; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_rs_root_switchable_actor_device_scope ON public.recording_studio_root_switchable_selections USING btree (actor_type, actor_id, device_key, scope_key) WHERE (actor_id IS NOT NULL);
-
-
---
--- Name: idx_rs_root_switchable_anonymous_device_scope; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_rs_root_switchable_anonymous_device_scope ON public.recording_studio_root_switchable_selections USING btree (device_key, scope_key) WHERE (actor_id IS NULL);
-
-
---
--- Name: idx_rs_root_switchable_root_recording; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_rs_root_switchable_root_recording ON public.recording_studio_root_switchable_selections USING btree (root_recording_id);
-
-
---
--- Name: index_admin_roots_on_name; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_admin_roots_on_name ON public.admin_roots USING btree (name);
-
-
---
 -- Name: index_recording_studio_billing_invoice_lines_on_invoice_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_invoice_lines_on_invoice_id ON public.recording_studio_billing_invoice_lines USING btree (invoice_id);
 
-
---
 -- Name: index_recording_studio_billing_invoices_on_purchase_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_invoices_on_purchase_id ON public.recording_studio_billing_invoices USING btree (purchase_id);
 
-
---
 -- Name: index_recording_studio_billing_invoices_on_root_recording_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_invoices_on_root_recording_id ON public.recording_studio_billing_invoices USING btree (root_recording_id);
 
-
---
 -- Name: index_recording_studio_billing_invoices_on_subscription_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_invoices_on_subscription_id ON public.recording_studio_billing_invoices USING btree (subscription_id);
 
-
---
 -- Name: index_recording_studio_billing_payments_on_invoice_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_payments_on_invoice_id ON public.recording_studio_billing_payments USING btree (invoice_id);
 
-
---
 -- Name: index_recording_studio_billing_payments_on_root_recording_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_payments_on_root_recording_id ON public.recording_studio_billing_payments USING btree (root_recording_id);
 
-
---
 -- Name: index_recording_studio_billing_prices_on_market_recording_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_prices_on_market_recording_id ON public.recording_studio_billing_prices USING btree (market_recording_id);
 
-
---
 -- Name: index_recording_studio_billing_purchase_effects_on_purchase_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_purchase_effects_on_purchase_id ON public.recording_studio_billing_purchase_effects USING btree (purchase_id);
 
-
---
 -- Name: index_recording_studio_billing_purchases_on_checkout_intent_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_purchases_on_checkout_intent_id ON public.recording_studio_billing_purchases USING btree (checkout_intent_id);
 
-
---
 -- Name: index_recording_studio_billing_purchases_on_root_recording_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_purchases_on_root_recording_id ON public.recording_studio_billing_purchases USING btree (root_recording_id);
 
-
---
 -- Name: index_recording_studio_billing_rates_on_rate_card_recording_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_rates_on_rate_card_recording_id ON public.recording_studio_billing_rates USING btree (rate_card_recording_id);
 
-
---
 -- Name: index_recording_studio_billing_refund_intents_on_payment_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_refund_intents_on_payment_id ON public.recording_studio_billing_refund_intents USING btree (payment_id);
 
-
---
 -- Name: index_recording_studio_billing_refunds_on_financial_command_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_refunds_on_financial_command_id ON public.recording_studio_billing_refunds USING btree (financial_command_id);
 
-
---
 -- Name: index_recording_studio_billing_refunds_on_payment_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_refunds_on_payment_id ON public.recording_studio_billing_refunds USING btree (payment_id);
 
-
---
 -- Name: index_recording_studio_billing_refunds_on_refund_intent_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_recording_studio_billing_refunds_on_refund_intent_id ON public.recording_studio_billing_refunds USING btree (refund_intent_id);
 
-
---
--- Name: index_recording_studio_events_on_recording_and_idempotency_key; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_recording_studio_events_on_recording_and_idempotency_key ON public.recording_studio_events USING btree (recording_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
-
-
---
--- Name: index_recording_studio_events_on_recording_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_events_on_recording_id ON public.recording_studio_events USING btree (recording_id);
-
-
---
--- Name: index_recording_studio_recordings_on_parent_recording_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_recordings_on_parent_recording_id ON public.recording_studio_recordings USING btree (parent_recording_id);
-
-
---
--- Name: index_recording_studio_recordings_on_recordable; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_recordings_on_recordable ON public.recording_studio_recordings USING btree (recordable_type, recordable_id);
-
-
---
--- Name: index_recording_studio_recordings_on_recordable_parent_trashed; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_recordings_on_recordable_parent_trashed ON public.recording_studio_recordings USING btree (recordable_type, recordable_id, parent_recording_id, trashed_at);
-
-
---
--- Name: index_recording_studio_webhooks_endpoint_tokens_on_digest; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_webhooks_endpoint_tokens_on_digest ON public.recording_studio_webhooks_endpoint_tokens USING btree (digest);
-
-
---
--- Name: index_recording_studio_webhooks_endpoints_on_provider_name; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_recording_studio_webhooks_endpoints_on_provider_name ON public.recording_studio_webhooks_endpoints USING btree (provider_name);
-
-
---
--- Name: index_rs_recordings_on_root_recording; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rs_recordings_on_root_recording ON public.recording_studio_recordings USING btree (root_recording_id);
-
-
---
--- Name: index_rsw_attempts_on_event_and_action; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_rsw_attempts_on_event_and_action ON public.recording_studio_webhooks_action_attempts USING btree (inbound_event_id, action_name);
-
-
---
--- Name: index_rsw_attempts_on_event_and_position; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_rsw_attempts_on_event_and_position ON public.recording_studio_webhooks_action_attempts USING btree (inbound_event_id, execution_position);
-
-
---
--- Name: index_rsw_attempts_on_event_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_attempts_on_event_id ON public.recording_studio_webhooks_action_attempts USING btree (inbound_event_id);
-
-
---
--- Name: index_rsw_attempts_on_status_and_next_attempt; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_attempts_on_status_and_next_attempt ON public.recording_studio_webhooks_action_attempts USING btree (status, next_attempt_at);
-
-
---
--- Name: index_rsw_endpoints_on_provider_and_recording; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_endpoints_on_provider_and_recording ON public.recording_studio_webhooks_endpoints USING btree (provider_name, recording_studio_recording_id);
-
-
---
--- Name: index_rsw_endpoints_on_recording_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_endpoints_on_recording_id ON public.recording_studio_webhooks_endpoints USING btree (recording_studio_recording_id);
-
-
---
--- Name: index_rsw_events_on_endpoint_and_deduplication; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_rsw_events_on_endpoint_and_deduplication ON public.recording_studio_webhooks_inbound_events USING btree (endpoint_id, deduplication_key);
-
-
---
--- Name: index_rsw_events_on_endpoint_token_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_events_on_endpoint_token_id ON public.recording_studio_webhooks_inbound_events USING btree (endpoint_token_id);
-
-
---
--- Name: index_rsw_events_on_provider_event_received; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_events_on_provider_event_received ON public.recording_studio_webhooks_inbound_events USING btree (provider_name, event_type, received_at);
-
-
---
--- Name: index_rsw_tokens_on_endpoint_and_active_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_rsw_tokens_on_endpoint_and_active_at ON public.recording_studio_webhooks_endpoint_tokens USING btree (endpoint_id, active_at);
-
-
---
--- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_users_on_email ON public.users USING btree (email);
-
-
---
--- Name: index_users_on_reset_password_token; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_users_on_reset_password_token ON public.users USING btree (reset_password_token);
-
-
---
 -- Name: rs_billing_publication_candidate_identity; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX rs_billing_publication_candidate_identity ON public.recording_studio_billing_commercial_publication_candidates USING btree (root_recording_id, effective_at);
 
-
---
 -- Name: rs_billing_publication_candidates_digest; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX rs_billing_publication_candidates_digest ON public.recording_studio_billing_commercial_publication_candidates USING btree (candidate_digest);
 
-
---
 -- Name: recording_studio_billing_billing_options recording_studio_billing_billing_options_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_billing_options_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_billing_options FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::BillingOption');
 
-
---
 -- Name: recording_studio_billing_billing_options recording_studio_billing_billing_options_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_billing_options_validate_publication AFTER INSERT ON public.recording_studio_billing_billing_options DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::BillingOption');
 
-
---
 -- Name: recording_studio_billing_cost_cards recording_studio_billing_cost_cards_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_cost_cards_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_cost_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostCard');
 
-
---
 -- Name: recording_studio_billing_cost_cards recording_studio_billing_cost_cards_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_cost_cards_validate_publication AFTER INSERT ON public.recording_studio_billing_cost_cards DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::CostCard');
 
-
---
 -- Name: recording_studio_billing_cost_rates recording_studio_billing_cost_rates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_cost_rates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_cost_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::CostRate');
 
-
---
 -- Name: recording_studio_billing_cost_rates recording_studio_billing_cost_rates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_cost_rates_validate_publication AFTER INSERT ON public.recording_studio_billing_cost_rates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::CostRate');
 
-
---
 -- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_feature_overrides_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_feature_overrides FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::FeatureOverride');
 
-
---
 -- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_feature_overrides_validate_publication AFTER INSERT ON public.recording_studio_billing_feature_overrides DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::FeatureOverride');
 
-
---
 -- Name: recording_studio_billing_features recording_studio_billing_features_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_features_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_features FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Feature');
 
-
---
 -- Name: recording_studio_billing_features recording_studio_billing_features_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_features_validate_publication AFTER INSERT ON public.recording_studio_billing_features DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Feature');
 
-
---
 -- Name: recording_studio_billing_markets recording_studio_billing_markets_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_markets_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_markets FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Market');
 
-
---
 -- Name: recording_studio_billing_markets recording_studio_billing_markets_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_markets_validate_publication AFTER INSERT ON public.recording_studio_billing_markets DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Market');
 
-
---
 -- Name: recording_studio_billing_meters recording_studio_billing_meters_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_meters_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_meters FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Meter');
 
-
---
 -- Name: recording_studio_billing_meters recording_studio_billing_meters_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_meters_validate_publication AFTER INSERT ON public.recording_studio_billing_meters DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Meter');
 
-
---
 -- Name: recording_studio_billing_overage_prices recording_studio_billing_overage_prices_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_overage_prices_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_overage_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::OveragePrice');
 
-
---
 -- Name: recording_studio_billing_overage_prices recording_studio_billing_overage_prices_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_overage_prices_validate_publication AFTER INSERT ON public.recording_studio_billing_overage_prices DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::OveragePrice');
 
-
---
 -- Name: recording_studio_billing_plan_updates recording_studio_billing_plan_updates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_plan_updates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_plan_updates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::PlanUpdate');
 
-
---
 -- Name: recording_studio_billing_plan_updates recording_studio_billing_plan_updates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_plan_updates_validate_publication AFTER INSERT ON public.recording_studio_billing_plan_updates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::PlanUpdate');
 
-
---
 -- Name: recording_studio_billing_prices recording_studio_billing_prices_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_prices_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_prices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Price');
 
-
---
 -- Name: recording_studio_billing_prices recording_studio_billing_prices_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_prices_validate_publication AFTER INSERT ON public.recording_studio_billing_prices DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Price');
 
-
---
 -- Name: recording_studio_billing_product_rules recording_studio_billing_product_rules_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_product_rules_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_product_rules FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProductRule');
 
-
---
 -- Name: recording_studio_billing_product_rules recording_studio_billing_product_rules_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_product_rules_validate_publication AFTER INSERT ON public.recording_studio_billing_product_rules DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::ProductRule');
 
-
---
 -- Name: recording_studio_billing_products recording_studio_billing_products_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_products_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_products FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Product');
 
-
---
 -- Name: recording_studio_billing_products recording_studio_billing_products_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_products_validate_publication AFTER INSERT ON public.recording_studio_billing_products DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Product');
 
-
---
 -- Name: recording_studio_billing_provider_accounts recording_studio_billing_provider_accounts_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_provider_accounts_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_provider_accounts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::ProviderAccount');
 
-
---
 -- Name: recording_studio_billing_provider_accounts recording_studio_billing_provider_accounts_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_provider_accounts_validate_publication AFTER INSERT ON public.recording_studio_billing_provider_accounts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::ProviderAccount');
 
-
---
 -- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_rate_cards_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rate_cards FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::RateCard');
 
-
---
 -- Name: recording_studio_billing_rate_cards recording_studio_billing_rate_cards_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_rate_cards_validate_publication AFTER INSERT ON public.recording_studio_billing_rate_cards DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::RateCard');
 
-
---
 -- Name: recording_studio_billing_rates recording_studio_billing_rates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_rates_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::Rate');
 
-
---
 -- Name: recording_studio_billing_rates recording_studio_billing_rates_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_rates_validate_publication AFTER INSERT ON public.recording_studio_billing_rates DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::Rate');
 
-
---
 -- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER recording_studio_billing_usage_units_protect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_units FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_history('RecordingStudioBilling::UsageUnit');
 
-
---
 -- Name: recording_studio_billing_usage_units recording_studio_billing_usage_units_validate_publication; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER recording_studio_billing_usage_units_validate_publication AFTER INSERT ON public.recording_studio_billing_usage_units DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_publication('RecordingStudioBilling::UsageUnit');
 
-
---
 -- Name: recording_studio_billing_financial_adjustments rs_billing_adjustment_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_adjustment_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_financial_adjustments FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_adjustment_intents rs_billing_adjustment_intent_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_adjustment_intent_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_adjustment_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_commercial_publication_candidates rs_billing_candidates_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_candidates_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_commercial_publication_candidates FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_candidate_history();
 
-
---
 -- Name: recording_studio_billing_checkout_attempts rs_billing_checkout_attempt_command_correlation; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_attempt_command_correlation BEFORE INSERT OR UPDATE OF financial_command_attempt_id ON public.recording_studio_billing_checkout_attempts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_attempt_command_correlation();
 
-
---
 -- Name: recording_studio_billing_checkout_attempts rs_billing_checkout_attempt_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_attempt_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_checkout_attempts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_checkout_attempt();
 
-
---
 -- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_intent_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_authority();
 
-
---
 -- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_command_binding; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_intent_command_binding BEFORE UPDATE OF financial_command_id ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_command_binding();
 
-
---
 -- Name: recording_studio_billing_checkout_intents rs_billing_checkout_intent_execution_state; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_intent_execution_state BEFORE UPDATE OF state ON public.recording_studio_billing_checkout_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_checkout_execution_state();
 
-
---
 -- Name: recording_studio_billing_checkout_intent_items rs_billing_checkout_item_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_checkout_item_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_checkout_intent_items FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_checkout_item();
 
-
---
 -- Name: recording_studio_billing_financial_command_attempts rs_billing_command_attempt_consistency_from_attempt; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER rs_billing_command_attempt_consistency_from_attempt AFTER INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_financial_command_attempts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_command_attempt_consistency();
 
-
---
 -- Name: recording_studio_billing_financial_commands rs_billing_command_attempt_consistency_from_command; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE CONSTRAINT TRIGGER rs_billing_command_attempt_consistency_from_command AFTER INSERT OR UPDATE ON public.recording_studio_billing_financial_commands DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_command_attempt_consistency();
 
-
---
 -- Name: recording_studio_billing_financial_command_attempts rs_billing_command_attempt_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_command_attempt_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_financial_command_attempts FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_command_attempt();
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries rs_billing_credit_ledger_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_credit_ledger_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_credit_ledger_entries FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_credit_ledger_entry();
 
-
---
 -- Name: recording_studio_billing_entitlement_grants rs_billing_entitlement_grant_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_entitlement_grant_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_entitlement_grants FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_entitlement_projection();
 
-
---
 -- Name: recording_studio_billing_financial_commands rs_billing_financial_command_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_financial_command_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_financial_commands FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_command_authority();
 
-
---
 -- Name: recording_studio_billing_financial_commands rs_billing_financial_command_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_financial_command_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_financial_commands FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_financial_command();
 
-
---
 -- Name: recording_studio_billing_invoices rs_billing_invoice_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_invoice_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_invoices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_invoices rs_billing_invoice_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_invoice_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_invoices FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_invoice_lines rs_billing_invoice_line_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_invoice_line_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_invoice_lines FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_commercial_manifests rs_billing_manifests_protect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_manifests_protect_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_commercial_manifests FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_manifest_history();
 
-
---
 -- Name: recording_studio_billing_meter_aggregations rs_billing_meter_aggregation_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_meter_aggregation_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_meter_aggregations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_meter_aggregation();
 
-
---
 -- Name: recording_studio_billing_overage_calculations rs_billing_overage_calculation_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_overage_calculation_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_overage_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_overage_calculation();
 
-
---
 -- Name: recording_studio_billing_payment_allocations rs_billing_payment_allocation_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_payment_allocation_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_payment_allocations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_payment_allocations rs_billing_payment_allocation_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_payment_allocation_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_payment_allocations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_payments rs_billing_payment_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_payment_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_payments FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_payments rs_billing_payment_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_payment_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_payments FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_plan_update_applications rs_billing_plan_update_application_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_plan_update_application_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_plan_update_applications FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_provider_references rs_billing_provider_reference_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_provider_reference_authority BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_provider_references FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_provider_reference();
 
-
---
 -- Name: recording_studio_billing_purchases rs_billing_purchase_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_purchase_authority BEFORE INSERT ON public.recording_studio_billing_purchases FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_lifecycle_projection();
 
-
---
 -- Name: recording_studio_billing_purchase_effects rs_billing_purchase_effect_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_purchase_effect_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_purchase_effects FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_purchase_effect();
 
-
---
 -- Name: recording_studio_billing_purchases rs_billing_purchase_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_purchase_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_purchases FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_purchase();
 
-
---
 -- Name: recording_studio_billing_rated_usages rs_billing_rated_usage_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_rated_usage_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rated_usages FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_rated_usage();
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements rs_billing_rated_usage_settlement_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_rated_usage_settlement_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_rated_usage_settlements FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_rated_usage_settlement();
 
-
---
 -- Name: recording_studio_billing_reconciliation_issues rs_billing_reconciliation_issue_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_reconciliation_issue_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_reconciliation_issues FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_reconciliation_history();
 
-
---
 -- Name: recording_studio_billing_reconciliation_records rs_billing_reconciliation_record_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_reconciliation_record_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_reconciliation_records FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_reconciliation_history();
 
-
---
 -- Name: recording_studio_billing_refunds rs_billing_refund_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_refund_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_refunds FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_commercial_projection();
 
-
---
 -- Name: recording_studio_billing_refund_intents rs_billing_refund_intent_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_refund_intent_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_refund_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_financial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_subscriptions rs_billing_subscription_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_subscriptions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_lifecycle_projection();
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents rs_billing_subscription_change_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_change_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_subscription_change_intents FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_subscription_items rs_billing_subscription_item_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_item_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_subscription_items FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions rs_billing_subscription_item_version_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_item_version_authority BEFORE INSERT OR UPDATE ON public.recording_studio_billing_subscription_item_versions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_commercial_lifecycle_authority();
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions rs_billing_subscription_item_version_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_item_version_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_subscription_item_versions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_subscription_item_version();
 
-
---
 -- Name: recording_studio_billing_subscriptions rs_billing_subscription_lifecycle; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_subscription_lifecycle BEFORE DELETE OR UPDATE ON public.recording_studio_billing_subscriptions FOR EACH ROW EXECUTE FUNCTION public.rs_billing_subscription_lifecycle();
 
-
---
 -- Name: recording_studio_billing_tax_calculations rs_billing_tax_calculation_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_tax_calculation_authority BEFORE INSERT ON public.recording_studio_billing_tax_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_tax_authority();
 
-
---
 -- Name: recording_studio_billing_tax_calculations rs_billing_tax_calculation_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_tax_calculation_history BEFORE DELETE OR UPDATE ON public.recording_studio_billing_tax_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_tax_calculation();
 
-
---
 -- Name: recording_studio_billing_tax_calculations rs_billing_tax_manifest_set_authority; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_tax_manifest_set_authority BEFORE INSERT ON public.recording_studio_billing_tax_calculations FOR EACH ROW EXECUTE FUNCTION public.rs_billing_validate_tax_manifest_set();
 
-
---
 -- Name: recording_studio_billing_usage_corrections rs_billing_usage_correction_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_usage_correction_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_corrections FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_correction();
 
-
---
 -- Name: recording_studio_billing_usage_credit_grants rs_billing_usage_credit_grant_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_usage_credit_grant_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_credit_grants FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_credit_grant();
 
-
---
 -- Name: recording_studio_billing_usage_events rs_billing_usage_event_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_usage_event_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_events FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_event();
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries rs_billing_usage_ledger_entry_history; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER rs_billing_usage_ledger_entry_history BEFORE INSERT OR DELETE OR UPDATE ON public.recording_studio_billing_usage_ledger_entries FOR EACH ROW EXECUTE FUNCTION public.rs_billing_protect_usage_ledger_entry();
 
-
---
 -- Name: recording_studio_billing_payment_allocations fk_rails_03719c9cf2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payment_allocations
     ADD CONSTRAINT fk_rails_03719c9cf2 FOREIGN KEY (payment_id) REFERENCES public.recording_studio_billing_payments(id);
 
-
---
 -- Name: recording_studio_billing_invoices fk_rails_05dec68c81; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT fk_rails_05dec68c81 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_0753a25392; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_0753a25392 FOREIGN KEY (rated_usage_id) REFERENCES public.recording_studio_billing_rated_usages(id);
 
-
---
 -- Name: recording_studio_billing_payments fk_rails_07f18c7620; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payments
     ADD CONSTRAINT fk_rails_07f18c7620 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries fk_rails_0eb965f4e9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT fk_rails_0eb965f4e9 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_provider_accounts fk_rails_1247aa36a0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_provider_accounts
     ADD CONSTRAINT fk_rails_1247aa36a0 FOREIGN KEY (billing_admin_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_plan_update_applications fk_rails_138729a8ec; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_applications
     ADD CONSTRAINT fk_rails_138729a8ec FOREIGN KEY (subscription_change_intent_id) REFERENCES public.recording_studio_billing_subscription_change_intents(id);
 
-
---
 -- Name: recording_studio_billing_feature_overrides fk_rails_17bde42a64; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_feature_overrides
     ADD CONSTRAINT fk_rails_17bde42a64 FOREIGN KEY (feature_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_1895ea5d94; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_1895ea5d94 FOREIGN KEY (supersedes_id) REFERENCES public.recording_studio_billing_usage_ledger_entries(id);
 
-
---
 -- Name: recording_studio_billing_entitlement_grants fk_rails_1b30f1de5f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT fk_rails_1b30f1de5f FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_provider_references fk_rails_1bdf7ac827; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_provider_references
     ADD CONSTRAINT fk_rails_1bdf7ac827 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
--- Name: recording_studio_webhooks_inbound_events fk_rails_1edbf48fb2; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_inbound_events
-    ADD CONSTRAINT fk_rails_1edbf48fb2 FOREIGN KEY (endpoint_id) REFERENCES public.recording_studio_webhooks_endpoints(id);
-
-
---
 -- Name: recording_studio_billing_usage_corrections fk_rails_200459b147; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_corrections
     ADD CONSTRAINT fk_rails_200459b147 FOREIGN KEY (supersedes_id) REFERENCES public.recording_studio_billing_usage_corrections(id);
 
-
---
 -- Name: recording_studio_billing_rated_usages fk_rails_21585faf73; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usages
     ADD CONSTRAINT fk_rails_21585faf73 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_2182831985; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_2182831985 FOREIGN KEY (subscription_item_id) REFERENCES public.recording_studio_billing_subscription_items(id);
 
-
---
 -- Name: recording_studio_billing_rates fk_rails_22d4fb3576; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rates
     ADD CONSTRAINT fk_rails_22d4fb3576 FOREIGN KEY (rate_card_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
--- Name: recording_studio_recordings fk_rails_26012d5ca3; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_recordings
-    ADD CONSTRAINT fk_rails_26012d5ca3 FOREIGN KEY (parent_recording_id) REFERENCES public.recording_studio_recordings(id);
-
-
---
 -- Name: recording_studio_billing_usage_credit_grants fk_rails_27aec1fa25; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_grants
     ADD CONSTRAINT fk_rails_27aec1fa25 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_allowance_policies fk_rails_2c0d836762; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allowance_policies
     ADD CONSTRAINT fk_rails_2c0d836762 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_purchases fk_rails_2db0688675; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchases
     ADD CONSTRAINT fk_rails_2db0688675 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_checkout_intents fk_rails_2ec9aa65bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
     ADD CONSTRAINT fk_rails_2ec9aa65bd FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_adjustment_intents fk_rails_3187ff5d54; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
     ADD CONSTRAINT fk_rails_3187ff5d54 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations fk_rails_31eed02146; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_31eed02146 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_billing_options fk_rails_33726a97d6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_options
     ADD CONSTRAINT fk_rails_33726a97d6 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_payments fk_rails_3cf8ecc046; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payments
     ADD CONSTRAINT fk_rails_3cf8ecc046 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_purchase_effects fk_rails_3e3b69f431; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
     ADD CONSTRAINT fk_rails_3e3b69f431 FOREIGN KEY (purchase_id) REFERENCES public.recording_studio_billing_purchases(id);
 
-
---
 -- Name: recording_studio_billing_financial_adjustments fk_rails_403ed1a454; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_adjustments
     ADD CONSTRAINT fk_rails_403ed1a454 FOREIGN KEY (invoice_id) REFERENCES public.recording_studio_billing_invoices(id);
 
-
---
 -- Name: recording_studio_billing_invoice_lines fk_rails_40a3be08d4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoice_lines
     ADD CONSTRAINT fk_rails_40a3be08d4 FOREIGN KEY (invoice_id) REFERENCES public.recording_studio_billing_invoices(id);
 
-
---
--- Name: recording_studio_webhooks_endpoint_tokens fk_rails_423bd8084a; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_endpoint_tokens
-    ADD CONSTRAINT fk_rails_423bd8084a FOREIGN KEY (endpoint_id) REFERENCES public.recording_studio_webhooks_endpoints(id);
-
-
---
 -- Name: recording_studio_billing_purchases fk_rails_436859f7d5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchases
     ADD CONSTRAINT fk_rails_436859f7d5 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_invoices fk_rails_437dc370ca; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT fk_rails_437dc370ca FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_checkout_intent_items fk_rails_454ae16426; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intent_items
     ADD CONSTRAINT fk_rails_454ae16426 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
-
---
 -- Name: recording_studio_billing_financial_commands fk_rails_45f2293813; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_commands
     ADD CONSTRAINT fk_rails_45f2293813 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_purchase_effects fk_rails_481999b1e3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
     ADD CONSTRAINT fk_rails_481999b1e3 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_4992812ca8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_4992812ca8 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_49d937bf87; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_49d937bf87 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_purchase_effects fk_rails_4b371c645a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchase_effects
     ADD CONSTRAINT fk_rails_4b371c645a FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents fk_rails_4b64fb3f93; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_change_intents
     ADD CONSTRAINT fk_rails_4b64fb3f93 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_corrections fk_rails_4d4ec85764; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_corrections
     ADD CONSTRAINT fk_rails_4d4ec85764 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_plan_updates fk_rails_511ec0e839; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_updates
     ADD CONSTRAINT fk_rails_511ec0e839 FOREIGN KEY (billing_option_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_allowance_policies fk_rails_52c3d91cb4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allowance_policies
     ADD CONSTRAINT fk_rails_52c3d91cb4 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_rated_usages fk_rails_54b225ad68; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usages
     ADD CONSTRAINT fk_rails_54b225ad68 FOREIGN KEY (meter_aggregation_id) REFERENCES public.recording_studio_billing_meter_aggregations(id);
 
-
---
 -- Name: recording_studio_billing_invoices fk_rails_57ef7bcb9f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT fk_rails_57ef7bcb9f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations fk_rails_580f212427; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_580f212427 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_plan_update_applications fk_rails_58986bbdeb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_applications
     ADD CONSTRAINT fk_rails_58986bbdeb FOREIGN KEY (plan_update_run_id) REFERENCES public.recording_studio_billing_plan_update_runs(id);
 
-
---
 -- Name: recording_studio_billing_subscriptions fk_rails_590163cfec; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscriptions
     ADD CONSTRAINT fk_rails_590163cfec FOREIGN KEY (market_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_59234eacda; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_59234eacda FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_financial_commands fk_rails_5a6dd935b1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_commands
     ADD CONSTRAINT fk_rails_5a6dd935b1 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_rates fk_rails_5c82417e3e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rates
     ADD CONSTRAINT fk_rails_5c82417e3e FOREIGN KEY (usage_unit_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_credit_grants fk_rails_5d84c55ced; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_grants
     ADD CONSTRAINT fk_rails_5d84c55ced FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_cost_rates fk_rails_6180561f6f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_cost_rates
     ADD CONSTRAINT fk_rails_6180561f6f FOREIGN KEY (cost_card_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_accounts fk_rails_618f9da784; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_accounts
     ADD CONSTRAINT fk_rails_618f9da784 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_billing_admins fk_rails_61d701f772; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_billing_admins
     ADD CONSTRAINT fk_rails_61d701f772 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_refunds fk_rails_6241d24d70; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refunds
     ADD CONSTRAINT fk_rails_6241d24d70 FOREIGN KEY (refund_intent_id) REFERENCES public.recording_studio_billing_refund_intents(id);
 
-
---
 -- Name: recording_studio_billing_prices fk_rails_62af4fe846; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_prices
     ADD CONSTRAINT fk_rails_62af4fe846 FOREIGN KEY (billing_option_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_reconciliation_issues fk_rails_6326faa349; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_reconciliation_issues
     ADD CONSTRAINT fk_rails_6326faa349 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_credit_allocations fk_rails_65809eecc3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_allocations
     ADD CONSTRAINT fk_rails_65809eecc3 FOREIGN KEY (usage_allocation_id) REFERENCES public.recording_studio_billing_usage_allocations(id);
 
-
---
 -- Name: recording_studio_billing_adjustment_intents fk_rails_6849d3008f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
     ADD CONSTRAINT fk_rails_6849d3008f FOREIGN KEY (invoice_id) REFERENCES public.recording_studio_billing_invoices(id);
 
-
---
 -- Name: recording_studio_billing_refund_intents fk_rails_6a522ae8d3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT fk_rails_6a522ae8d3 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_adjustment_intents fk_rails_6aa8855c04; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
     ADD CONSTRAINT fk_rails_6aa8855c04 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_events fk_rails_6f1eea0ab2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_events
     ADD CONSTRAINT fk_rails_6f1eea0ab2 FOREIGN KEY (late_usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
 
-
---
 -- Name: recording_studio_billing_subscription_items fk_rails_6f3c6eb3c0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_items
     ADD CONSTRAINT fk_rails_6f3c6eb3c0 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_overage_prices fk_rails_71961e29ca; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_prices
     ADD CONSTRAINT fk_rails_71961e29ca FOREIGN KEY (usage_unit_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_prices fk_rails_71e092b121; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_prices
     ADD CONSTRAINT fk_rails_71e092b121 FOREIGN KEY (market_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_meters fk_rails_754812330d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_meters
     ADD CONSTRAINT fk_rails_754812330d FOREIGN KEY (usage_unit_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries fk_rails_7582e03759; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT fk_rails_7582e03759 FOREIGN KEY (usage_event_id) REFERENCES public.recording_studio_billing_usage_events(id);
 
-
---
 -- Name: recording_studio_billing_subscriptions fk_rails_770ec9da1e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscriptions
     ADD CONSTRAINT fk_rails_770ec9da1e FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_77212d5465; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_77212d5465 FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
 
-
---
 -- Name: recording_studio_billing_subscription_item_versions fk_rails_7ad7f1b975; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_item_versions
     ADD CONSTRAINT fk_rails_7ad7f1b975 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
-
---
 -- Name: recording_studio_billing_refunds fk_rails_7afc681b16; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refunds
     ADD CONSTRAINT fk_rails_7afc681b16 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries fk_rails_7c45c8481c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT fk_rails_7c45c8481c FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_purchases fk_rails_7f6c19f3a5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_purchases
     ADD CONSTRAINT fk_rails_7f6c19f3a5 FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
-
---
 -- Name: recording_studio_billing_entitlement_grants fk_rails_7f8dce0a7f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT fk_rails_7f8dce0a7f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_cost_cards fk_rails_7fe81ededc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_cost_cards
     ADD CONSTRAINT fk_rails_7fe81ededc FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_invoices fk_rails_8379195747; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT fk_rails_8379195747 FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
 
-
---
 -- Name: recording_studio_billing_usage_allocations fk_rails_83995afa71; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allocations
     ADD CONSTRAINT fk_rails_83995afa71 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_plan_update_applications fk_rails_840dd3b60c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_applications
     ADD CONSTRAINT fk_rails_840dd3b60c FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
 
-
---
 -- Name: recording_studio_billing_invoices fk_rails_84e50e53b6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_invoices
     ADD CONSTRAINT fk_rails_84e50e53b6 FOREIGN KEY (purchase_id) REFERENCES public.recording_studio_billing_purchases(id);
 
-
---
 -- Name: recording_studio_billing_financial_command_attempts fk_rails_87375cc605; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_command_attempts
     ADD CONSTRAINT fk_rails_87375cc605 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations fk_rails_896fceb34d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_896fceb34d FOREIGN KEY (commercial_manifest_id) REFERENCES public.recording_studio_billing_commercial_manifests(id);
 
-
---
 -- Name: recording_studio_billing_usage_periods fk_rails_8b30316470; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_periods
     ADD CONSTRAINT fk_rails_8b30316470 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_overage_calculations fk_rails_8c0a89323f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_calculations
     ADD CONSTRAINT fk_rails_8c0a89323f FOREIGN KEY (overage_price_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_payments fk_rails_8e6bba275d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payments
     ADD CONSTRAINT fk_rails_8e6bba275d FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_subscription_items fk_rails_907dd5e2ad; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_items
     ADD CONSTRAINT fk_rails_907dd5e2ad FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
 
-
---
 -- Name: recording_studio_billing_overage_prices fk_rails_9546dcb8cf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_prices
     ADD CONSTRAINT fk_rails_9546dcb8cf FOREIGN KEY (billing_option_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_refund_intents fk_rails_97c28ba8db; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT fk_rails_97c28ba8db FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscriptions fk_rails_97d9baa876; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscriptions
     ADD CONSTRAINT fk_rails_97d9baa876 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_events fk_rails_98ba3ca398; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_events
     ADD CONSTRAINT fk_rails_98ba3ca398 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_checkout_intents fk_rails_9ad6795b60; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
     ADD CONSTRAINT fk_rails_9ad6795b60 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_webhook_effects fk_rails_9c6d3a6c42; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_webhook_effects
     ADD CONSTRAINT fk_rails_9c6d3a6c42 FOREIGN KEY (provider_reference_id) REFERENCES public.recording_studio_billing_provider_references(id);
 
-
---
 -- Name: recording_studio_billing_features fk_rails_9eae67f745; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_features
     ADD CONSTRAINT fk_rails_9eae67f745 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_product_rules fk_rails_9eb3a96d12; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT fk_rails_9eb3a96d12 FOREIGN KEY (product_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_refunds fk_rails_a02352ba22; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refunds
     ADD CONSTRAINT fk_rails_a02352ba22 FOREIGN KEY (payment_id) REFERENCES public.recording_studio_billing_payments(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_a09cef4e82; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_a09cef4e82 FOREIGN KEY (usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_a381620ba7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_a381620ba7 FOREIGN KEY (usage_credit_grant_id) REFERENCES public.recording_studio_billing_usage_credit_grants(id);
 
-
---
 -- Name: recording_studio_billing_financial_adjustments fk_rails_a42c5114ef; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_adjustments
     ADD CONSTRAINT fk_rails_a42c5114ef FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
--- Name: recording_studio_webhooks_inbound_events fk_rails_a4cf5f7f8b; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_inbound_events
-    ADD CONSTRAINT fk_rails_a4cf5f7f8b FOREIGN KEY (endpoint_token_id) REFERENCES public.recording_studio_webhooks_endpoint_tokens(id);
-
-
---
--- Name: recording_studio_webhooks_endpoints fk_rails_a75cd5fa78; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_endpoints
-    ADD CONSTRAINT fk_rails_a75cd5fa78 FOREIGN KEY (recording_studio_recording_id) REFERENCES public.recording_studio_recordings(id);
-
-
---
--- Name: recording_studio_webhooks_action_attempts fk_rails_a8bfe4c3eb; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_webhooks_action_attempts
-    ADD CONSTRAINT fk_rails_a8bfe4c3eb FOREIGN KEY (inbound_event_id) REFERENCES public.recording_studio_webhooks_inbound_events(id);
-
-
---
 -- Name: recording_studio_billing_webhook_effects fk_rails_aa052199d4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_webhook_effects
     ADD CONSTRAINT fk_rails_aa052199d4 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_refund_intents fk_rails_ac859b998f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT fk_rails_ac859b998f FOREIGN KEY (payment_id) REFERENCES public.recording_studio_billing_payments(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_ae4a8877f1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_ae4a8877f1 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_af410220df; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_af410220df FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_refund_intents fk_rails_afb61f61d3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT fk_rails_afb61f61d3 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_corrections fk_rails_b0e3bd3478; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_corrections
     ADD CONSTRAINT fk_rails_b0e3bd3478 FOREIGN KEY (tax_calculation_id) REFERENCES public.recording_studio_billing_tax_calculations(id);
 
-
---
 -- Name: recording_studio_billing_usage_events fk_rails_b6561d39f1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_events
     ADD CONSTRAINT fk_rails_b6561d39f1 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_meter_aggregations fk_rails_b715e0782f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
     ADD CONSTRAINT fk_rails_b715e0782f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_allocations fk_rails_ba2cb2b15e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allocations
     ADD CONSTRAINT fk_rails_ba2cb2b15e FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_checkout_intents fk_rails_bab17f442c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_intents
     ADD CONSTRAINT fk_rails_bab17f442c FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_allocations fk_rails_bae485b4a6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allocations
     ADD CONSTRAINT fk_rails_bae485b4a6 FOREIGN KEY (usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
 
-
---
 -- Name: recording_studio_billing_rated_usages fk_rails_bcb788189f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usages
     ADD CONSTRAINT fk_rails_bcb788189f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_overage_prices fk_rails_bd104db33e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_prices
     ADD CONSTRAINT fk_rails_bd104db33e FOREIGN KEY (market_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_periods fk_rails_bdd2fa4687; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_periods
     ADD CONSTRAINT fk_rails_bdd2fa4687 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_financial_adjustments fk_rails_be02a5b3e8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_adjustments
     ADD CONSTRAINT fk_rails_be02a5b3e8 FOREIGN KEY (adjustment_intent_id) REFERENCES public.recording_studio_billing_adjustment_intents(id);
 
-
---
 -- Name: recording_studio_billing_financial_commands fk_rails_beae460789; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_financial_commands
     ADD CONSTRAINT fk_rails_beae460789 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents fk_rails_bf36b26762; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_change_intents
     ADD CONSTRAINT fk_rails_bf36b26762 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_credit_allocations fk_rails_c2ee643ad3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_credit_allocations
     ADD CONSTRAINT fk_rails_c2ee643ad3 FOREIGN KEY (usage_credit_grant_id) REFERENCES public.recording_studio_billing_usage_credit_grants(id);
 
-
---
 -- Name: recording_studio_billing_feature_overrides fk_rails_c386383455; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_feature_overrides
     ADD CONSTRAINT fk_rails_c386383455 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations fk_rails_c41f9eb26c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_c41f9eb26c FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_credit_ledger_entries fk_rails_c4e2d771c3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT fk_rails_c4e2d771c3 FOREIGN KEY (purchase_effect_id) REFERENCES public.recording_studio_billing_purchase_effects(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_c69d309478; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_c69d309478 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_rate_cards fk_rails_ca9368a435; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rate_cards
     ADD CONSTRAINT fk_rails_ca9368a435 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_cb2aba86cf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_cb2aba86cf FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_adjustment_intents fk_rails_d17cedc866; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
     ADD CONSTRAINT fk_rails_d17cedc866 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents fk_rails_d1fad01faf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_change_intents
     ADD CONSTRAINT fk_rails_d1fad01faf FOREIGN KEY (subscription_id) REFERENCES public.recording_studio_billing_subscriptions(id);
 
-
---
 -- Name: recording_studio_billing_tax_calculations fk_rails_d5913910b5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_tax_calculations
     ADD CONSTRAINT fk_rails_d5913910b5 FOREIGN KEY (supersedes_id) REFERENCES public.recording_studio_billing_tax_calculations(id);
 
-
---
 -- Name: recording_studio_billing_usage_corrections fk_rails_d6d888a54c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_corrections
     ADD CONSTRAINT fk_rails_d6d888a54c FOREIGN KEY (usage_allocation_id) REFERENCES public.recording_studio_billing_usage_allocations(id);
 
-
---
 -- Name: recording_studio_billing_product_rules fk_rails_d8f5b1928a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_product_rules
     ADD CONSTRAINT fk_rails_d8f5b1928a FOREIGN KEY (target_product_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_overage_calculations fk_rails_d9d5104528; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_overage_calculations
     ADD CONSTRAINT fk_rails_d9d5104528 FOREIGN KEY (usage_allocation_id) REFERENCES public.recording_studio_billing_usage_allocations(id);
 
-
---
 -- Name: recording_studio_billing_payments fk_rails_da854b1259; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_payments
     ADD CONSTRAINT fk_rails_da854b1259 FOREIGN KEY (invoice_id) REFERENCES public.recording_studio_billing_invoices(id);
 
-
---
 -- Name: recording_studio_billing_rated_usage_settlements fk_rails_db4b276e0c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_rated_usage_settlements
     ADD CONSTRAINT fk_rails_db4b276e0c FOREIGN KEY (usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
 
-
---
 -- Name: recording_studio_billing_checkout_attempts fk_rails_de6ed4bdf2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
     ADD CONSTRAINT fk_rails_de6ed4bdf2 FOREIGN KEY (financial_command_attempt_id) REFERENCES public.recording_studio_billing_financial_command_attempts(id);
 
-
---
 -- Name: recording_studio_billing_usage_allocations fk_rails_dea52d5f40; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allocations
     ADD CONSTRAINT fk_rails_dea52d5f40 FOREIGN KEY (rated_usage_id) REFERENCES public.recording_studio_billing_rated_usages(id);
 
-
---
 -- Name: recording_studio_billing_reconciliation_records fk_rails_deb283311f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_reconciliation_records
     ADD CONSTRAINT fk_rails_deb283311f FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_usage_allowance_policies fk_rails_defb070ea5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_allowance_policies
     ADD CONSTRAINT fk_rails_defb070ea5 FOREIGN KEY (usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
 
-
---
 -- Name: recording_studio_billing_checkout_attempts fk_rails_e0ac93ff05; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
     ADD CONSTRAINT fk_rails_e0ac93ff05 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_plan_update_runs fk_rails_e1efe7faa6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_runs
     ADD CONSTRAINT fk_rails_e1efe7faa6 FOREIGN KEY (plan_update_id) REFERENCES public.recording_studio_billing_plan_updates(id);
 
-
---
 -- Name: recording_studio_billing_subscription_change_intents fk_rails_e454961746; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_change_intents
     ADD CONSTRAINT fk_rails_e454961746 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_checkout_attempts fk_rails_e66059dc8f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_checkout_attempts
     ADD CONSTRAINT fk_rails_e66059dc8f FOREIGN KEY (checkout_intent_id) REFERENCES public.recording_studio_billing_checkout_intents(id);
 
-
---
 -- Name: recording_studio_billing_markets fk_rails_e81c1eaa3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_markets
     ADD CONSTRAINT fk_rails_e81c1eaa3f FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_cost_rates fk_rails_e9f02ab3e1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_cost_rates
     ADD CONSTRAINT fk_rails_e9f02ab3e1 FOREIGN KEY (usage_unit_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_refund_intents fk_rails_eaf5f904f2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_refund_intents
     ADD CONSTRAINT fk_rails_eaf5f904f2 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_meter_aggregations fk_rails_eb540df9eb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_meter_aggregations
     ADD CONSTRAINT fk_rails_eb540df9eb FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscriptions fk_rails_eb5461aa73; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscriptions
     ADD CONSTRAINT fk_rails_eb5461aa73 FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_subscription_items fk_rails_f23081330d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_subscription_items
     ADD CONSTRAINT fk_rails_f23081330d FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_products fk_rails_f2d073142d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_products
     ADD CONSTRAINT fk_rails_f2d073142d FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_reconciliation_issues fk_rails_f34d73b261; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_reconciliation_issues
     ADD CONSTRAINT fk_rails_f34d73b261 FOREIGN KEY (financial_command_id) REFERENCES public.recording_studio_billing_financial_commands(id);
 
-
---
 -- Name: recording_studio_billing_webhook_effects fk_rails_f5cb15010c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_webhook_effects
     ADD CONSTRAINT fk_rails_f5cb15010c FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_f6ca7a76f4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_f6ca7a76f4 FOREIGN KEY (usage_allocation_id) REFERENCES public.recording_studio_billing_usage_allocations(id);
 
-
---
 -- Name: recording_studio_billing_usage_ledger_entries fk_rails_f8cee7b253; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_ledger_entries
     ADD CONSTRAINT fk_rails_f8cee7b253 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
 -- Name: recording_studio_billing_plan_update_applications fk_rails_fad5e84a01; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_plan_update_applications
     ADD CONSTRAINT fk_rails_fad5e84a01 FOREIGN KEY (plan_update_id) REFERENCES public.recording_studio_billing_plan_updates(id);
 
-
---
 -- Name: recording_studio_billing_provider_references fk_rails_fdca126298; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_provider_references
     ADD CONSTRAINT fk_rails_fdca126298 FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
--- Name: recording_studio_events fk_rails_ff21937ccd; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_events
-    ADD CONSTRAINT fk_rails_ff21937ccd FOREIGN KEY (recording_id) REFERENCES public.recording_studio_recordings(id);
-
-
---
 -- Name: recording_studio_billing_usage_units fk_rails_ff6cd411aa; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_units
     ADD CONSTRAINT fk_rails_ff6cd411aa FOREIGN KEY (provider_account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
--- Name: recording_studio_recordings fk_rails_ffcd14a670; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.recording_studio_recordings
-    ADD CONSTRAINT fk_rails_ffcd14a670 FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
-
-
---
 -- Name: recording_studio_billing_commercial_publication_candidates fk_rs_billing_candidates_root; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.recording_studio_billing_commercial_publication_candidates
     ADD CONSTRAINT fk_rs_billing_candidates_root FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
-
---
--- PostgreSQL database dump complete
---
-
 SET search_path TO "$user", public;
-
-INSERT INTO "schema_migrations" (version) VALUES
-('20260816000001'),
-('20260813014124'),
-('20260809999999'),
-('20260612000000'),
-('20260421000000'),
-('20260217233016'),
-('20260217072940'),
-('20260217072923'),
-('20260217072826'),
-('20260217072825'),
-('20260217072824'),
-('20260217072823'),
-('20260217072822'),
-('20260217072821'),
-('20260217072820'),
-('20260217072819'),
-('20260217072818'),
-('20260217072817'),
-('20260217072816'),
-('20260217072815'),
-('20250101000000');
-

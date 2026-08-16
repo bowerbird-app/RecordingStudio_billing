@@ -553,7 +553,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
                           ), provider_root, product)
     price = record_child(RecordingStudioBilling::Price.new(
                            billing_option_recording: option, market_recording: market, key: price_key, amount_minor: 1_000, currency_code: "EUR",
-                           currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default", feature_values: {}
+                           currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market", feature_values: {}
                          ), provider_root, option)
     addon_option = nil
     addon_price = nil
@@ -570,7 +570,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
                                   ), provider_root, addon_product)
       addon_price = record_child(RecordingStudioBilling::Price.new(
                                    billing_option_recording: addon_option, market_recording: market, key: addon_price_key, amount_minor: 500,
-                                   currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "default",
+                                   currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market",
                                    feature_values: {}
                                  ), provider_root, addon_option)
     end

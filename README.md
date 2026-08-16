@@ -1,11 +1,17 @@
 # RecordingStudioBilling
 
 `recording_studio_billing` is a Rails mountable, provider-neutral billing engine
-for Recording Studio. It owns the commercial catalogue, durable financial
-commands, checkout intents, subscription and entitlement projections, usage
-rating, tax calculations, and a mounted customer billing surface. Stripe is the
-built-in provider key; hosts keep provider credentials in their own credentials
-or secret manager.
+for Recording Studio. It owns products and pricing, durable financial commands,
+checkout intents, subscription and entitlement projections, usage rating, tax
+calculations, and a mounted customer billing surface. Stripe is the built-in
+provider key; hosts keep provider credentials in their own credentials or secret
+manager.
+
+User-facing screens should say **products and pricing**, not developer catalogue
+terms. Canonical V1 values are price scope `market`, checkout presentations
+`embedded` / `redirect` / `payment_link` / `invoice` / `no_charge`, collection
+methods `automatic` / `send_invoice`, and tax policies `exclusive` / `inclusive`
+/ `provider_default`. See [docs/billing.md](docs/billing.md).
 
 ## Customer billing surface
 
@@ -109,17 +115,18 @@ corresponding domain service; it does not update billing rows directly.
 
 RecordingStudioAdmin cannot generate safe CRUD forms for these recording-backed
 models. Hosts that expose create or edit controls for provider accounts,
-catalogue records, tax/usage configuration, feature overrides, or plan updates
+products and prices, tax/usage configuration, feature overrides, or plan updates
 must create drafts with `RecordingStudio.record!` and revise existing records
 with the relevant Recording Studio revision API. They must not mutate published
-or historical recordables in place. Catalogue publication remains exclusively
-with `CommercialPublisher`, and account-scoped feature overrides remain with
-`FeatureOverrideReviser`.
+or historical recordables in place. Publication remains exclusively with
+`CommercialPublisher`, and account-scoped feature overrides remain with
+`FeatureOverrideReviser`. The admin inventory label is **Products and pricing**;
+the section key remains `billing_commercial`.
 
-## V1 commercial catalogue contract
+## V1 products and pricing contract
 
-This engine publishes validated, versioned commercial catalogue manifests and
-uses them to create durable provider commands. `ProviderAccount`, `Market`,
+This engine publishes validated, versioned commercial manifests and uses them to
+create durable provider commands. `ProviderAccount`, `Market`,
 `Product`, `ProductRule`, `PlanUpdate`, `UsageUnit`, `Meter`, `RateCard`, and
 `CostCard` are direct `BillingAdmin` recording children. Their semantic links
 (for example, a product's provider account) remain stable
@@ -146,8 +153,8 @@ uses them to create durable provider commands. `ProviderAccount`, `Market`,
 
 `RecordingStudioBilling::CommercialPublisher` is the only supported application
 path from `draft` to `published`, or from `published` to `retired`, for the
-central BillingAdmin catalogue. Every publication requires a persisted actor and
-the configured `commercial_authorizer`. PostgreSQL triggers reject ordinary
+central BillingAdmin product graph. Every publication requires a persisted actor
+and the configured `commercial_authorizer`. PostgreSQL triggers reject ordinary
 direct non-draft inserts, in-place state transitions, incomplete revisions, and
 mutations of published, retired, or historical snapshots.
 
@@ -158,7 +165,7 @@ authorization boundary against arbitrary SQL executed by that trusted role.
 Hosts that include arbitrary runtime-role SQL in their threat model must add
 role separation and narrowly granted database operations at deployment time.
 
-`FeatureOverride` is account-scoped rather than part of the central catalogue.
+`FeatureOverride` is account-scoped rather than part of the central product graph.
 It therefore does not use `CommercialPublisher`; state or value revisions use
 `RecordingStudioBilling::FeatureOverrideReviser`, which requires the configured
 authorizer and a persisted actor and records that actor on the Recording Studio
@@ -278,18 +285,12 @@ payment credentials, client-authored tax authority, and tax PII are rejected.
 Tax rates, nexus, registrations, exemptions, thresholds, returns, filing,
 remittance, and compliance advice remain outside this engine.
 
-### Upgrading from the initial commercial hierarchy
+### Clean install only
 
-Run the engine migrations after upgrading. The V1 correction removes the old
-single-country/single-currency market fields, provider name, billing option
-kind, and monetary rate fields. Logical price identities and versions are
-validated against current Recording Studio revisions while immutable physical
-snapshots remain available as commercial history.
-
-This pre-release repository supports clean installations for current schema
-work. In particular, webhook receipt scoping is consolidated into the owning
-create migrations and does not provide an upgrade path from intermediate
-development schemas.
+This gem does not provide an upgrade path from earlier experimental schemas.
+Hosts copy the current engine migrations (a single `InstallRecordingStudioBilling`
+migration that loads `db/schema/install_recording_studio_billing.sql`), migrate,
+and commit `db/structure.sql`. See [MIGRATION_NOTES.md](MIGRATION_NOTES.md).
 
 ## Installation
 
@@ -437,15 +438,15 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 ## Dummy app
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
-Codespaces, and idempotent seeds. Its credential-free demonstration catalogue
-includes fake-provider checkout prices across US, UK, Italy, Germany, and a
+Codespaces, and idempotent seeds. Its credential-free demonstration products
+include fake-provider checkout prices across US, UK, Italy, Germany, and a
 global fallback, plus a metered API-call product with rates, costs, and US
 overage pricing. It creates one named Workspace/Billing Account and one named
 AdminRoot/BillingAdmin for root-switch demonstrations, as well as free,
 monthly, annual, quantity-addon, credit-pack, product-rule, and published
 plan-update examples. It does not contact Stripe or any other network provider.
 
-The dummy suite exercises seeded hierarchy and catalogue assertions, root
+The dummy suite exercises seeded hierarchy and product assertions, root
 switching, permitted customer billing, restricted customer/admin access, and
 provider-projected hybrid subscription, invoice, payment, refund, adjustment,
 and FeatureOverride journeys. These fixtures use the same command,
@@ -457,8 +458,8 @@ Subscription cancellation and resumption routes provide integration points, but
 they are not documentation of a complete host customer-subscription-change
 workflow. Admin-action, tax-demo, and lifecycle flows are likewise
 host-extensible integration points unless the host implements and authorizes
-them. Recording Studio Admin registers the site-scoped Commercial Catalogue,
-Financial Records, and Billing Operations areas. Hosts must apply their own
+them. Recording Studio Admin registers the site-scoped Products and pricing,
+Financial records, and Billing operations areas. Hosts must apply their own
 Accessible authorization policy for customer and site operations before
 rendering or executing actions.
 

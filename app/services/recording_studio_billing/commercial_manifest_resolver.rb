@@ -94,8 +94,8 @@ module RecordingStudioBilling
               "product provider is missing or inactive"
       end
       if provider.capabilities.present? &&
-         !provider.capabilities.intersect?(%w[catalogue commercial_catalogue])
-        raise ArgumentError, "provider lacks commercial catalogue capability"
+         !provider.capabilities.intersect?(%w[commercial_configuration])
+        raise ArgumentError, "provider lacks commercial configuration capability"
       end
 
       unless billing_option.product_recording_id == product.recording.id

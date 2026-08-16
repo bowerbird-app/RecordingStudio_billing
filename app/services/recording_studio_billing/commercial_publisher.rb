@@ -343,9 +343,9 @@ module RecordingStudioBilling
 
     def validate_provider!(provider, _records)
       raise ArgumentError, "provider account is inactive" unless provider.active?
-      return if provider.capabilities.blank? || provider.capabilities.intersect?(%w[catalogue commercial_catalogue])
+      return if provider.capabilities.blank? || provider.capabilities.intersect?(%w[commercial_configuration])
 
-      raise ArgumentError, "provider lacks commercial catalogue capability"
+      raise ArgumentError, "provider lacks commercial configuration capability"
     end
 
     def validate_market!(market, records)

@@ -46,7 +46,7 @@ module RecordingStudioBilling
 
     def checkout_presentation(option, product, price, resolution)
       adapter = RecordingStudioBilling.provider_adapter(product.provider_account_recording.recordable.adapter_key)
-      presentation = if option.collection_method == "invoice"
+      presentation = if option.collection_method == "send_invoice"
                        "invoice"
                      else
                        (if price.amount_minor.zero?

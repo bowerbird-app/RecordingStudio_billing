@@ -242,7 +242,7 @@ class UsageRatingTest < ActiveSupport::TestCase
         "cost_rates" => { cost_rate_id => { "cost_rate_recording_id" => cost_rate_id, "key" => "cost",
                                             "cost_card_recording_id" => cost_card_id, "usage_unit_recording_id" => unit_id, "amount_minor" => 3, "currency_code" => "USD", "currency_exponent" => 2 } },
         "customer_rates" => { customer_price_id => { "customer_price_recording_id" => customer_price_id,
-                                                     "key" => "customer", "usage_unit_recording_id" => unit_id, "amount_minor" => 2, "currency_code" => "USD", "currency_exponent" => 2, "pricing_model" => "per_unit", "package_size" => nil, "version" => 1, "scope" => "default" } }
+                                                     "key" => "customer", "usage_unit_recording_id" => unit_id, "amount_minor" => 2, "currency_code" => "USD", "currency_exponent" => 2, "pricing_model" => "per_unit", "package_size" => nil, "version" => 1, "scope" => "market" } }
       }
     }
     snapshots = [{ "fixture" => true }]
@@ -279,13 +279,13 @@ class UsageRatingTest < ActiveSupport::TestCase
     )
     price = record_catalogue(
       RecordingStudioBilling::Price.new(billing_option_recording: option, market_recording: market, key: "base",
-                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"), catalogue_root, option
+                                        amount_minor: 1, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "market"), catalogue_root, option
     )
     unit = record_catalogue(RecordingStudioBilling::UsageUnit.new(provider_account_recording: provider, key: "unit"),
                             catalogue_root, billing_admin.recording)
     record_catalogue(
       RecordingStudioBilling::OveragePrice.new(billing_option_recording: option, market_recording: market,
-                                               usage_unit_recording: unit, key: "overage", amount_minor: 2, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "default"), catalogue_root, option
+                                               usage_unit_recording: unit, key: "overage", amount_minor: 2, currency_code: "USD", currency_exponent: 2, pricing_model: "per_unit", version: 1, scope: "market"), catalogue_root, option
     )
     meter = record_catalogue(
       RecordingStudioBilling::Meter.new(usage_unit_recording: unit, key: "published_meter",

@@ -2,7 +2,7 @@
 
 module RecordingStudioBilling
   class CommercialPriceSelector
-    def initialize(billing_option:, market:, currency_code:, scope: "default")
+    def initialize(billing_option:, market:, currency_code:, scope: Price::V1_SCOPE)
       @billing_option = billing_option
       @market = market
       @currency_code = currency_code
