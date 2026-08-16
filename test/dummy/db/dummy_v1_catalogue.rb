@@ -485,15 +485,22 @@ class DummyV1Catalogue
   end
 
   def seed_checkout_presentations!
-    complete_checkout("seed:checkout-no-charge", [
-                        { billing_option_recording_id: @catalogue.fetch("demo_free_plan").fetch(:option).recording.id, quantity: 1 }
-                      ], project_payment: false)
-    project_checkout!(RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-no-charge"))
+    execute_checkout_presentation!(
+      "seed:checkout-no-charge",
+      [{ billing_option_recording_id: @catalogue.fetch("demo_free_plan").fetch(:option).recording.id, quantity: 1 }]
+    )
     %w[redirect payment_link invoice].each do |presentation|
-      create_checkout("seed:checkout-#{presentation.tr('_', '-')}", [
-                        { billing_option_recording_id: @checkout_option.recording.id, quantity: 1 }
-                      ], presentation:)
+      execute_checkout_presentation!(
+        "seed:checkout-#{presentation.tr('_', '-')}",
+        [{ billing_option_recording_id: @checkout_option.recording.id, quantity: 1 }],
+        presentation:
+      )
     end
+    monthly_option_id = @catalogue.fetch("demo_monthly_plan").fetch(:option).recording.id
+    create_checkout("seed:checkout-italy", [{ billing_option_recording_id: monthly_option_id, quantity: 1 }],
+                    country_code: "IT")
+    create_checkout("seed:checkout-germany", [{ billing_option_recording_id: monthly_option_id, quantity: 1 }],
+                    country_code: "DE")
   end
 
   def publish_override!
@@ -644,8 +651,8 @@ class DummyV1Catalogue
     )
   end
 
-  def complete_checkout(key, items, presentation: nil, project_payment: true)
-    intent = create_checkout(key, items, presentation:)
+  def complete_checkout(key, items, presentation: nil, country_code: "US", project_payment: true)
+    intent = create_checkout(key, items, presentation:, country_code:)
     if intent.state == "pending_provider" && intent.financial_command.state == "pending"
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: @root_recording)
     end
@@ -657,12 +664,20 @@ class DummyV1Catalogue
     intent.reload
   end
 
-  def create_checkout(key, items, presentation: nil)
+  def execute_checkout_presentation!(key, items, presentation: nil, country_code: "US")
+    intent = create_checkout(key, items, presentation:, country_code:)
+    return intent unless intent.state == "pending_provider" && intent.financial_command.state == "pending"
+
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: @root_recording)
+    intent.reload
+  end
+
+  def create_checkout(key, items, presentation: nil, country_code: "US")
     existing = RecordingStudioBilling::CheckoutIntent.find_by(root_recording: @root_recording, local_idempotency_key: key)
     return existing if existing
 
     RecordingStudioBilling.create_checkout_intent(
-      root_recording: @root_recording, local_idempotency_key: key, country_code: "US",
+      root_recording: @root_recording, local_idempotency_key: key, country_code:,
       items:, presentation:
     ).intent
   end

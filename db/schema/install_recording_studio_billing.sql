@@ -742,7 +742,7 @@ CREATE FUNCTION public.rs_billing_validate_checkout_execution_state() RETURNS tr
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF NEW.state IN ('requires_requote', 'requires_review', 'cancelled', 'expired') AND EXISTS (
+  IF NEW.state IN ('requires_requote', 'requires_restart', 'requires_review', 'rejected', 'cancelled', 'expired') AND EXISTS (
     SELECT 1 FROM recording_studio_billing_financial_commands command
     WHERE command.id = NEW.financial_command_id AND command.state IN ('pending', 'processing')
   ) THEN
@@ -1265,7 +1265,7 @@ CREATE TABLE public.recording_studio_billing_checkout_intents (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT rs_billing_checkout_intents_fingerprint CHECK (((request_fingerprint)::text ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('validated'::character varying)::text, ('awaiting_confirmation'::character varying)::text, ('pending_provider'::character varying)::text, ('requires_requote'::character varying)::text, ('completed'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('requires_review'::character varying)::text])))
+    CONSTRAINT rs_billing_checkout_intents_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('validated'::character varying)::text, ('awaiting_confirmation'::character varying)::text, ('pending_provider'::character varying)::text, ('requires_requote'::character varying)::text, ('requires_restart'::character varying)::text, ('completed'::character varying)::text, ('failed'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('requires_review'::character varying)::text, ('rejected'::character varying)::text])))
 );
 
 -- Name: recording_studio_billing_commercial_manifests; Type: TABLE; Schema: public; Owner: -

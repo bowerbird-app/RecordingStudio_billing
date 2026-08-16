@@ -233,6 +233,10 @@ class StripeAdapterTest < Minitest::Test
       captured << params
       Struct.new(:id).new("cs_invoice_123")
     end
+    sessions.define_singleton_method(:retrieve) do |_reference|
+      { "url" => "https://checkout.stripe.com/c/pay/cs_invoice_123",
+        "metadata" => { "recording_studio_billing_presentation" => "invoice" } }
+    end
     client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
     adapter = RecordingStudioBilling::StripeAdapter.new(credential_resolver: lambda {
       { secret_key: "sk_test", success_url: "https://app.example.test/success",
@@ -251,6 +255,8 @@ class StripeAdapterTest < Minitest::Test
     refute captured.last.key?("ui_mode")
     assert_equal({ "enabled" => true, "invoice_data" => { "collection_method" => "send_invoice", "days_until_due" => 14 } },
                  captured.last.fetch("invoice_creation"))
+    assert_equal({ mode: "invoice", url: "https://checkout.stripe.com/c/pay/cs_invoice_123" },
+                 adapter.checkout_presentation(provider_reference: response.provider_reference))
   end
 
   def test_no_charge_requires_zero_frozen_lines_and_never_constructs_a_stripe_client

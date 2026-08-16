@@ -49,6 +49,13 @@ client-authoritative fields are rejected. Checkout completion is never inferred
 from a browser return; it is projected only after provider-authoritative
 reconciliation.
 
+The same customer checkout page covers every V1 presentation: embedded,
+redirect, payment link, invoice, and no-charge. Copy talks about plans, prices,
+and tax at checkout. If the final Charge Market would change the frozen price
+or terms, checkout stops at requote, restart, reject, or review. It never keeps
+a cheaper ineligible price. Italy and Germany euro prices are resolved at
+checkout, not only in seed data.
+
 Invoice downloads are root scoped and set `Cache-Control: private, no-store`.
 Applications must supply a trusted invoice document stream or a short-lived
 provider redirect through their adapter integration; never expose provider

@@ -169,7 +169,12 @@ module RecordingStudioBilling
 
     def final_verification_state(resolution)
       policy = resolution.outcome == :confirmed ? resolution.market.verification_policy : resolution.outcome
-      %i[review reject].include?(policy.to_sym) ? "requires_review" : "requires_requote"
+      case policy.to_sym
+      when :restart then "requires_restart"
+      when :reject then "rejected"
+      when :review then "requires_review"
+      else "requires_requote"
+      end
     end
 
     def resolve_final_item(item, root, account, previous:, account_country:, provider_country:, host_country:)

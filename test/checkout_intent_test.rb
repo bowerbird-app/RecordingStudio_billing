@@ -280,8 +280,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal 0, graph[:adapter].calls
   end
 
-  test "cancelled, expired, requote, and review intents cannot execute or recover" do
-    %w[cancelled expired requires_requote requires_review].each do |state|
+  test "cancelled, expired, requote, restart, review, and rejected intents cannot execute or recover" do
+    %w[cancelled expired requires_requote requires_restart requires_review rejected].each do |state|
       RecordingStudioBilling.configuration.reset_registries!
       graph = published_catalogue
       intent = create_intent(graph, country: "IT", key: "blocked-#{state}").intent
@@ -366,6 +366,52 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     RecordingStudioBilling::FinancialCommandExecutor.execute(command: updated.financial_command, provider_key: "fake")
     assert_equal 0, graph[:adapter].calls
+  end
+
+  test "final Charge Market changes requote restart reject or review without keeping a cheaper ineligible price" do
+    {
+      "requote" => "requires_requote",
+      "restart" => "requires_restart",
+      "reject" => "rejected",
+      "review" => "requires_review"
+    }.each do |policy, state|
+      graph = published_catalogue(germany_verification_policy: policy)
+      intent = create_intent(graph, country: "IT", key: "final-policy-#{policy}").intent
+      frozen_item = intent.items.first
+
+      result = RecordingStudioBilling::CreateCheckoutIntent.new(
+        root_recording: graph[:customer_root], local_idempotency_key: "unused", items: []
+      ).verify_final_market!(intent:, account_country: verified_country("DE", :verified_account))
+
+      assert_equal state, result.state, policy
+      assert_equal "cancelled", result.financial_command.reload.state
+      assert_equal "cancelled", result.attempts.first.reload.state
+      assert_equal graph[:italy_price].recording.id, frozen_item.reload.price_recording_id
+      assert_equal 1_000, frozen_item.commercial_manifest.dig("canonical_data", "price", "amount_minor")
+      assert_equal 1_200, graph[:germany_price].amount_minor
+    end
+  end
+
+  test "client presentation preference is frozen and cannot set money or Charge Market" do
+    graph = published_catalogue(checkout_modes: %w[embedded redirect payment_link invoice no_charge])
+
+    %w[embedded redirect payment_link invoice].each do |presentation|
+      intent = create_intent(graph, country: "IT", key: "presentation-#{presentation}", presentation:).intent
+
+      assert_equal presentation, intent.presentation_preference
+      assert_equal presentation, intent.items.sole.presentation
+      assert_equal 1_000, intent.items.sole.commercial_manifest.dig("canonical_data", "price", "amount_minor")
+    end
+
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.create_checkout_intent(
+        root_recording: graph[:customer_root], local_idempotency_key: "forged-market", country_code: "IT",
+        presentation: "redirect",
+        items: [{ billing_option_recording_id: graph[:option].recording.id, quantity: 1,
+                  market: "DE", amount_minor: 1, tax: "forged" }]
+      )
+    end
+    assert_equal "unsupported checkout input", error.message
   end
 
   test "creates a compatible multi-item hybrid checkout and binds every frozen manifest" do
@@ -601,7 +647,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
     assert_raises(ActiveRecord::StatementInvalid) { created.intent.items.first.update_column(:currency_code, "USD") }
     assert_raises(ActiveRecord::StatementInvalid) { created.intent.attempts.first.update_column(:state, "failed") }
-    %w[requires_requote requires_review cancelled expired].each do |state|
+    %w[requires_requote requires_restart requires_review rejected cancelled expired].each do |state|
       intent = if state == "requires_review"
                  created.intent
                else
@@ -1397,10 +1443,10 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     @database_lock_held = false
   end
 
-  def create_intent(graph, country:, key:, option: graph[:option])
+  def create_intent(graph, country:, key:, option: graph[:option], presentation: nil)
     RecordingStudioBilling.create_checkout_intent(
       root_recording: graph[:customer_root], local_idempotency_key: key, country_code: country,
-      items: [{ billing_option_recording_id: option.recording.id, quantity: 1 }]
+      presentation:, items: [{ billing_option_recording_id: option.recording.id, quantity: 1 }]
     )
   end
 
@@ -1463,7 +1509,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000,
-                          account_country: "IT", checkout_policy: "allowed")
+                          account_country: "IT", checkout_policy: "allowed", germany_verification_policy: "requote",
+                          checkout_modes: ["redirect"])
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root,
                                                         key: "billing_#{SecureRandom.hex(4)}")
@@ -1473,13 +1520,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       provider_root, admin.recording
     )
     italy_market = market("italy", "IT", provider_recording, provider_root, admin.recording, "requote")
-    germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording, "requote")
+    germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording,
+                            germany_verification_policy)
     graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
     option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:,
                                                                                      trial_days:, amount:, checkout_policy:)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success,
                                                                capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"],
-                                                                                                                              markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
+                                                                                                                              markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes:, quantities: ["fixed"], composition: ["single"]))
     RecordingStudioBilling.register_provider("fake", adapter)
     customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Customer #{SecureRandom.hex(4)}"))
     account_recording = record_child(

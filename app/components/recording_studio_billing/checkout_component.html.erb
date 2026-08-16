@@ -1,36 +1,16 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("checkout_title", "Checkout"), variant: :h1) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<p data-checkout-intent-state="<%= @presenter.checkout_intent.state %>"><%= @presenter.checkout_intent.state.humanize %></p>
-<% frozen_line_rows = if @presenter.respond_to?(:frozen_line_rows)
-                        @presenter.frozen_line_rows
-                      else
-                        @presenter.frozen_lines.map do |line|
-                          price = line.fetch("price", {})
-                          option = line.fetch("billing_option", {})
-                          { label: line.dig("product", "name") || line.dig("product", "key") || "Billing item",
-                            amount: [price["amount_minor"], price["currency_code"]].compact.join(" "),
-                            quantity: price["quantity"], recurrence: option["recurrence"], interval: option["interval"],
-                            tax: line["tax"], benefits: line["benefits"], overage: line["overage"], market: line["market"] }
-                        end
-                      end %>
+<p data-checkout-intent-state="<%= @presenter.checkout_intent.state %>"><%= checkout_status_copy %></p>
 <%= render FlatPack::List::Component.new do %>
-  <% frozen_line_rows.each do |line| %>
+  <% checkout_line_rows.each do |line| %>
     <li>
-      <strong><%= line[:label] %></strong>: <%= line[:quantity] %> x <%= line[:amount] %> <%= [line[:recurrence], line[:interval]].compact.join(" ") %>
-      <% if line[:market].present? %><br>Market: <%= line[:market] %><% end %>
-      <% if line[:tax].present? %><br>Tax: <%= line[:tax] %><% end %>
-      <% if line[:benefits].present? %><br>Benefits: <%= line[:benefits] %><% end %>
-      <% if line[:overage].present? %><br>Overage policy: <%= line[:overage] %><% end %>
+      <strong><%= line[:label] %></strong>: <%= line[:quantity] %> x <%= line[:amount] %>
+      <% if line[:cadence].present? %> <%= line[:cadence] %><% end %>
+      <% if line[:tax].present? %><br><%= line[:tax] %><% end %>
     </li>
   <% end %>
 <% end %>
-<% if @presenter.embedded? %>
-  <p><%= @presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.") %></p>
-<% elsif @presenter.redirect? %>
-  <%= render FlatPack::Button::Component.new(text: @presenter.copy("checkout_continue", "Continue to secure checkout"), style: :primary, size: :md, url: @presenter.presentation[:url], data: { turbo: false }) %>
-<% else %>
-  <p><%= @presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.") %></p>
-<% end %>
+<%= render_checkout_action %>
 <p><%= @presenter.copy("checkout_notice", "Your payment is confirmed only after provider reconciliation. Browser completion does not confirm a purchase.") %></p>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:checkout).each { |content| %><%= render_extension(content) %><% } %>

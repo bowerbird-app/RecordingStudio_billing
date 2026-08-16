@@ -71,12 +71,7 @@ module RecordingStudioBilling
         { mode: "embedded", client_secret: session["client_secret"],
           publishable_key: credential.fetch(:publishable_key, "") }
       elsif stripe_browser_url?(session["url"])
-        mode = if session.dig("metadata", "recording_studio_billing_presentation") == "payment_link"
-                 "payment_link"
-               else
-                 "redirect"
-               end
-        { mode:, url: session["url"] }
+        { mode: stripe_checkout_mode(session), url: session["url"] }
       else
         {}
       end
@@ -301,6 +296,11 @@ module RecordingStudioBilling
 
       AdapterResponse.new(status: "success", result: { "no_charge" => true, "presentation" => "no_charge" },
                           metadata: { "adapter" => "stripe" })
+    end
+
+    def stripe_checkout_mode(session)
+      mode = session.dig("metadata", "recording_studio_billing_presentation").to_s
+      %w[payment_link invoice redirect].include?(mode) ? mode : "redirect"
     end
 
     def stripe_reference!(change_set, key, prefix, reason)

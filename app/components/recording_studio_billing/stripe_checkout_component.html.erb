@@ -1,14 +1,12 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("checkout_title", "Checkout"), variant: :h1) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<p data-checkout-intent-state="<%= @presenter.checkout_intent.state %>"><%= @presenter.checkout_intent.state.humanize %></p>
+<p data-checkout-intent-state="<%= @presenter.checkout_intent.state %>"><%= checkout_status_copy %></p>
 <%= render FlatPack::List::Component.new do %>
-  <% @presenter.frozen_line_rows.each do |line| %>
+  <% checkout_line_rows.each do |line| %>
     <li>
-      <strong><%= line[:label] %></strong>: <%= line[:quantity] %> x <%= line[:amount] %> <%= [line[:recurrence], line[:interval]].compact.join(" ") %>
-      <% if line[:market].present? %><br>Market: <%= line[:market] %><% end %>
-      <% if line[:tax].present? %><br>Tax: <%= line[:tax] %><% end %>
-      <% if line[:benefits].present? %><br>Benefits: <%= line[:benefits] %><% end %>
-      <% if line[:overage].present? %><br>Overage policy: <%= line[:overage] %><% end %>
+      <strong><%= line[:label] %></strong>: <%= line[:quantity] %> x <%= line[:amount] %>
+      <% if line[:cadence].present? %> <%= line[:cadence] %><% end %>
+      <% if line[:tax].present? %><br><%= line[:tax] %><% end %>
     </li>
   <% end %>
 <% end %>
@@ -17,12 +15,10 @@
   <p data-stripe-checkout-failure hidden><%= @presenter.copy("checkout_provider_failure", "Secure checkout could not load. Refresh the page or try again shortly.") %></p>
   <%= javascript_include_tag "https://js.stripe.com/v3/" %>
   <%= javascript_include_tag "recording_studio_billing/stripe_checkout", type: "module" %>
-<% elsif @presenter.redirect? %>
-  <%= render FlatPack::Button::Component.new(text: @presenter.copy("checkout_continue", "Continue to secure checkout"), style: :primary, size: :md, url: @presenter.presentation[:url], data: { turbo: false }) %>
 <% else %>
-  <p><%= @presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.") %></p>
+  <%= render_checkout_action %>
 <% end %>
-<p><%= @presenter.copy("checkout_notice", "Your payment is confirmed only after provider reconciliation.") %></p>
+<p><%= @presenter.copy("checkout_notice", "Your payment is confirmed only after provider reconciliation. Browser completion does not confirm a purchase.") %></p>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:checkout).each { |content| %><%= render_extension(content) %><% } %>
 <% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

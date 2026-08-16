@@ -98,7 +98,7 @@ class BillingUiConfigurationTest < Minitest::Test
     assert_includes html, "Your payment is being prepared or is awaiting provider confirmation."
   end
 
-  def test_checkout_component_renders_frozen_tax_benefits_and_overage_without_authoritative_completion_claim
+  def test_checkout_component_renders_plan_price_and_tax_at_checkout_without_authoritative_completion_claim
     line = Struct.new(:commercial_manifest).new({
                                                   "canonical_data" => {
                                                     "product" => { "name" => "Studio Pro" },
@@ -119,9 +119,11 @@ class BillingUiConfigurationTest < Minitest::Test
 
     assert_includes html, "Studio Pro"
     assert_includes html, "3 x 1000 EUR"
-    assert_includes html, "Tax: Status: estimated"
-    assert_includes html, "Benefits: Minutes: 120"
-    assert_includes html, "Overage policy: Policy: metered"
+    assert_includes html, "monthly"
+    assert_includes html, "Tax is calculated at checkout"
+    refute_includes html, "Overage policy"
+    refute_includes html, "Market:"
+    refute_includes html, "Benefits:"
     assert_includes html, "Browser completion does not confirm a purchase."
   end
 

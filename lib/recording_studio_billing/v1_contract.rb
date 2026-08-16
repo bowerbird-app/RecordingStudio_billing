@@ -5,6 +5,9 @@ module RecordingStudioBilling
   module V1Contract
     PRICE_SCOPE = "market"
     CHECKOUT_MODES = %w[embedded redirect payment_link invoice no_charge].freeze
+    CHECKOUT_INTENT_STATES = %w[draft validated awaiting_confirmation pending_provider requires_requote
+                                requires_restart completed failed cancelled expired requires_review rejected].freeze
+    MARKET_VERIFICATION_POLICIES = %w[requote restart reject review none].freeze
     COLLECTION_METHODS = %w[automatic send_invoice].freeze
     TAX_POLICIES = %w[inclusive exclusive provider_default].freeze
 

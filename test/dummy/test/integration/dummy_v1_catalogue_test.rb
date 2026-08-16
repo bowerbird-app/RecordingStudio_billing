@@ -78,7 +78,15 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     assert_equal "redirect", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-redirect").items.first.presentation
     assert_equal "payment_link", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-payment-link").items.first.presentation
     assert_equal "invoice", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-invoice").items.first.presentation
-    assert_equal "pending_provider", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-invoice").state
+    invoice = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-invoice")
+    assert_equal "awaiting_confirmation", invoice.state
+    italy = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-italy")
+    germany = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-germany")
+    assert_equal 4_500, italy.items.first.commercial_manifest.dig("canonical_data", "price", "amount_minor")
+    assert_equal 4_700, germany.items.first.commercial_manifest.dig("canonical_data", "price", "amount_minor")
+    assert_equal "EUR", italy.items.first.currency_code
+    assert_equal "EUR", germany.items.first.currency_code
+    refute_equal italy.items.first.price_recording_id, germany.items.first.price_recording_id
     assert_equal "monthly_subscription", usage_item_mode(usage)
     assert_equal "one_off_credit_pack", credit.items.first.then { |item|
       RecordingStudioBilling::Purchase.find_by!(checkout_intent_item_id: item.id).mode

@@ -44,6 +44,7 @@ class RecordingStudioBillingTest < Minitest::Test
                     "rs_billing_protect_commercial_history('RecordingStudioBilling::Price')"
     assert_includes structure, "DEFAULT 'market'::character varying"
     assert_includes structure, "send_invoice"
+    assert_includes structure, "requires_restart"
     refute_match(/scope\)::text = 'default'/, structure)
     refute_includes structure, "('20260810000000')"
     assert_includes structure, "('20260816000001')"

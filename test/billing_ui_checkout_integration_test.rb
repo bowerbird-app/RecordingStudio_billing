@@ -102,6 +102,48 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", command.reload.state
   end
 
+  test "checkout pages render redirect payment link invoice and no-charge without fulfilling on return" do
+    use_presentation_checkout_adapter!
+    root, option = published_checkout_option(adapter_key: "fake")
+    switch_root(root)
+    expected = {
+      "redirect" => "Continue to secure checkout",
+      "payment_link" => "Open payment link",
+      "invoice" => "Continue to invoice"
+    }
+
+    expected.each do |presentation, copy|
+      intent = create_presented_checkout_intent(root, option, presentation:)
+      RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: root)
+
+      get "/billing/checkout/#{intent.id}", params: { root_recording_id: root.id }
+
+      assert_response :success
+      assert_select "[data-checkout-intent-state=awaiting_confirmation]"
+      assert_includes response.body, copy
+      assert_includes response.body, "https://checkout.example.test/#{presentation}"
+      assert_includes response.body, "Tax is calculated at checkout"
+      refute_includes response.body, "Market:"
+      refute_includes response.body, "Overage policy"
+
+      get "/billing/checkout/#{intent.id}/return", params: { root_recording_id: root.id }
+
+      assert_response :success
+      assert_equal "awaiting_confirmation", intent.reload.state
+    end
+
+    free_root, free_option = published_checkout_option(adapter_key: "fake", amount_minor: 0)
+    switch_root(free_root)
+    free = create_presented_checkout_intent(free_root, free_option, presentation: "no_charge")
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: free, root_recording: free_root)
+
+    get "/billing/checkout/#{free.id}", params: { root_recording_id: free_root.id }
+
+    assert_response :success
+    assert_includes response.body, "No payment is due for this plan."
+    refute_includes response.body, "Continue to secure checkout"
+  end
+
   test "missing malformed and client-authoritative selection input redirects safely" do
     [
       {},
@@ -252,6 +294,18 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     name == "test_Stripe_embedded_checkout_mounts_transient_data_and_browser_return_cannot_fulfil_the_intent"
   end
 
+  def create_presented_checkout_intent(root, option, presentation:)
+    RecordingStudioBilling.create_checkout_intent(
+      root_recording: root, local_idempotency_key: "#{presentation}-#{SecureRandom.uuid}", country_code: "IT",
+      presentation:, items: [{ billing_option_recording_id: option.recording.id, quantity: 1 }]
+    ).intent
+  end
+
+  def use_presentation_checkout_adapter!
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider("fake", PresentationCheckoutAdapter.new)
+  end
+
   def create_embedded_checkout_intent(quantity: 1)
     RecordingStudioBilling.create_checkout_intent(
       root_recording: @root, local_idempotency_key: "embedded-#{SecureRandom.uuid}", country_code: "IT",
@@ -266,7 +320,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
-  def published_checkout_option(recurrence: "one_time", interval: nil, adapter_key: "fake", product_kind: "service", checkout_policy: "allowed")
+  def published_checkout_option(recurrence: "one_time", interval: nil, adapter_key: "fake", product_kind: "service", checkout_policy: "allowed", amount_minor: 1_000)
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root,
                                                         key: "billing_#{SecureRandom.hex(4)}")
@@ -288,11 +342,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     )
     price = record_child(
       RecordingStudioBilling::Price.new(billing_option_recording: option_recording, market_recording: market,
-                                        key: "price_#{SecureRandom.hex(4)}", amount_minor: 1_000, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market", feature_values: {}), provider_root, option_recording
+                                        key: "price_#{SecureRandom.hex(4)}", amount_minor:, currency_code: "EUR", currency_exponent: 2, pricing_model: "flat", version: 1, scope: "market", feature_values: {}), provider_root, option_recording
     )
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: provider_root,
                                                          price_recording_ids: [price.id], actor: @user)
-    register_fake_checkout_adapter! if adapter_key == "fake"
+    register_fake_checkout_adapter! if adapter_key == "fake" && !RecordingStudioBilling.configuration.provider_registry.registered?("fake")
     root = RecordingStudio.root_recording_for(Workspace.create!(name: "Customer #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: root, name: "Customer #{SecureRandom.hex(4)}")
     [root,
@@ -354,6 +408,43 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       return {} unless provider_reference == "fake-operation"
 
       { mode: "embedded", client_secret: "cs_test_embedded_secret", publishable_key: "pk_test_embedded" }
+    end
+  end
+
+  class PresentationCheckoutAdapter < RecordingStudioBilling::FakeFinancialAdapter
+    def initialize
+      super(
+        outcome: :success,
+        capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+          operations: ["checkout"], currencies: ["EUR"], markets: ["IT"],
+          collection_methods: %w[automatic send_invoice],
+          checkout_modes: %w[embedded redirect payment_link invoice no_charge],
+          quantities: ["adjustable"], composition: ["single"]
+        )
+      )
+    end
+
+    def call(command:, request:, idempotency_key:)
+      response = super
+      return response unless %w[success duplicate].include?(response.status)
+
+      presentation = command.canonical_request.dig("request", "presentation")
+      RecordingStudioBilling::AdapterResponse.new(status: response.status, provider_reference: "fake-#{command.id}",
+                                                  result: response.result.merge("presentation" => presentation),
+                                                  metadata: response.metadata)
+    end
+
+    def checkout_presentation(provider_reference:)
+      command = RecordingStudioBilling::FinancialCommand.find_by(provider_reference:)
+      presentation = command&.canonical_request&.dig("request", "presentation").to_s
+      case presentation
+      when "redirect", "payment_link", "invoice"
+        { mode: presentation, url: "https://checkout.example.test/#{presentation}" }
+      when "embedded", "no_charge"
+        { mode: presentation }
+      else
+        {}
+      end
     end
   end
 end

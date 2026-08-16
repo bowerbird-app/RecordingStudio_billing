@@ -21,12 +21,14 @@ class BillingControllerCheckoutSelectionTest < Minitest::Test
     assert_raises(ArgumentError) { controller.send(:checkout_selection) }
   end
 
-  def test_selection_accepts_only_option_identifier_and_quantity
+  def test_selection_accepts_option_identifier_quantity_country_currency_and_presentation
     request_key = SecureRandom.hex(16)
     controller = controller_with(
       params: {
         checkout_request_key: request_key,
         country_code: "IT",
+        currency_code: "EUR",
+        presentation: "payment_link",
         items: { "0" => { billing_option_recording_id: "option", quantity: "2" } }
       }
     )
@@ -36,6 +38,8 @@ class BillingControllerCheckoutSelectionTest < Minitest::Test
     assert_equal request_key, selection.fetch(:request_key)
     assert_equal [{ "billing_option_recording_id" => "option", "quantity" => 2 }], selection.fetch(:items)
     assert_equal "IT", selection.fetch(:country_code)
+    assert_equal "EUR", selection.fetch(:currency_code)
+    assert_equal "payment_link", selection.fetch(:presentation)
   end
 
   private

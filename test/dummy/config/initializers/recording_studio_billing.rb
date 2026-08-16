@@ -46,12 +46,46 @@ module RecordingStudioBilling
       download
     end
 
+    def checkout_presentation(provider_reference:)
+      intent = checkout_intent_for(provider_reference)
+      return no_charge_presentation if intent.nil? && provider_reference.blank?
+
+      return {} unless intent
+
+      dummy_checkout_presentation(intent)
+    end
+
     private
 
     def checkout_command_response(command, status)
       intent = CheckoutIntent.find_by!(financial_command: command)
       AdapterResponse.new(status:, provider_reference: "dummy-checkout-#{intent.id}",
-                          result: { "checkout_intent_id" => intent.id }, metadata: { "adapter" => "dummy" })
+                          result: { "checkout_intent_id" => intent.id, "presentation" => intent.items.first&.presentation },
+                          metadata: { "adapter" => "dummy" })
+    end
+
+    def checkout_intent_for(provider_reference)
+      return if provider_reference.blank?
+      return CheckoutIntent.find_by(id: provider_reference.delete_prefix("dummy-checkout-")) if provider_reference.to_s.start_with?("dummy-checkout-")
+
+      command = FinancialCommand.find_by(provider_reference:)
+      command && CheckoutIntent.find_by(financial_command: command)
+    end
+
+    def dummy_checkout_presentation(intent)
+      presentation = intent.items.first&.presentation.to_s
+      case presentation
+      when "redirect", "payment_link", "invoice"
+        { mode: presentation, url: "https://checkout.example.test/#{presentation.tr('_', '-')}/#{intent.id}" }
+      when "embedded", "no_charge"
+        { mode: presentation }
+      else
+        {}
+      end
+    end
+
+    def no_charge_presentation
+      { mode: "no_charge" }
     end
 
     def checkout_response(command, status)

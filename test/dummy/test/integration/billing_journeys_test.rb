@@ -121,6 +121,46 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "seeded checkout presentations and Italy vs Germany euro prices render through checkout" do
+    select_root(@workspace_root)
+    expected = {
+      "seed:checkout-redirect" => "Continue to secure checkout",
+      "seed:checkout-payment-link" => "Open payment link",
+      "seed:checkout-invoice" => "Continue to invoice",
+      "seed:checkout-no-charge" => "No payment is due for this plan."
+    }
+
+    with_billing_access(true) do
+      expected.each do |key, copy|
+        intent = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key)
+        get "/billing/checkout/#{intent.id}", params: { root_recording_id: @workspace_root.id }
+
+        assert_response :success, "#{key}: #{response.body}"
+        assert_includes response.body, copy
+        refute_includes response.body, "Market:"
+        refute_includes response.body, "Overage policy"
+        assert_includes response.body, "Tax is calculated at checkout"
+
+        get "/billing/checkout/#{intent.id}/return", params: { root_recording_id: @workspace_root.id }
+
+        assert_response :success
+        assert_equal intent.reload.state, RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key).state
+      end
+
+      italy = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-italy")
+      germany = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-germany")
+      get "/billing/checkout/#{italy.id}", params: { root_recording_id: @workspace_root.id }
+      assert_response :success
+      assert_includes response.body, "4500 EUR"
+      refute_includes response.body, "4700 EUR"
+
+      get "/billing/checkout/#{germany.id}", params: { root_recording_id: @workspace_root.id }
+      assert_response :success
+      assert_includes response.body, "4700 EUR"
+      refute_includes response.body, "4500 EUR"
+    end
+  end
+
   test "tax calculator contracts reject disabled and unsupported requests without creating projections" do
     result = RecordingStudioBilling.calculate_tax(calculator_key: "missing", tax_policy: {}, root_recording: @workspace_root,
                                                   account_recording: RecordingStudioBilling::Account.find_by!(name: "Studio Account").recording,
