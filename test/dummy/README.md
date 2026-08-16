@@ -42,7 +42,8 @@ Billing Administration (products and pricing).
 
 ## Seeds
 
-`bin/rails db:seed` is idempotent. It creates the workspace and admin roots,
+`bin/rails db:seed` is idempotent, including when dummy tests load it more than
+once in the same process. It creates the workspace and admin roots,
 fake and Stripe-test provider accounts, US/USD, UK/GBP, Italy/EUR, Germany/EUR,
 and global/USD markets, and example products (free, monthly, annual, quantity
 add-on, credit pack, meter, overage). The fake provider has no credentials. The

@@ -2,6 +2,10 @@
 # development, test). The code here should be idempotent so that it can be executed at any point in every environment.
 # The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
 
+# Dummy tests load this file more than once in the same process. Clear the
+# ActiveRecord query cache so find-or-create checks see rows from earlier loads.
+ActiveRecord::Base.connection.clear_query_cache
+
 # Create the admin user
 user = User.find_or_create_by!(email: "admin@admin.com") do |u|
   u.password = "Password"
@@ -235,7 +239,9 @@ begin
       admin_root_recording, billing_admin.recording
     )
   monthly_plan_update_recording_id = monthly_plan_update.recording.id
-  unpublished_price_ids = (prices + [usage_price] + catalogue_prices).reject { |price| price.state == "published" }.map { |price| price.recording.id }
+  unpublished_price_ids = RecordingStudioBilling::Price.with_current_recording.where(
+    key: (prices + [usage_price] + catalogue_prices).map(&:key)
+  ).where.not(state: "published").map { |price| price.recording.id }
   RecordingStudioBilling::CommercialPublisher.publish!(root_recording: admin_root_recording, price_recording_ids: unpublished_price_ids, actor: user) if unpublished_price_ids.any?
 
   fake_provider = refresh_recordable.call(fake_provider.recording.id)
@@ -440,7 +446,7 @@ begin
 
   replacement_manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: active_subscription.item_versions.first.manifest_digest)
   plan_update_for = lambda do |key, effective_at: nil|
-    update = catalogue_recordable.call("RecordingStudioBilling::PlanUpdate", key) ||
+    update = RecordingStudioBilling::PlanUpdate.with_current_recording.find_by(key:) ||
              record_child.call(
         RecordingStudioBilling::PlanUpdate.new(
           billing_option_recording: monthly_option.recording, key:, allowance_policy: "preserve", execution_state: "draft",
@@ -456,15 +462,19 @@ begin
     [outcome, recording_id]
   end
   plan_run = lambda do |update, key, outcome: :success|
+    return if RecordingStudioBilling::PlanUpdateRun.exists?(idempotency_key: key)
+
     preview = RecordingStudioBilling.apply_plan_update(plan_update: update, root_recording: admin_root_recording, idempotency_key: key)
     run = RecordingStudioBilling.apply_plan_update(run: preview, root_recording: admin_root_recording, idempotency_key: key,
                                                    confirmation: { "approved_by" => user.id.to_s })
     run.applications.each { |application| execute_change.call(application.subscription_change_intent, outcome) }
     RecordingStudioBilling.apply_plan_update(run:, root_recording: admin_root_recording, idempotency_key: key)
   end
-  scheduled_update = refresh_recordable.call(scheduled_update_recording_id)
-  scheduled_preview = RecordingStudioBilling.apply_plan_update(plan_update: scheduled_update, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled")
-  RecordingStudioBilling.apply_plan_update(run: scheduled_preview, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled", confirmation: { "approved_by" => user.id.to_s })
+  unless RecordingStudioBilling::PlanUpdateRun.exists?(idempotency_key: "seed:plan-scheduled")
+    scheduled_update = refresh_recordable.call(scheduled_update_recording_id)
+    scheduled_preview = RecordingStudioBilling.apply_plan_update(plan_update: scheduled_update, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled")
+    RecordingStudioBilling.apply_plan_update(run: scheduled_preview, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled", confirmation: { "approved_by" => user.id.to_s })
+  end
   plan_run.call(refresh_recordable.call(plan_updates.fetch("applied")), "seed:plan-applied")
   plan_run.call(refresh_recordable.call(plan_updates.fetch("failed")), "seed:plan-failed", outcome: :provider_rejection)
   plan_run.call(refresh_recordable.call(plan_updates.fetch("uncertain")), "seed:plan-uncertain", outcome: :timeout_after_possible_success)

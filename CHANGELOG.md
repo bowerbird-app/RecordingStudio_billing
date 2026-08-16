@@ -20,6 +20,10 @@ earlier experimental schemas.
 - `RecordingStudioBilling::V1Contract` for canonical V1 vocabulary and Stripe-shaped provider capabilities, including the shared market list used at checkout.
 - Stripe checkout support for invoice presentation and `send_invoice` collection.
 
+### Fixed
+
+- Dummy seeds stay idempotent when loaded twice in one process. Plan-update fixtures are found by key, and seed apply runs are skipped when those runs already exist.
+
 ## 0.1.2
 
 - Initial engine checkout from the RecordingStudio gem template.
