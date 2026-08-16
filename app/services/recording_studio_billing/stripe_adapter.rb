@@ -186,9 +186,7 @@ module RecordingStudioBilling
         assign_trusted_url!(params, "success_url", credential[:success_url]) if credential[:success_url].present?
         assign_trusted_url!(params, "cancel_url", credential[:cancel_url]) if credential[:cancel_url].present?
       end
-      if presentation == "invoice" && !recurring?(items)
-        params["invoice_creation"] ||= { "enabled" => true }
-      end
+      params["invoice_creation"] ||= { "enabled" => true } if presentation == "invoice" && !recurring?(items)
       session = stripe_client(credential).v1.checkout.sessions.create(params, { idempotency_key: })
       reference = session.id
 

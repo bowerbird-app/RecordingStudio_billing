@@ -103,9 +103,10 @@ namespace :test do
   task :dummy do
     Dir.chdir(DUMMY_APP_ROOT) do
       env = dummy_bundle_env
+      drop_env = env.merge("DISABLE_DATABASE_ENVIRONMENT_CHECK" => "1")
 
-      run_command!(env, "bundle", "exec", "bin/rails", "db:environment:set", "RAILS_ENV=test")
-      run_command!(env, "bundle", "exec", "bin/rails", "db:drop")
+      run_command!(env, "bundle", "exec", "bin/rails", "db:create")
+      run_command!(drop_env, "bundle", "exec", "bin/rails", "db:drop")
       run_command!(env, "bundle", "exec", "bin/rails", "db:create")
       run_command!(env, "bundle", "exec", "bin/rails", "db:migrate")
       run_command!(env, "bundle", "exec", "bin/rails", "db:schema:dump")

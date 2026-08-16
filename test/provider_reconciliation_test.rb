@@ -577,14 +577,14 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: provider_root,
                                                          price_recording_ids: [price.id, addon_price&.id].compact, actor:)
     provider = RecordingStudioBilling::ProviderAccount.with_current_recording.find_by!(key: provider_key)
-    provider_recording = provider.recording
-    market_recording = RecordingStudioBilling::Market.with_current_recording.find_by!(key: market_key).recording
-    price_recording = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key).recording
+    provider.recording
+    RecordingStudioBilling::Market.with_current_recording.find_by!(key: market_key).recording
+    RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key).recording
     option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_key)
     option_recording = option.recording
     if mixed
       RecordingStudioBilling::Product.with_current_recording.find_by!(key: addon_product_key)
-      addon_price_recording = RecordingStudioBilling::Price.with_current_recording.find_by!(key: addon_price_key).recording
+      RecordingStudioBilling::Price.with_current_recording.find_by!(key: addon_price_key).recording
       addon_option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: addon_option_key)
       addon_option_recording = addon_option.recording
     end

@@ -75,10 +75,10 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
                                                 amount_minor: 500, currency_code: "USD",
                                                 safe_snapshot: { "tax" => { "status" => "final" }, "overage" => true })
     command = invoice.financial_command
-    payment = RecordingStudioBilling::Payment.create!(root_recording: @root, account_recording: @account.recording,
-                                                      financial_command: command, currency_code: "USD", amount_minor: 1_000,
-                                                      state: "captured", safe_snapshot: { "source" => "card", "tax" => "final" },
-                                                      recorded_at: Time.current)
+    RecordingStudioBilling::Payment.create!(root_recording: @root, account_recording: @account.recording,
+                                            financial_command: command, currency_code: "USD", amount_minor: 1_000,
+                                            state: "captured", safe_snapshot: { "source" => "card", "tax" => "final" },
+                                            recorded_at: Time.current)
     other_invoice = invoice_for(root: @other_root, account: @other_account)
 
     with_authorization(true) { get "/billing/billing/invoices", params: { root_recording_id: @root.id } }

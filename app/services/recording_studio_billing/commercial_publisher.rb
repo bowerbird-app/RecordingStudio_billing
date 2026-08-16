@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
+# rubocop:disable Metrics/AbcSize, Metrics/ClassLength, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Lint/MissingCopEnableDirective
 
 require "json"
 
@@ -343,7 +343,7 @@ module RecordingStudioBilling
 
     def validate_provider!(provider, _records)
       raise ArgumentError, "provider account is inactive" unless provider.active?
-      return if provider.capabilities.blank? || provider.capabilities.intersect?(%w[commercial_configuration])
+      return if provider.capabilities.blank? || provider.capabilities.include?("commercial_configuration")
 
       raise ArgumentError, "provider lacks commercial configuration capability"
     end

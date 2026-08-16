@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/AbcSize, Lint/MissingCopEnableDirective
+# rubocop:disable Lint/MissingCopEnableDirective
 
 module RecordingStudioBilling
   class CommercialManifestResolver
@@ -94,7 +94,7 @@ module RecordingStudioBilling
               "product provider is missing or inactive"
       end
       if provider.capabilities.present? &&
-         !provider.capabilities.intersect?(%w[commercial_configuration])
+         !provider.capabilities.include?("commercial_configuration")
         raise ArgumentError, "provider lacks commercial configuration capability"
       end
 
