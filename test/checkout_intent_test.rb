@@ -797,9 +797,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   test "projecting a later checkout reactivates a cancelled execution-group subscription" do
-    use_subscription_change_adapter!
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     subscription = project_subscription!(graph, key: "before-cancel")
+    use_subscription_change_adapter!
     cancel = create_subscription_change!(subscription, graph, key: "cancel-then-buy", kind: "cancellation")
     complete_subscription_change!(cancel)
     RecordingStudioBilling.apply_subscription_change_intent(subscription_change_intent: cancel,
