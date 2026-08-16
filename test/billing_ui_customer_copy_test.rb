@@ -29,6 +29,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_equal "Monthly plan", row[:label]
     assert_equal "Active", row[:state]
     assert_includes row[:summary], "Monthly plan"
+    assert_includes row[:summary], "Add-on"
     refute_includes row[:summary], "Market"
     refute_equal subscription.identifier, row[:label]
   end
@@ -126,13 +127,19 @@ class BillingUiCustomerCopyTest < Minitest::Test
   end
 
   def subscription
+    addon = Version.new(
+      line_key: "addon-1", mode: "recurring_addon", quantity: 2, amount_minor: 1_000,
+      currency_code: "USD", interval: "month",
+      commercial_snapshot: { "canonical_data" => { "product" => { "kind" => "addon" },
+                                                   "billing_option" => { "recurrence" => "recurring" } } }
+    )
     version = Version.new(
       line_key: "item-1", mode: "monthly_subscription", quantity: 1, amount_minor: 4_900,
       currency_code: "USD", interval: "month",
       commercial_snapshot: { "canonical_data" => { "product" => { "kind" => "plan" },
                                                    "billing_option" => { "recurrence" => "recurring" } } }
     )
-    versions = [version]
+    versions = [addon, version]
     versions.define_singleton_method(:where) { |**| versions }
     versions.define_singleton_method(:order) { |*| versions }
     Subscription.new(id: "sub-1", identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)

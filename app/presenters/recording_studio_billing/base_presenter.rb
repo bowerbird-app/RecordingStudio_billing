@@ -103,6 +103,15 @@ module RecordingStudioBilling
        display_amount(invoice.total_minor, invoice.currency_code)].compact.join(" · ")
     end
 
+    def current_item_versions(subscription)
+      versions = subscription.item_versions.where(effective_ends_at: nil).order(:line_key).to_a
+      versions.sort_by { |version| plan_item_version?(version) ? 0 : 1 }
+    end
+
+    def plan_item_version?(version)
+      snapshot_value(canonical_terms(version.commercial_snapshot), "product", "kind").to_s == "plan"
+    end
+
     def money_state(value)
       case value.to_s
       when "requires_review", "requires_reconciliation", "pending_provider", "awaiting_confirmation",

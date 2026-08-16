@@ -228,7 +228,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Applied"
     assert_includes response.body, "Failed"
     assert_includes response.body, "Waiting for confirmation"
-    assert_includes response.body, "Choose a plan"
+    assert_includes response.body, "<strong>Monthly plan</strong>: Active"
 
     subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
       checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id

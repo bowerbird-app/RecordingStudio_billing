@@ -8,7 +8,7 @@ module RecordingStudioBilling
 
     def subscription_rows
       ordered_subscriptions.map do |subscription|
-        versions = subscription.item_versions.where(effective_ends_at: nil).order(:line_key)
+        versions = current_item_versions(subscription)
         primary = versions.first
         terms = canonical_terms(primary&.commercial_snapshot)
         {

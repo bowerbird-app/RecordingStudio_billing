@@ -7,7 +7,7 @@ module RecordingStudioBilling
     def page = :subscriptions
 
     def current_subscription_rows(subscription)
-      subscription.item_versions.where(effective_ends_at: nil).order(:line_key).map do |version|
+      current_item_versions(subscription).map do |version|
         terms = canonical_terms(version.commercial_snapshot)
         {
           label: offer_label(
