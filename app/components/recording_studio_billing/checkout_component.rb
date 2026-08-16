@@ -37,6 +37,7 @@ module RecordingStudioBilling
 
     def render_checkout_action
       action = presenter.checkout_action if presenter.respond_to?(:checkout_action)
+      return if action.nil? && presenter.respond_to?(:checkout_action)
       return render_action(action) if action
       return redirect_button if presenter.respond_to?(:redirect?) && presenter.redirect?
 

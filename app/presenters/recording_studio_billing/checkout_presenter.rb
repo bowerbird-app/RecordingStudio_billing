@@ -51,7 +51,7 @@ module RecordingStudioBilling
     end
 
     def checkout_action
-      return { kind: :notice, text: status_copy } if blocked_checkout?
+      return if blocked_checkout?
 
       key, default = ACTION_COPY.fetch(presentation_mode) { ACTION_COPY.fetch("embedded") }
       text = copy(key, default)
