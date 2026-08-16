@@ -69,10 +69,12 @@ plans, prices, and tax at checkout. If a later Charge Market would change the
 price, checkout requotes, restarts, rejects, or holds for review instead of
 keeping the cheaper quote. Browser return does not complete a purchase.
 
-Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace has a
-current monthly plan (and change-request examples for scheduled, applied, failed,
-and waiting-for-confirmation). Recurring dummy checkouts share one execution
-group, so the cancelled hybrid journey is history on that same plan.
+Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace shows FlatPack
+pricing cards for the US free ($0), monthly ($49), and annual ($490) plans, with a title
+and subtitle above the three cards. The live monthly plan is marked current. Change-request
+examples (scheduled, applied, failed, and waiting) sit below the cards. Recurring dummy
+checkouts share one execution group, so the cancelled hybrid journey is history on that
+same plan.
 
 ## Why this app exists
 

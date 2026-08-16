@@ -29,6 +29,26 @@ module RecordingStudioBilling
       [amount_minor, currency_code].compact.join(" ")
     end
 
+    def customer_price(amount_minor, currency_code, exponent: 2)
+      units = amount_minor.to_i / (10.0 ** exponent)
+      formatted = (units == units.to_i) ? units.to_i.to_s : format("%.#{exponent}f", units)
+      case currency_code.to_s.upcase
+      when "USD" then "$#{formatted}"
+      when "EUR" then "€#{formatted}"
+      when "GBP" then "£#{formatted}"
+      else
+        "#{formatted} #{currency_code}"
+      end
+    end
+
+    def price_interval_suffix(interval)
+      case interval.to_s
+      when "year" then copy("price_suffix_year", "/yr")
+      when "week" then copy("price_suffix_week", "/wk")
+      else copy("price_suffix_month", "/mo")
+      end
+    end
+
     def display_value(value)
       case value
       when Hash

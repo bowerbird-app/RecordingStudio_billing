@@ -17,6 +17,10 @@ module RecordingStudioBilling
           label: subscription_label(primary, terms),
           state: money_state(subscription.state),
           current: current_plan?(subscription),
+          price_label: primary && customer_price(primary.amount_minor, primary.currency_code),
+          price_suffix: price_interval_suffix(primary&.interval),
+          cadence: primary && cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring",
+                                            primary.interval),
           summary: versions.map { |version| version_summary(version) }.join("; ")
         }
       end

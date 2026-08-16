@@ -1089,7 +1089,10 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     global = resolver_market("global", global_fallback: true)
     resolver = eligible_resolver([global, regional, group, exact])
 
+    host = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :host)
     assert_equal exact, resolver.resolve(stage: :display, declaration_country: "IT").market
+    assert_equal exact, resolver.resolve(stage: :display, host_country: host).market
+    assert_equal :host, resolver.resolve(stage: :display, host_country: host).source
     assert_equal group,
                  eligible_resolver([global, regional, group]).resolve(stage: :display, declaration_country: "IT").market
     assert_equal regional,

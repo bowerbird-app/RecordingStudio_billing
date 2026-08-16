@@ -1,28 +1,56 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("overview_title", "Billing"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("overview_title", "Billing"),
+  subtitle: @presenter.copy("overview_subtitle", "Your current plan and billing for this workspace."),
+  variant: :h1
+) %>
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :overview) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
-  <% card.header { render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_title", "Plan"), variant: :h2) } %>
+  <% card.header do %>
+    <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_title", "Plan"), variant: :h2) %>
+  <% end %>
   <% card.body do %>
     <% if @presenter.subscription_rows.present? %>
-      <%= render FlatPack::List::Component.new do %>
-        <% @presenter.subscription_rows.each do |row| %>
-          <li>
-            <strong><%= row[:label] %></strong>: <%= row[:state] %>
-            <% if row[:summary].present? %><br><%= row[:summary] %><% end %>
-            <% if row[:current] %>
-              <%= link_to @presenter.copy("cancel_subscription", "Cancel plan"), helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id) %>
-            <% end %>
-            <% if row[:subscription].state == "paused" %>
-              <%= link_to @presenter.copy("resume_subscription", "Resume plan"), helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id) %>
-            <% end %>
-            <br><%= @presenter.copy("change_request_notice", "Cancellation and resumption are requests; the current plan changes only after the provider confirms.") %>
-          </li>
+      <% row = @presenter.subscription_rows.find { |item| item[:current] } || @presenter.subscription_rows.first %>
+      <div class="text-center">
+        <%= render FlatPack::Badge::Component.new(text: row[:state], style: :success, size: :sm) %>
+        <h3 class="text-xl font-bold mt-3 mb-2"><%= row[:label] %></h3>
+        <% if row[:price_label].present? %>
+          <div class="text-3xl font-bold"><%= row[:price_label] %><span class="text-sm text-[var(--surface-muted-content-color)]"><%= row[:price_suffix] %></span></div>
         <% end %>
-      <% end %>
+        <% if row[:cadence].present? %>
+          <p class="text-sm mt-2 text-[var(--surface-muted-content-color)]"><%= @presenter.copy("plan_feature_billed_prefix", "Billed") %> <%= row[:cadence] %></p>
+        <% end %>
+      </div>
     <% else %>
-      <p><%= @presenter.copy("no_subscriptions", "No active subscription.") %></p>
+      <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("no_subscriptions", "No active plan yet. Choose a plan to get started.") %></p>
     <% end %>
+  <% end %>
+  <% card.footer do %>
+    <div class="flex flex-col gap-2 sm:flex-row">
+      <%= render FlatPack::Button::Component.new(
+        text: @presenter.copy("view_plans", "View plans"),
+        style: :primary,
+        url: helpers.plan_billing_path(root_recording_id: @presenter.root_recording.id),
+        class: "w-full"
+      ) %>
+      <% current = @presenter.subscription_rows.find { |item| item[:current] } %>
+      <% if current && current[:subscription].state == "paused" %>
+        <%= render FlatPack::Button::Component.new(
+          text: @presenter.copy("resume_subscription", "Resume plan"),
+          style: :secondary,
+          url: helpers.resume_confirmation_subscription_path(current[:subscription], root_recording_id: @presenter.root_recording.id),
+          class: "w-full"
+        ) %>
+      <% elsif current %>
+        <%= render FlatPack::Button::Component.new(
+          text: @presenter.copy("cancel_subscription", "Cancel plan"),
+          style: :ghost,
+          url: helpers.cancel_confirmation_subscription_path(current[:subscription], root_recording_id: @presenter.root_recording.id),
+          class: "w-full"
+        ) %>
+      <% end %>
+    </div>
   <% end %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

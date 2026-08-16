@@ -27,7 +27,8 @@ Customer billing views use the host's Recording Studio default layout
 gem-template left sidebar (`flat_pack_sidebar`), then `application`.
 
 The customer area provides Overview, Plan, Add-ons, Usage, Invoices,
-Payments, and Billing settings. Every request uses the selected root;
+Payments, and Billing settings. The Plan page is a FlatPack pricing-card
+layout with a title, subtitle, and up to three plan cards. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
 Customer billing authorizes through RecordingStudio Accessible role grants on
 the workspace root (`view` to read, `edit` to checkout or change a plan).

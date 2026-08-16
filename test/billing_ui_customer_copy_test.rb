@@ -28,10 +28,18 @@ class BillingUiCustomerCopyTest < Minitest::Test
 
     assert_equal "Monthly plan", row[:label]
     assert_equal "Active", row[:state]
+    assert_equal "$49", row[:price_label]
+    assert_equal "/mo", row[:price_suffix]
     assert_includes row[:summary], "Monthly plan"
     assert_includes row[:summary], "Add-on"
     refute_includes row[:summary], "Market"
     refute_equal subscription.identifier, row[:label]
+
+    html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
+    assert_includes html, "$49"
+    assert_includes html, "View plans"
+    assert_includes html, "Billed monthly"
+    refute_includes html, "Add-on: 2 x"
   end
 
   def test_plan_and_addon_offers_use_customer_labels
@@ -45,10 +53,34 @@ class BillingUiCustomerCopyTest < Minitest::Test
       RecordingStudioBilling::AddonsPresenter.new(root_recording: root, purchases: [], eligible_options: [option])
     )
 
-    assert_includes plan_html, "Monthly plan · monthly"
+    assert_includes plan_html, "Monthly plan"
+    assert_includes plan_html, "Choose a plan"
+    assert_includes plan_html, "Pick the plan that fits this workspace"
+    assert_includes plan_html, "text-3xl font-bold"
     assert_includes addon_html, "Monthly plan · monthly"
     refute_includes plan_html, option.key
     refute_includes addon_html, option.key
+    refute_includes plan_html, "Usage ·"
+  end
+
+  def test_plan_page_shows_three_priced_cards_in_cadence_order
+    free = offer_option(kind: "plan", interval: "month", recurrence: "recurring", key: "free_option")
+    monthly = offer_option(kind: "plan", interval: "month", recurrence: "recurring", key: "monthly_option")
+    annual = offer_option(kind: "plan", interval: "year", recurrence: "recurring", key: "annual_option")
+    presenter = RecordingStudioBilling::SubscriptionsPresenter.new(
+      root_recording: root, subscriptions: [], eligible_options: [annual, monthly, free]
+    )
+    amounts = { free => 0, monthly => 4_900, annual => 49_000 }
+    presenter.define_singleton_method(:live_price_for) do |option|
+      Struct.new(:amount_minor, :currency_code, :currency_exponent).new(amounts.fetch(option), "USD", 2)
+    end
+    cards = presenter.plan_cards
+    html = render_component(RecordingStudioBilling::SubscriptionsComponent, presenter)
+
+    assert_equal ["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] }
+    assert_equal ["$0", "$49", "$490"], cards.map { |card| card[:price_label] }
+    assert_equal ["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] }
+    assert_includes html, "Continue to checkout"
   end
 
   def test_usage_hides_raw_keys_and_internal_hashes
@@ -145,11 +177,11 @@ class BillingUiCustomerCopyTest < Minitest::Test
     Subscription.new(id: "sub-1", identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
   end
 
-  def offer_option(kind:, interval:, recurrence:)
+  def offer_option(kind:, interval:, recurrence:, key: "demo_secret_option_key")
     product = Product.new(kind, nil)
     recording = Recording.new("option-recording-1", product)
     Option.new(
-      key: "demo_secret_option_key", recurrence:, interval:, lifecycle_policy: "immediate",
+      key:, recurrence:, interval:, lifecycle_policy: "immediate",
       checkout_policy: "allowed", quantity_mode: "fixed", default_quantity: 1,
       minimum_quantity: 1, maximum_quantity: 1, recording:, product_recording: recording
     )

@@ -137,7 +137,8 @@ module RecordingStudioBilling
     end
 
     def normalize_country(value)
-      value&.to_s&.upcase
+      code = value.is_a?(VerifiedCountryEvidence) ? value.country_code : value
+      code&.to_s&.upcase
     end
   end
 end

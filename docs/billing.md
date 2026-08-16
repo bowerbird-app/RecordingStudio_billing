@@ -59,11 +59,11 @@ RecordingStudioAccessible.grant_access(
 
 The dummy seed grants `edit` on Studio Workspace to `admin@admin.com`. Do not stub `RecordingStudioAccessible.authorized?` in the host.
 
-Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels.
+Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels. Display prices use the same trusted location evidence as checkout, so a US host sees US plan prices rather than the global fallback.
 
 Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation.
 
-The customer **Plan** page (`/billing/billing/plan`) lists the current plan and add-on lines, change-request states, and a **Choose a plan** checkout. Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
+The customer **Plan** page (`/billing/billing/plan`) is a FlatPack pricing-card layout: a title and subtitle, then up to three plan cards (free, monthly, and annual in the dummy). Cards show the resolved customer-market price. The current plan is marked on its card. Change-request history sits in a **Plan requests** card below, not in the pricing grid. Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
 
 ## Restricted payment portal
 

@@ -30,6 +30,9 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
+    assert_includes response.body, "Monthly plan"
+    assert_includes response.body, "$49"
+    assert_includes response.body, "View plans"
     assert_includes response.body, "flat-pack--sidebar-layout"
     assert_includes response.body, "flat_pack/application"
     assert_includes response.body, 'data-theme="rounded"'
@@ -222,13 +225,20 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     get "/billing/billing/plan", params: { root_recording_id: @workspace_root.id }
     assert_response :success, response.body
     assert_includes response.body, "Monthly plan"
-    assert_includes response.body, "Active"
-    assert_includes response.body, "4900 USD"
+    assert_includes response.body, "Current"
+    assert_includes response.body, "$0"
+    assert_includes response.body, "$49"
+    assert_includes response.body, "$490"
+    assert_includes response.body, "Free plan"
+    assert_includes response.body, "Annual plan"
+    assert_includes response.body, "Choose a plan"
+    assert_includes response.body, "Pick the plan that fits this workspace"
+    refute_includes response.body, "$51"
+    refute_includes response.body, "Usage ·"
     assert_includes response.body, "Scheduled"
     assert_includes response.body, "Applied"
     assert_includes response.body, "Failed"
     assert_includes response.body, "Waiting for confirmation"
-    assert_includes response.body, "<strong>Monthly plan</strong>: Active"
 
     subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
       checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id

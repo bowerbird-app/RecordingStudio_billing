@@ -14,7 +14,7 @@ module RecordingStudioBilling
     def plan
       @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
       @presenter = billing_presenter(
-        :subscriptions, subscriptions: @subscriptions,
+        :subscriptions, subscriptions: @subscriptions, account_recording:,
                         eligible_options: customer_offers_for("plan"),
                         change_intents: SubscriptionChangeIntent.where(root_recording:, account_recording:).order(created_at: :desc)
       )

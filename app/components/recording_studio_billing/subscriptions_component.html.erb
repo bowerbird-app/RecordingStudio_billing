@@ -1,44 +1,72 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_title", "Plan"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("choose_plan_title", "Choose a plan"),
+  subtitle: @presenter.copy("choose_plan_subtitle", "Pick the plan that fits this workspace. You can change later."),
+  variant: :h1
+) %>
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :subscriptions) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<%= render FlatPack::List::Component.new do %>
-  <% @presenter.subscriptions.each do |subscription| %>
-    <li>
-      <strong><%= @presenter.subscription_label(subscription) %></strong>: <%= @presenter.money_state(subscription.state) %>
-      <% @presenter.current_subscription_rows(subscription).each do |item| %>
-        <%= render FlatPack::List::Component.new do %>
-          <li><%= item[:label] %>: <%= item[:quantity] %> x <%= item[:amount] %> <%= item[:cadence] %></li>
-        <% end %>
+<div class="grid gap-6 md:grid-cols-3">
+  <% @presenter.plan_cards.each do |plan| %>
+    <%= render FlatPack::Card::Component.new(style: plan[:highlighted] ? :elevated : :default, hover: :subtle) do |card| %>
+      <% card.header do %>
+        <div class="text-center">
+          <% if plan[:badge].present? %>
+            <div class="mb-3">
+              <%= render FlatPack::Badge::Component.new(text: plan[:badge], style: plan[:current] ? :success : :primary, size: :sm) %>
+            </div>
+          <% end %>
+          <h3 class="text-xl font-bold mb-2"><%= plan[:name] %></h3>
+          <div class="text-3xl font-bold"><%= plan[:price_label] %><span class="text-sm text-[var(--surface-muted-content-color)]"><%= plan[:price_suffix] %></span></div>
+        </div>
       <% end %>
-      <% if @presenter.change_rows(subscription).present? %>
-        <%= render FlatPack::List::Component.new do %>
-          <% @presenter.change_rows(subscription).each do |change| %>
-            <li><%= change[:label] %>: <%= change[:state] %> · <%= @presenter.copy("change_effective", "Effective") %>: <%= change[:effective] %></li>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(spacing: :dense, class: "text-sm") do %>
+          <% plan[:features].each do |feature| %>
+            <%= render FlatPack::List::Item.new(leading: "✓", class: "py-0 px-0 items-center") do %>
+              <%= feature %>
+            <% end %>
           <% end %>
         <% end %>
       <% end %>
-      <%= link_to @presenter.copy("change_subscription", "Change plan"), helpers.change_selection_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
-      <% if subscription.state.in?(%w[trialing active past_due paused]) %>
-        <%= link_to @presenter.copy("cancel_subscription", "Cancel plan"), helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+      <% card.footer do %>
+        <% if plan[:current] %>
+          <div class="flex flex-col gap-2">
+            <%= render FlatPack::Button::Component.new(text: @presenter.copy("plan_card_current", "Current plan"), style: :secondary, class: "w-full", disabled: true) %>
+            <% if (subscription = @presenter.current_subscription) %>
+              <%= render FlatPack::Button::Component.new(
+                text: @presenter.copy("cancel_subscription", "Cancel plan"),
+                style: :ghost,
+                class: "w-full",
+                url: helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id)
+              ) %>
+            <% end %>
+          </div>
+        <% elsif plan[:checkoutable] %>
+          <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
+            <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
+            <%= hidden_field_tag "items[0][billing_option_recording_id]", plan[:option].recording.id %>
+            <% if plan[:quantity_mode] == "adjustable" %>
+              <%= label_tag "items_0_quantity", @presenter.copy("quantity_label", "Quantity") %>
+              <%= number_field_tag "items[0][quantity]", plan[:default_quantity], min: plan[:minimum_quantity], max: plan[:maximum_quantity], id: "items_0_quantity" %>
+            <% end %>
+            <%= render FlatPack::Button::Component.new(text: @presenter.copy("choose_plan_continue", "Continue to checkout"), style: plan[:highlighted] ? :primary : :secondary, class: "w-full", type: :submit) %>
+          <% end %>
+        <% end %>
       <% end %>
-      <% if subscription.state == "paused" %>
-        <%= link_to @presenter.copy("resume_subscription", "Resume plan"), helpers.resume_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
-      <% end %>
-    </li>
+    <% end %>
   <% end %>
-<% end %>
-<% if @presenter.eligible_options.present? %>
-  <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("choose_plan_title", "Choose a plan"), variant: :h2) %>
-  <% @presenter.eligible_options.each do |option| %>
-    <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
-      <p><%= @presenter.offer_summary(option) %></p>
-      <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
-      <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
-      <% if option.quantity_mode == "adjustable" %>
-        <%= label_tag "items_0_quantity", @presenter.copy("quantity_label", "Quantity") %>
-        <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity, id: "items_0_quantity" %>
+</div>
+<% if @presenter.request_rows.present? %>
+  <%= render FlatPack::Card::Component.new(style: :default, class: "mt-8") do |card| %>
+    <% card.header { render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_requests_title", "Plan requests"), variant: :h2) } %>
+    <% card.body do %>
+      <%= render FlatPack::List::Component.new(spacing: :dense) do %>
+        <% @presenter.request_rows.each do |change| %>
+          <%= render FlatPack::List::Item.new do %>
+            <%= change[:label] %>: <%= change[:state] %> · <%= @presenter.copy("change_effective", "Effective") %>: <%= change[:effective] %>
+          <% end %>
+        <% end %>
       <% end %>
-      <%= render FlatPack::Button::Component.new(text: @presenter.copy("choose_plan_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
     <% end %>
   <% end %>
 <% end %>
