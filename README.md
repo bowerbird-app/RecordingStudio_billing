@@ -22,6 +22,10 @@ support in the host application controller:
 mount RecordingStudioBilling::Engine, at: "/billing"
 ```
 
+Customer billing views use the host's Recording Studio default layout
+(`recording_studio/default_layout`) when that template exists, then the
+gem-template left sidebar (`flat_pack_sidebar`), then `application`.
+
 The customer area provides Overview, Plan, Addons, Usage & Credits, Invoices,
 Payments, and Billing Settings routes. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
@@ -438,7 +442,10 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 ## Dummy app
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
-Codespaces, and idempotent seeds. Its credential-free demonstration products
+Codespaces, and idempotent seeds. Signed-in dummy pages use the gem-template
+left sidebar (`flat_pack_sidebar`). Mounted billing pages use Recording Studio's
+`recording_studio/default_layout`, which this dummy implements with the same
+FlatPack sidebar shell. Its credential-free demonstration products
 include fake-provider checkout prices across US, UK, Italy, Germany, and a
 global fallback, plus a metered API-call product with rates, costs, and US
 overage pricing. It creates one named Workspace/Billing Account and one named

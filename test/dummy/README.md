@@ -9,8 +9,9 @@ without calling Stripe.
 - Devise authentication with a seeded admin user
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
-- FlatPack layout and Tailwind source scanning
-- Mounted customer billing and RecordingStudioAdmin **Products and pricing**
+- FlatPack UI: sign-in uses the gem-template `application` layout; signed-in dummy pages use the left `flat_pack_sidebar` layout; mounted billing pages use Recording Studio's `recording_studio/default_layout` (the same left sidebar shell in this host)
+- Tailwind source scanning for dummy views, billing views/components, and FlatPack
+- Mounted customer billing. RecordingStudioAdmin **Products and pricing** is registered for later host wiring
 
 ## Quick start
 

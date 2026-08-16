@@ -84,11 +84,16 @@ module RecordingStudioBilling
                 after: "recording_studio_billing.load_config" do |app|
       next unless app.config.respond_to?(:content_security_policy)
 
-      app.config.content_security_policy do |policy|
-        policy.frame_src :self, *StripeAdapter::STRIPE_BROWSER_ORIGINS
-        policy.script_src :self, "https://js.stripe.com"
-        policy.connect_src :self, "https://api.stripe.com", "https://r.stripe.com"
+      policy = app.config.content_security_policy
+      next unless policy.is_a?(ActionDispatch::ContentSecurityPolicy)
+
+      append_csp_sources = lambda do |directive, *values|
+        mapped = values.map { |value| value.is_a?(Symbol) ? "'#{value}'" : value.to_s }
+        policy.directives[directive] = (Array(policy.directives[directive]) + mapped).uniq
       end
+      append_csp_sources.call("frame-src", :self, *StripeAdapter::STRIPE_BROWSER_ORIGINS)
+      append_csp_sources.call("script-src", :self, "https://js.stripe.com")
+      append_csp_sources.call("connect-src", :self, "https://api.stripe.com", "https://r.stripe.com")
     end
 
     initializer "recording_studio_billing.assets" do |app|

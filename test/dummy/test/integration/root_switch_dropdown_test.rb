@@ -24,6 +24,9 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, workspace.name
     assert_includes response.body, admin_root.name
+    assert_includes response.body, "flat-pack--sidebar-layout"
+    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-billing-layout="flat-pack-sidebar"'
   end
 
   test "root switch page renders with the host sidebar" do
@@ -41,6 +44,9 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Billing"
+    assert_includes response.body, "flat-pack--sidebar-layout"
+    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-billing-layout="flat-pack-sidebar"'
   end
 
   test "switching returns to the current page when it is a valid internal route" do

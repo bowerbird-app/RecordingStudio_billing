@@ -8,11 +8,16 @@
   <% end %>
 
   <% sidebar.items do %>
-    <nav aria-label="Main navigation">
+    <nav class="py-4 space-y-1" aria-label="Main navigation">
       <%= render FlatPack::Sidebar::Item::Component.new(
         label: "Home",
         href: main_app.root_path,
         icon: :home
+      ) %>
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Billing",
+        href: recording_studio_billing.root_path,
+        icon: :credit_card
       ) %>
     </nav>
   <% end %>

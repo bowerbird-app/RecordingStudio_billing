@@ -17,10 +17,18 @@ class RecordingStudioBillingTest < Minitest::Test
   end
 
   def test_dummy_keeps_the_flatpack_rounded_theme
-    layout = File.read(File.expand_path("dummy/app/views/layouts/flat_pack_sidebar.html.erb", __dir__))
+    sidebar = File.read(File.expand_path("dummy/app/views/layouts/flat_pack_sidebar.html.erb", __dir__))
+    default_layout = File.read(
+      File.expand_path("dummy/app/views/layouts/recording_studio/default_layout.html.erb", __dir__)
+    )
 
-    assert_includes layout, '<html data-theme="rounded">'
-    assert_includes layout, "FlatPack::SidebarLayout::Component"
+    [sidebar, default_layout].each do |layout|
+      assert_includes layout, '<html data-theme="rounded"'
+      assert_includes layout, "FlatPack::SidebarLayout::Component"
+      assert_includes layout, 'side: :left'
+      assert_includes layout, 'stylesheet_link_tag "flat_pack/application"'
+      assert_match(/data-billing-layout="(flat-pack-sidebar|recording-studio-default)"/, layout)
+    end
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects

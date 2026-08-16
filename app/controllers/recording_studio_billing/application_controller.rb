@@ -5,14 +5,35 @@ require "recording_studio_accessible"
 module RecordingStudioBilling
   class ApplicationController < ActionController::Base
     include RecordingStudio::RootSwitchable::ControllerSupport if defined?(RecordingStudio::RootSwitchable::ControllerSupport)
+    include Devise::Controllers::Helpers if defined?(Devise::Controllers::Helpers)
 
     protect_from_forgery with: :exception
-    layout "application"
+    layout :billing_host_layout
 
     before_action :authenticate_billing_user!
     before_action :load_root_recording!
 
     private
+
+    def billing_host_layout
+      return "application" unless request&.format&.html?
+
+      if host_layout?("recording_studio/default_layout")
+        "recording_studio/default_layout"
+      elsif host_layout?("flat_pack_sidebar")
+        "flat_pack_sidebar"
+      else
+        "application"
+      end
+    end
+
+    def host_layout?(name)
+      return true if Rails.root.join("app/views/layouts/#{name}.html.erb").file?
+
+      lookup_context.exists?(name, %w[layouts], false)
+    rescue StandardError
+      false
+    end
 
     def authenticate_billing_user!
       return if respond_to?(:current_user) && current_user.present?

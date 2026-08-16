@@ -21,6 +21,8 @@ class InstallGeneratorTest < Minitest::Test
 
     assert_includes generator.send(:tailwind_source_lines),
                     '@source "../../vendor/bundle/**/recording_studio_billing/app/views/**/*.erb";'
+    assert_includes generator.send(:tailwind_source_lines),
+                    '@source "../../vendor/bundle/**/recording_studio_billing/app/components/**/*.{rb,erb}";'
   end
 
   def test_sql_schema_format_configuration_is_idempotent

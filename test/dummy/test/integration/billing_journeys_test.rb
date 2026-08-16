@@ -32,6 +32,10 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
+    assert_includes response.body, "flat-pack--sidebar-layout"
+    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-theme="rounded"'
+    assert_includes response.body, 'data-billing-layout="recording-studio-default"'
   end
 
   test "customer billing routes reject an actor without billing access" do

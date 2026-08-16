@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="rounded">
+<html data-theme="rounded" class="h-full overscroll-none" data-billing-layout="flat-pack-sidebar">
   <head>
     <title><%= content_for(:title) || "Dummy" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -17,12 +17,13 @@
 
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "flat_pack/variables", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "flat_pack/application", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "flat_pack/rich_text", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags if respond_to?(:javascript_importmap_tags) %>
   </head>
 
-  <body>
+  <body class="m-0 min-h-full bg-(--surface-page-background-color) text-(--surface-content-color)">
     <%= render FlatPack::SidebarLayout::Component.new(side: :left, storage_key: "flat-pack-sidebar-layout") do |layout| %>
       <% layout.sidebar do %>
         <%= render "layouts/flat_pack/sidebar", sidebar_side: :left %>
@@ -33,7 +34,7 @@
       <% end %>
 
       <% layout.main do %>
-        <main class="p-4 md:p-6">
+        <main class="p-6">
           <%= yield %>
         </main>
       <% end %>

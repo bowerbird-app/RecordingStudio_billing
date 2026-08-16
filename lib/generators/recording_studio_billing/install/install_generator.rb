@@ -98,9 +98,9 @@ module RecordingStudioBilling
       def formatted_tailwind_source_block(missing_lines)
         [
           "\n/* Include RecordingStudioBilling engine views for Tailwind CSS */",
-          missing_lines.first(2),
+          missing_lines.first(3),
           "\n/* Include FlatPack component sources for Tailwind CSS */",
-          missing_lines.drop(2)
+          missing_lines.drop(3)
         ].flatten.reject(&:empty?).join("\n")
       end
 
@@ -115,6 +115,7 @@ module RecordingStudioBilling
       def tailwind_source_lines
         [
           '@source "../../vendor/bundle/**/recording_studio_billing/app/views/**/*.erb";',
+          '@source "../../vendor/bundle/**/recording_studio_billing/app/components/**/*.{rb,erb}";',
           '@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/' \
           'recording_studio_billing-*/app/views/**/*.erb";',
           '@source "../../vendor/bundle/**/flatpack/app/components/**/*.{rb,erb}";',

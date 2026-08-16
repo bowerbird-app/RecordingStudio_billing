@@ -49,3 +49,7 @@ Commercial publication still writes `rs_v3_commercial_configurations`. Capabilit
 ## What V1 does not include
 
 Do not add these in this gem: quotes, trials, coupons, credits, dunning, retries, metered billing keys, proration, multiple providers in one install, or a customer self-serve portal. See `README.md`.
+
+## Host layouts
+
+Customer billing controllers render inside the host's Recording Studio default layout (`recording_studio/default_layout`) when that template exists. Gem-template hosts that only ship `flat_pack_sidebar` fall back to that left sidebar. Sign-in stays on the host `application` layout. Rebuild Tailwind after install so FlatPack component classes are present.
