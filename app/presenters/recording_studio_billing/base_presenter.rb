@@ -30,8 +30,8 @@ module RecordingStudioBilling
     end
 
     def customer_price(amount_minor, currency_code, exponent: 2)
-      units = amount_minor.to_i / (10.0 ** exponent)
-      formatted = (units == units.to_i) ? units.to_i.to_s : format("%.#{exponent}f", units)
+      units = amount_minor.to_i / (10.0**exponent)
+      formatted = units == units.to_i ? units.to_i.to_s : format("%.#{exponent}f", units)
       case currency_code.to_s.upcase
       when "USD" then "$#{formatted}"
       when "EUR" then "€#{formatted}"

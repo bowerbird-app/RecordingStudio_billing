@@ -77,9 +77,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
     cards = presenter.plan_cards
     html = render_component(RecordingStudioBilling::SubscriptionsComponent, presenter)
 
-    assert_equal ["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] }
-    assert_equal ["$0", "$49", "$490"], cards.map { |card| card[:price_label] }
-    assert_equal ["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] }
+    assert_equal(["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] })
+    assert_equal(["$0", "$49", "$490"], cards.map { |card| card[:price_label] })
+    assert_equal(["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] })
     assert_includes html, "Continue to checkout"
   end
 

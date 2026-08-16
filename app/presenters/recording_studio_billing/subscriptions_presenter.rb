@@ -144,7 +144,7 @@ module RecordingStudioBilling
     def plan_feature_labels(option, amount)
       features = []
       features << copy("plan_feature_no_charge", "No charge to start") if amount&.zero?
-      features << "#{copy("plan_feature_billed_prefix", "Billed")} #{cadence_label(option.recurrence, option.interval)}"
+      features << "#{copy('plan_feature_billed_prefix', 'Billed')} #{cadence_label(option.recurrence, option.interval)}"
       features << copy("plan_feature_trial", "#{option.trial_days}-day trial") if option.try(:trial_days).to_i.positive?
       features.concat(catalogue_feature_labels(option))
       features
