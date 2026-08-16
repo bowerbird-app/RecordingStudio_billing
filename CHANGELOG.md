@@ -22,7 +22,7 @@ earlier experimental schemas.
 
 ### Fixed
 
-- Dummy seeds stay idempotent when loaded twice in one process. Plan-update fixtures are found by key, and seed apply runs are skipped when those runs already exist.
+- Dummy seeds stay idempotent when loaded twice in one process. Plan-update and feature fixtures are found by key (and product, for features that share a key).
 
 ## 0.1.2
 

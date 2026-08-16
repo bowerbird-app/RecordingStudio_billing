@@ -51,11 +51,6 @@ end
 refresh_recordable = lambda do |recording_id|
   RecordingStudio::Recording.unscoped.find(recording_id).recordable
 end
-catalogue_recordable = lambda do |recordable_type, key|
-  RecordingStudio::Recording.unscoped.where(root_recording: admin_root_recording, recordable_type:, trashed_at: nil).find do |recording|
-    recording.recordable.key == key
-  end&.recordable
-end
 
 previous_actor = Current.actor
 Current.actor = user
@@ -259,19 +254,18 @@ begin
   usage_price = refresh_recordable.call(usage_recording_ids.fetch(:price))
   overage_price = refresh_recordable.call(usage_recording_ids.fetch(:overage_price))
   monthly_plan_update = refresh_recordable.call(monthly_plan_update_recording_id)
-  feature = catalogue_recordable.call("RecordingStudioBilling::Feature", "demo_priority_support") ||
+  feature = RecordingStudioBilling::Feature.with_current_recording.find_by(key: "demo_priority_support", product_recording_id: monthly_product.recording.id) ||
             record_child.call(
               RecordingStudioBilling::Feature.new(product_recording: monthly_product.recording, key: "demo_priority_support",
                                                    kind: "boolean", definition: {}),
               admin_root_recording, monthly_product.recording
             )
-  unless catalogue_recordable.call("RecordingStudioBilling::Feature", "demo_priority_support")&.product_recording_id == addon_product.recording.id
+  RecordingStudioBilling::Feature.with_current_recording.find_by(key: "demo_priority_support", product_recording_id: addon_product.recording.id) ||
     record_child.call(
       RecordingStudioBilling::Feature.new(product_recording: addon_product.recording, key: "demo_priority_support",
                                            kind: "boolean", definition: {}),
       admin_root_recording, addon_product.recording
     )
-  end
   feature_recording_id = feature.recording.id
   unless feature.state == "published"
     RecordingStudioBilling::CommercialPublisher.publish!(root_recording: admin_root_recording,
@@ -317,14 +311,12 @@ begin
   payment = RecordingStudioBilling::Payment.find_by!(financial_command: checkout_command)
   invoice = payment.invoice
 
-  unless catalogue_recordable.call("RecordingStudioBilling::Feature", "demo_api_calls")
-    record_child.call(
-      RecordingStudioBilling::Feature.new(product_recording: usage_product.recording, key: "demo_api_calls",
-                                           kind: "boolean", definition: {}),
-      admin_root_recording, usage_product.recording
-    )
-  end
-  usage_feature = catalogue_recordable.call("RecordingStudioBilling::Feature", "demo_api_calls")
+  usage_feature = RecordingStudioBilling::Feature.with_current_recording.find_by(key: "demo_api_calls", product_recording_id: usage_product.recording.id) ||
+                  record_child.call(
+                    RecordingStudioBilling::Feature.new(product_recording: usage_product.recording, key: "demo_api_calls",
+                                                         kind: "boolean", definition: {}),
+                    admin_root_recording, usage_product.recording
+                  )
   raise "seeded usage feature is missing" unless usage_feature&.product_recording_id == usage_product.recording.id
   usage_feature_recording_id = usage_feature.recording.id
   RecordingStudioBilling::CommercialPublisher.publish!(root_recording: admin_root_recording,
@@ -462,19 +454,15 @@ begin
     [outcome, recording_id]
   end
   plan_run = lambda do |update, key, outcome: :success|
-    return if RecordingStudioBilling::PlanUpdateRun.exists?(idempotency_key: key)
-
     preview = RecordingStudioBilling.apply_plan_update(plan_update: update, root_recording: admin_root_recording, idempotency_key: key)
     run = RecordingStudioBilling.apply_plan_update(run: preview, root_recording: admin_root_recording, idempotency_key: key,
                                                    confirmation: { "approved_by" => user.id.to_s })
     run.applications.each { |application| execute_change.call(application.subscription_change_intent, outcome) }
     RecordingStudioBilling.apply_plan_update(run:, root_recording: admin_root_recording, idempotency_key: key)
   end
-  unless RecordingStudioBilling::PlanUpdateRun.exists?(idempotency_key: "seed:plan-scheduled")
-    scheduled_update = refresh_recordable.call(scheduled_update_recording_id)
-    scheduled_preview = RecordingStudioBilling.apply_plan_update(plan_update: scheduled_update, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled")
-    RecordingStudioBilling.apply_plan_update(run: scheduled_preview, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled", confirmation: { "approved_by" => user.id.to_s })
-  end
+  scheduled_update = refresh_recordable.call(scheduled_update_recording_id)
+  scheduled_preview = RecordingStudioBilling.apply_plan_update(plan_update: scheduled_update, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled")
+  RecordingStudioBilling.apply_plan_update(run: scheduled_preview, root_recording: admin_root_recording, idempotency_key: "seed:plan-scheduled", confirmation: { "approved_by" => user.id.to_s })
   plan_run.call(refresh_recordable.call(plan_updates.fetch("applied")), "seed:plan-applied")
   plan_run.call(refresh_recordable.call(plan_updates.fetch("failed")), "seed:plan-failed", outcome: :provider_rejection)
   plan_run.call(refresh_recordable.call(plan_updates.fetch("uncertain")), "seed:plan-uncertain", outcome: :timeout_after_possible_success)
