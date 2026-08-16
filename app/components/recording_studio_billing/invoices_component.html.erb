@@ -2,16 +2,16 @@
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :invoices) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::List::Component.new do %>
-  <% @presenter.invoices.each do |invoice| %><li><%= link_to invoice.id, helpers.invoice_path(invoice, root_recording_id: @presenter.root_recording.id) %>: <%= @presenter.invoice_status(invoice) %> - <%= @presenter.invoice_total(invoice) %></li><% end %>
+  <% @presenter.invoices.each do |invoice| %><li><%= link_to @presenter.invoice_label(invoice), helpers.invoice_path(invoice, root_recording_id: @presenter.root_recording.id) %>: <%= @presenter.invoice_status(invoice) %></li><% end %>
 <% end %>
 <% if @presenter.adjustments.present? %>
   <%= render FlatPack::List::Component.new do %>
-    <% @presenter.adjustments.each do |adjustment| %><li><%= adjustment.kind.humanize %>: <%= adjustment.amount_minor %> <%= adjustment.currency_code %> (<%= adjustment.financial_command.state.humanize %>)</li><% end %>
+    <% @presenter.adjustments.each do |adjustment| %><li><%= @presenter.adjustment_label(adjustment) %> (<%= @presenter.money_state(adjustment.financial_command.state) %>)</li><% end %>
   <% end %>
 <% end %>
 <% if @presenter.refunds.present? %>
   <%= render FlatPack::List::Component.new do %>
-    <% @presenter.refunds.each do |refund| %><li>Refund: <%= refund.amount_minor %> <%= refund.currency_code %> (<%= refund.financial_command.state.humanize %>)</li><% end %>
+    <% @presenter.refunds.each do |refund| %><li><%= @presenter.refund_label(refund) %> (<%= @presenter.money_state(refund.financial_command.state) %>)</li><% end %>
   <% end %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

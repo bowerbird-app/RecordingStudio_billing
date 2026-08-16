@@ -6,7 +6,7 @@ require_relative "dummy_v1_catalogue"
 
 result = DummyV1Catalogue.call
 
-puts "Seeded: admin@admin.com / Password"
+puts "Seeded: admin@admin.com / Password with workspace billing access"
 puts "Seeded: Workspace '#{result.workspace.name}' with root recording ##{result.root_recording.id}"
 puts "Seeded: Admin root '#{result.admin_root.name}' with root recording ##{result.admin_root_recording.id}"
 puts "Seeded: Billing account '#{result.account.name}' and billing admin '#{result.billing_admin.key}'"

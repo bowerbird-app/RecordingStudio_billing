@@ -8,7 +8,7 @@ module RecordingStudioBilling
 
     def notice
       copy("settings_notice",
-           "Payment methods and provider portal changes are disabled until a provider-authorized billing settings command is configured.")
+           "Payment methods cannot be changed here yet.")
     end
   end
 end

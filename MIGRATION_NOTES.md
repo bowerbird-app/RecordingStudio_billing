@@ -25,4 +25,4 @@ Do not edit copied engine migrations in the host. Schema changes belong in this 
 
 `test/dummy` uses the same install migration. Reset it with `bin/rails db:drop db:create db:migrate` from `test/dummy`, then commit `test/dummy/db/structure.sql`.
 
-The dummy host uses FlatPack. Signed-in dummy pages use the gem-template left sidebar layout. Billing engine pages use `app/views/layouts/recording_studio/default_layout.html.erb`. Dummy seeds rebuild the V1 demonstration catalogue; reset the dummy database if published records were created by an older seed.
+The dummy host uses FlatPack. Signed-in dummy pages use the gem-template left sidebar layout. Billing engine pages use `app/views/layouts/recording_studio/default_layout.html.erb`. Dummy seeds rebuild the V1 demonstration catalogue and grant the seeded admin Accessible `edit` on Studio Workspace; reset the dummy database if published records were created by an older seed.

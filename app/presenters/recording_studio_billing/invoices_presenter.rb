@@ -11,7 +11,15 @@ module RecordingStudioBilling
     end
 
     def invoice_status(invoice)
-      [invoice.state.humanize, invoice.financial_command&.state&.humanize].compact.join(" | ")
+      money_state(invoice.state)
+    end
+
+    def adjustment_label(adjustment)
+      "#{money_state(adjustment.kind)}: #{display_amount(adjustment.amount_minor, adjustment.currency_code)}"
+    end
+
+    def refund_label(refund)
+      "#{copy("refund_title", "Refund")}: #{display_amount(refund.amount_minor, refund.currency_code)}"
     end
   end
 end

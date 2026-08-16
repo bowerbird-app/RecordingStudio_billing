@@ -44,6 +44,11 @@ class BillingUiAccessActionsTest < Minitest::Test
     assert_raises(KeyError) { RecordingStudioBilling::AccessActions.role_for(:record_usage) }
   end
 
+  def test_billable_roots_opt_into_accessible_grants
+    assert RecordingStudio.capability_enabled?(:accessible, for: Workspace)
+    assert_includes RecordingStudio.capability_child_recordables_for(:accessible), "RecordingStudio::Access"
+  end
+
   def test_customer_mutation_routes_do_not_accept_get
     mutations = [
       "/billing/update_settings",

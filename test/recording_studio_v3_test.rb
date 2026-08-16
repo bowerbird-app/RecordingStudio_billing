@@ -40,6 +40,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_equal ["Workspace"], RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Account)
     assert_equal ["AdminRoot"], RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::BillingAdmin)
     assert RecordingStudio.capability_enabled?(:billing, for: Workspace)
+    assert RecordingStudio.capability_enabled?(:accessible, for: Workspace)
     assert RecordingStudio.capability_enabled?(:billing_admin, for: AdminRoot)
   end
 

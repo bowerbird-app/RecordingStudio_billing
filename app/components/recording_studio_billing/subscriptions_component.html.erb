@@ -4,21 +4,18 @@
 <%= render FlatPack::List::Component.new do %>
   <% @presenter.subscriptions.each do |subscription| %>
     <li>
-      <strong><%= subscription.identifier %></strong>: <%= subscription.state.humanize %>
+      <strong><%= @presenter.subscription_label(subscription) %></strong>: <%= @presenter.money_state(subscription.state) %>
       <% @presenter.current_subscription_rows(subscription).each do |item| %>
         <%= render FlatPack::List::Component.new do %>
-          <li><%= item[:label] %>: <%= item[:quantity] %> x <%= item[:amount] %> <%= item[:interval] %></li>
-          <% if item[:market].present? %><li>Market: <%= item[:market] %></li><% end %>
-          <% if item[:benefits].present? %><li>Benefits: <%= item[:benefits] %></li><% end %>
-          <% if item[:overage].present? %><li>Overage: <%= item[:overage] %></li><% end %>
+          <li><%= item[:label] %>: <%= item[:quantity] %> x <%= item[:amount] %> <%= item[:cadence] %></li>
         <% end %>
       <% end %>
-      <%= link_to @presenter.copy("change_subscription", "Change subscription"), helpers.change_selection_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+      <%= link_to @presenter.copy("change_subscription", "Change plan"), helpers.change_selection_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
       <% if subscription.state.in?(%w[trialing active past_due paused]) %>
-        <%= link_to @presenter.copy("cancel_subscription", "Cancel subscription"), helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+        <%= link_to @presenter.copy("cancel_subscription", "Cancel plan"), helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
       <% end %>
       <% if subscription.state == "paused" %>
-        <%= link_to @presenter.copy("resume_subscription", "Resume subscription"), helpers.resume_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+        <%= link_to @presenter.copy("resume_subscription", "Resume plan"), helpers.resume_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
       <% end %>
     </li>
   <% end %>
@@ -31,7 +28,8 @@
       <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
       <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
       <% if option.quantity_mode == "adjustable" %>
-        <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity %>
+        <%= label_tag "items_0_quantity", @presenter.copy("quantity_label", "Quantity") %>
+        <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity, id: "items_0_quantity" %>
       <% end %>
       <%= render FlatPack::Button::Component.new(text: @presenter.copy("choose_plan_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
     <% end %>

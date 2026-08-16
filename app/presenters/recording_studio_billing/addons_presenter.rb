@@ -8,20 +8,26 @@ module RecordingStudioBilling
 
     def purchase_rows
       purchases.map do |purchase|
-        snapshot = purchase.commercial_snapshot || {}
+        terms = canonical_terms(purchase.commercial_snapshot)
         {
-          mode: purchase.mode.humanize, quantity: purchase.quantity,
+          label: offer_label(
+            kind: snapshot_value(terms, "product", "kind") || "addon",
+            interval: snapshot_value(terms, "billing_option", "interval"),
+            recurrence: snapshot_value(terms, "billing_option", "recurrence") || purchase.mode,
+            name: snapshot_value(terms, "product", "name"),
+            amount_minor: purchase.amount_minor
+          ),
+          quantity: purchase.quantity,
           amount: display_amount(purchase.amount_minor, purchase.currency_code),
-          benefits: display_value(snapshot_value(snapshot, "benefits")),
-          grant: purchase.effects.map { |effect| display_value(effect.safe_metadata) }.reject(&:blank?).join("; "),
-          expiry: purchase.effects.map(&:effective_at).compact.max&.to_fs(:long),
-          refund: display_value(snapshot_value(snapshot, "refund_policy") || snapshot_value(snapshot, "refund"))
+          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence"),
+                                 snapshot_value(terms, "billing_option", "interval")),
+          expiry: purchase.effects.map(&:effective_at).compact.max&.to_fs(:long)
         }
       end
     end
 
     def offer_summary(option)
-      [option.key, option.recurrence, option.lifecycle_policy, option.checkout_policy].compact.join(" | ")
+      [catalog_offer_label(option), cadence_label(option.recurrence, option.interval)].compact.join(" · ")
     end
   end
 end

@@ -45,5 +45,75 @@ module RecordingStudioBilling
     def snapshot_value(snapshot, *keys)
       keys.reduce(snapshot || {}) { |value, key| value.is_a?(Hash) ? value[key.to_s] || value[key.to_sym] : nil }
     end
+
+    def canonical_terms(snapshot)
+      return {} unless snapshot.is_a?(Hash)
+
+      nested = snapshot_value(snapshot, "canonical_data")
+      nested.is_a?(Hash) ? nested : snapshot
+    end
+
+    def offer_label(kind:, interval: nil, recurrence: nil, name: nil, amount_minor: nil)
+      return name if name.present?
+
+      case kind.to_s
+      when "addon"
+        copy("offer_addon", "Add-on")
+      when "credit_pack"
+        copy("offer_credit_pack", "Credit pack")
+      when "service"
+        copy("offer_usage", "Usage")
+      when "plan"
+        return copy("offer_free_plan", "Free plan") if amount_minor&.zero?
+
+        case interval.to_s
+        when "year" then copy("offer_annual_plan", "Annual plan")
+        when "week" then copy("offer_weekly_plan", "Weekly plan")
+        else copy("offer_monthly_plan", "Monthly plan")
+        end
+      else
+        copy("offer_plan", "Plan")
+      end
+    end
+
+    def catalog_offer_label(option)
+      product = option.product_recording.recordable
+      offer_label(kind: product.kind, interval: option.interval, recurrence: option.recurrence,
+                  name: product.try(:name))
+    end
+
+    def cadence_label(recurrence, interval = nil)
+      return copy("checkout_cadence_one_time", "one-time") unless recurrence.to_s == "recurring"
+
+      case interval.to_s
+      when "year" then copy("checkout_cadence_yearly", "yearly")
+      when "week" then copy("checkout_cadence_weekly", "weekly")
+      else copy("checkout_cadence_monthly", "monthly")
+      end
+    end
+
+    def usage_label(key)
+      normalized = key.to_s
+      copy("usage_#{normalized}", human_usage_key(normalized))
+    end
+
+    def invoice_label(invoice)
+      issued = invoice.issued_at || invoice.try(:created_at)
+      [copy("invoice_title", "Invoice"), issued&.to_fs(:long),
+       display_amount(invoice.total_minor, invoice.currency_code)].compact.join(" · ")
+    end
+
+    def money_state(value)
+      value.to_s.humanize
+    end
+
+    private
+
+    def human_usage_key(key)
+      stripped = key.delete_prefix("demo_")
+      return copy("usage_api_calls", "API calls") if stripped.match?(/api.?calls/i)
+
+      stripped.tr("_", " ").capitalize
+    end
   end
 end

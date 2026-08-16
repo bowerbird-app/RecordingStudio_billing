@@ -104,6 +104,26 @@ class DummyV1Catalogue
     )
     @account = account_recording.recordable
     @billing_admin = billing_admin_recording.recordable
+    seed_customer_access!
+  end
+
+  def seed_customer_access!
+    previous = RecordingStudioAccessible.configuration.access_management_authorizer
+    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
+    result = RecordingStudioAccessible.grant_access(
+      recording: @root_recording,
+      actor: @user,
+      role: "edit",
+      manager_actor: @user
+    )
+    unless result.success?
+      raise "dummy catalogue could not grant workspace billing access: #{result.error}"
+    end
+    unless RecordingStudioAccessible.authorized?(actor: @user, recording: @root_recording, role: :edit)
+      raise "dummy catalogue workspace billing access was not granted"
+    end
+  ensure
+    RecordingStudioAccessible.configuration.access_management_authorizer = previous
   end
 
   def seed_providers!

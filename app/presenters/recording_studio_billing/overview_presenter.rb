@@ -9,11 +9,42 @@ module RecordingStudioBilling
     def subscription_rows
       subscriptions.map do |subscription|
         versions = subscription.item_versions.where(effective_ends_at: nil).order(:line_key)
-        { identifier: subscription.identifier, state: subscription.state.humanize, currency: subscription.currency_code,
-          lifecycle: versions.map { |version| "#{version.mode.humanize}: #{version.quantity} x #{display_amount(version.amount_minor, version.currency_code)} #{version.interval}" }.join("; "),
-          benefits: versions.map { |version| display_value(snapshot_value(version.commercial_snapshot, "benefits")) }.reject(&:blank?).join("; "),
-          market: versions.map { |version| display_value(snapshot_value(version.commercial_snapshot, "market")) }.reject(&:blank?).join("; ") }
+        primary = versions.first
+        terms = canonical_terms(primary&.commercial_snapshot)
+        {
+          identifier: subscription.identifier,
+          label: subscription_label(primary, terms),
+          state: money_state(subscription.state),
+          summary: versions.map { |version| version_summary(version) }.join("; ")
+        }
       end
+    end
+
+    private
+
+    def subscription_label(version, terms)
+      return copy("plan_title", "Plan") unless version
+
+      offer_label(
+        kind: snapshot_value(terms, "product", "kind") || "plan",
+        interval: version.interval,
+        recurrence: snapshot_value(terms, "billing_option", "recurrence"),
+        name: snapshot_value(terms, "product", "name"),
+        amount_minor: version.amount_minor
+      )
+    end
+
+    def version_summary(version)
+      terms = canonical_terms(version.commercial_snapshot)
+      label = offer_label(
+        kind: snapshot_value(terms, "product", "kind") || "plan",
+        interval: version.interval,
+        recurrence: snapshot_value(terms, "billing_option", "recurrence"),
+        name: snapshot_value(terms, "product", "name"),
+        amount_minor: version.amount_minor
+      )
+      cadence = cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
+      "#{label}: #{version.quantity} x #{display_amount(version.amount_minor, version.currency_code)} #{cadence}"
     end
   end
 end

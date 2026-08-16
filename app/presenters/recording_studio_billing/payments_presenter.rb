@@ -7,15 +7,19 @@ module RecordingStudioBilling
     def page = :payments
 
     def payment_state(payment)
-      payment.financial_command&.state || payment.state
+      money_state(payment.financial_command&.state || payment.state)
     end
 
-    def payment_details(payment)
-      display_value(payment[:safe_snapshot])
+    def payment_summary(payment)
+      snapshot = payment[:safe_snapshot] || {}
+      source = snapshot["source"] || snapshot[:source]
+      return copy("payment_source_card", "Paid by card") if source.to_s == "card"
+
+      nil
     end
 
     def refund_status(refund)
-      refund.financial_command.state
+      money_state(refund.financial_command.state)
     end
   end
 end

@@ -1,15 +1,9 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("invoice_title", "Invoice"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.invoice_heading, variant: :h1) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<p><%= @presenter.invoice.total_minor %> <%= @presenter.invoice.currency_code %></p>
-<p><%= @presenter.invoice.state %></p>
-<% if @presenter.command_state.present? %><p>Command status: <%= @presenter.command_state.humanize %></p><% end %>
+<p><%= @presenter.invoice_total %></p>
+<p><%= @presenter.invoice_status %></p>
 <%= render FlatPack::List::Component.new do %>
-  <% @presenter.invoice.lines.each do |line| %><li><%= line.description %>: <%= line.quantity %> x <%= line.amount_minor %> <%= line.currency_code %><% if line.safe_snapshot.present? %><br>Tax/Overage: <%= @presenter.display_value(line.safe_snapshot) %><% end %></li><% end %>
-<% end %>
-<% if @presenter.snapshot_rows.present? %>
-  <%= render FlatPack::List::Component.new do %>
-    <% @presenter.snapshot_rows.each do |label, value| %><li><%= label %>: <%= value %></li><% end %>
-  <% end %>
+  <% @presenter.line_rows.each do |line| %><li><%= line[:description] %>: <%= line[:quantity] %> x <%= line[:amount] %></li><% end %>
 <% end %>
 <% if @presenter.financial_rows.present? %>
   <%= render FlatPack::List::Component.new do %>

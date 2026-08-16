@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "recording_studio_accessible"
+
 module RecordingStudioBilling
   module Billable
     extend ActiveSupport::Concern
@@ -7,6 +9,8 @@ module RecordingStudioBilling
     included do |base|
       RecordingStudioBilling.register_capabilities!
       RecordingStudio.enable_capability(:billing, on: base)
+      RecordingStudioAccessible::Compatibility.register_access_capability!
+      RecordingStudio.enable_capability(:accessible, on: base)
     end
   end
 end

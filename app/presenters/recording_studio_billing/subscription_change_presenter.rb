@@ -24,10 +24,25 @@ module RecordingStudioBilling
       kinds
     end
 
+    def change_kind_label(kind)
+      copy("change_kind_#{kind}", kind.to_s.humanize)
+    end
+
     def current_terms
       subscription.item_versions.where(effective_ends_at: nil).order(:line_key).map do |version|
-        { line_key: version.line_key, quantity: version.quantity, amount_minor: version.amount_minor,
-          currency_code: version.currency_code, interval: version.interval, manifest_digest: version.manifest_digest }
+        terms = canonical_terms(version.commercial_snapshot)
+        {
+          label: offer_label(
+            kind: snapshot_value(terms, "product", "kind") || "plan",
+            interval: version.interval,
+            recurrence: snapshot_value(terms, "billing_option", "recurrence"),
+            name: snapshot_value(terms, "product", "name"),
+            amount_minor: version.amount_minor
+          ),
+          quantity: version.quantity,
+          amount: display_amount(version.amount_minor, version.currency_code),
+          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
+        }
       end
     end
 
@@ -35,20 +50,30 @@ module RecordingStudioBilling
       terms = proposal&.canonical_data || intent&.frozen_terms&.dig("proposed", "canonical_data")
       return {} unless terms
 
-      { quantity: terms.dig("price", "quantity"), amount_minor: terms.dig("price", "amount_minor"),
-        currency_code: terms.dig("price", "currency_code"), interval: terms.dig("billing_option", "interval"),
-        manifest_digest: proposal&.manifest_digest || intent&.proposed_manifest_digest }
+      {
+        label: offer_label(
+          kind: snapshot_value(terms, "product", "kind") || "plan",
+          interval: snapshot_value(terms, "billing_option", "interval"),
+          recurrence: snapshot_value(terms, "billing_option", "recurrence"),
+          name: snapshot_value(terms, "product", "name"),
+          amount_minor: snapshot_value(terms, "price", "amount_minor")
+        ),
+        quantity: snapshot_value(terms, "price", "quantity"),
+        amount: display_amount(snapshot_value(terms, "price", "amount_minor"),
+                               snapshot_value(terms, "price", "currency_code")),
+        cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence"),
+                               snapshot_value(terms, "billing_option", "interval"))
+      }
     end
 
     def effective_description
       return intent.effective_at.to_fs(:long) if intent&.effective_at
 
-      "Immediately after provider confirmation"
+      copy("change_effective_after_confirmation", "Immediately after provider confirmation")
     end
 
-    def expected_effects
-      intent&.outcome || { "financial_effect" => { "authority" => "provider_pending" },
-                           "tax_effect" => { "authority" => "provider_pending" } }
+    def result_notice
+      copy("change_result_notice", "The charge and tax update after the provider confirms this request.")
     end
 
     def page = :subscriptions

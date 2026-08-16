@@ -60,8 +60,8 @@ class BillingUiConfigurationTest < Minitest::Test
       locals: { presenter: }
     )
 
-    assert_includes html, "Usage &amp; Credits"
-    assert_includes html, "minutes"
+    assert_includes html, "Usage"
+    assert_includes html, "Minutes"
   end
 
   def test_customer_components_render_named_extension_slots

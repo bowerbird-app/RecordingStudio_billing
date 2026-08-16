@@ -181,7 +181,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   test "subscription confirmation GETs are read-only, POST creates one durable intent, and cross-root routes are hidden" do
-    root, option = published_checkout_option(recurrence: "recurring", interval: "month")
+    root, option = published_checkout_option(recurrence: "recurring", interval: "month", product_kind: "plan")
     subscription = project_recurring_subscription(root, option)
     use_subscription_change_adapter!
     switch_root(root)
@@ -190,9 +190,10 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
 
     get "/billing", params: { root_recording_id: root.id }
     assert_response :success
-    assert_includes response.body, "Current versions"
-    assert_includes response.body, "Monthly subscription"
+    assert_includes response.body, "Monthly plan"
     assert_includes response.body, "Cancellation and resumption are requests"
+    refute_includes response.body, "Current versions"
+    refute_includes response.body, "Market:"
 
     get "/billing/subscriptions/#{subscription.id}/cancel_confirmation", params: { root_recording_id: root.id }
     assert_response :success

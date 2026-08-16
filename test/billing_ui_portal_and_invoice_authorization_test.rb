@@ -89,13 +89,14 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     with_authorization(true) { get "/billing/invoices/#{invoice.id}", params: { root_recording_id: @root.id } }
     assert_response :success
     assert_includes response.body, "Overage minutes"
-    assert_includes response.body, "Tax/Overage"
+    refute_includes response.body, "Tax/Overage"
 
     with_authorization(true) { get "/billing/billing/payments", params: { root_recording_id: @root.id } }
     assert_response :success
     assert_includes response.body, "1000 USD"
     assert_includes response.body, command.state.humanize
-    assert_includes response.body, "Source, reason and tax"
+    assert_includes response.body, "Paid by card"
+    refute_includes response.body, "Source, reason and tax"
   end
 
   test "invoice index renders scoped refund adjustment and command states" do
@@ -129,18 +130,18 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     assert_includes response.body, refund_command.state.humanize
   end
 
-  test "usage route renders only the selected root's periods grants and caps" do
+  test "usage route renders only the selected root's periods grants and included amounts" do
     period = RecordingStudioBilling::UsagePeriod.create!(
-      root_recording: @root, account_recording: @account.recording, usage_key: "recording_minutes",
+      root_recording: @root, account_recording: @account.recording, usage_key: "studio_minutes",
       starts_at: 1.day.ago, ends_at: 1.day.from_now, state: "open", safe_metadata: { "tax_status" => "estimated" }
     )
     RecordingStudioBilling::UsageCreditGrant.create!(
-      root_recording: @root, account_recording: @account.recording, credit_key: "recording_minutes", quantity: 100,
+      root_recording: @root, account_recording: @account.recording, credit_key: "studio_minutes", quantity: 100,
       remaining_quantity: 75, effective_at: 1.day.ago, expires_at: 1.month.from_now,
       source_key: "usage-ui-#{SecureRandom.uuid}", safe_metadata: { "source" => "credit_pack" }
     )
     RecordingStudioBilling::UsageAllowancePolicy.create!(
-      root_recording: @root, account_recording: @account.recording, usage_period: period, usage_key: "recording_minutes",
+      root_recording: @root, account_recording: @account.recording, usage_period: period, usage_key: "studio_minutes",
       policy_kind: "hard_limit", limit_quantity: 100, consumed_quantity: 25, effective_at: 1.day.ago, safe_metadata: {}
     )
     hidden_period = RecordingStudioBilling::UsagePeriod.create!(
@@ -151,9 +152,12 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     with_authorization(true) { get "/billing/billing/usage", params: { root_recording_id: @root.id } }
 
     assert_response :success
-    assert_includes response.body, "recording_minutes"
+    assert_includes response.body, "Studio minutes"
     assert_includes response.body, "75 available of 100"
-    assert_includes response.body, "25/100"
+    assert_includes response.body, "25 of 100 included this period"
+    refute_includes response.body, "studio_minutes"
+    refute_includes response.body, "Caps"
+    refute_includes response.body, "tax_status"
     refute_includes response.body, hidden_period.usage_key
   end
 

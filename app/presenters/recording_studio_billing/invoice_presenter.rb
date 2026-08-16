@@ -6,18 +6,38 @@ module RecordingStudioBilling
 
     def page = :invoice
 
-    def snapshot_rows
-      (invoice[:safe_snapshot] || {}).map { |key, value| [key.to_s.humanize, display_value(value)] }
+    def invoice_heading
+      invoice_label(invoice)
     end
 
-    def command_state
-      invoice.financial_command&.state
+    def invoice_total
+      display_amount(invoice.total_minor, invoice.currency_code)
+    end
+
+    def invoice_status
+      money_state(invoice.state)
+    end
+
+    def line_rows
+      invoice.lines.map do |line|
+        {
+          description: line.description.presence || copy("invoice_item", "Invoice item"),
+          quantity: line.quantity,
+          amount: display_amount(line.amount_minor, line.currency_code)
+        }
+      end
     end
 
     def financial_rows
-      Array(payments).map { |payment| "Payment #{display_amount(payment.amount_minor, payment.currency_code)}: #{payment.financial_command&.state || payment.state}" } +
-        Array(refunds).map { |refund| "Refund #{display_amount(refund.amount_minor, refund.currency_code)}: #{refund.financial_command.state}" } +
-        Array(adjustments).map { |adjustment| "#{adjustment.kind.humanize} #{display_amount(adjustment.amount_minor, adjustment.currency_code)}: #{adjustment.financial_command.state}" }
+      Array(payments).map do |payment|
+        "#{copy("payments_title", "Payments")} #{display_amount(payment.amount_minor, payment.currency_code)}: #{money_state(payment.financial_command&.state || payment.state)}"
+      end +
+        Array(refunds).map do |refund|
+          "#{copy("refund_title", "Refund")} #{display_amount(refund.amount_minor, refund.currency_code)}: #{money_state(refund.financial_command.state)}"
+        end +
+        Array(adjustments).map do |adjustment|
+          "#{money_state(adjustment.kind)} #{display_amount(adjustment.amount_minor, adjustment.currency_code)}: #{money_state(adjustment.financial_command.state)}"
+        end
     end
   end
 end

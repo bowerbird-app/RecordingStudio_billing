@@ -6,7 +6,7 @@ without calling Stripe.
 
 ## What it covers
 
-- Devise authentication with a seeded admin user
+- Devise authentication with a seeded admin user who has Accessible `edit` on the Studio Workspace
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
 - FlatPack UI: sign-in uses the gem-template `application` layout; signed-in dummy pages use the left `flat_pack_sidebar` layout; mounted billing pages use Recording Studio's `recording_studio/default_layout` (the same left sidebar shell in this host)
@@ -73,4 +73,6 @@ keeping the cheaper quote. Browser return does not complete a purchase.
 Use it to verify the billing engine in a real host. If a layout, route, asset
 source, or Recording Studio initializer change breaks here, fix that before
 changing adapters. Keep user-facing copy on **products, prices, and checkout**;
-leave recordings and recordables in code.
+leave recordings and recordables in code. The dummy admin can open `/billing`
+because seeds grant Accessible `edit` on the workspace. A signed-in user
+without that grant receives `404`.

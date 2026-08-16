@@ -44,6 +44,23 @@ The dummy seed is the V1 demonstration catalogue: one Workspace, one Admin root,
 
 Checkout is one customer-facing lifecycle for every presentation. The browser may send option IDs, quantities, a country or currency preference, and a presentation preference. The server freezes money, tax treatment, Charge Market, and the commercial manifest. If the final Charge Market would change price or terms, checkout requotes, restarts, rejects, or holds for review. Browser return pages show intent state only; they never fulfil a purchase.
 
+## Customer billing access
+
+Customer `/billing` pages authorize through RecordingStudio Accessible. `RecordingStudioBilling::Billable` enables `:accessible` on the workspace-like root. Hosts grant a person `view` to read billing and `edit` to checkout or change a plan:
+
+```ruby
+RecordingStudioAccessible.grant_access(
+  recording: workspace_root,
+  actor: current_user,
+  role: "edit",
+  manager_actor: current_user
+)
+```
+
+The dummy seed grants `edit` on Studio Workspace to `admin@admin.com`. Do not stub `RecordingStudioAccessible.authorized?` in the host.
+
+Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels.
+
 ## Products and pricing
 
 Admin inventory lives under **Products and pricing**. The section key remains `billing_commercial` for hosts that already registered that navigation id.

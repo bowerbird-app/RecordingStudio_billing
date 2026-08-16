@@ -8,21 +8,29 @@ module RecordingStudioBilling
 
     def current_subscription_rows(subscription)
       subscription.item_versions.where(effective_ends_at: nil).order(:line_key).map do |version|
-        snapshot = version.commercial_snapshot || {}
+        terms = canonical_terms(version.commercial_snapshot)
         {
-          label: snapshot_value(snapshot, "product", "name") || snapshot_value(snapshot, "product", "key") || version.line_key,
+          label: offer_label(
+            kind: snapshot_value(terms, "product", "kind") || "plan",
+            interval: version.interval,
+            recurrence: snapshot_value(terms, "billing_option", "recurrence"),
+            name: snapshot_value(terms, "product", "name"),
+            amount_minor: version.amount_minor
+          ),
           quantity: version.quantity,
           amount: display_amount(version.amount_minor, version.currency_code),
-          interval: version.interval,
-          benefits: display_value(snapshot_value(snapshot, "benefits")),
-          overage: display_value(snapshot_value(snapshot, "overage")),
-          market: display_value(snapshot_value(snapshot, "market"))
+          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
         }
       end
     end
 
+    def subscription_label(subscription)
+      row = current_subscription_rows(subscription).first
+      row&.fetch(:label, nil) || copy("plan_title", "Plan")
+    end
+
     def offer_summary(option)
-      [option.key, option.recurrence, option.interval, option.lifecycle_policy, option.proration_policy].compact.join(" | ")
+      [catalog_offer_label(option), cadence_label(option.recurrence, option.interval)].compact.join(" · ")
     end
   end
 end

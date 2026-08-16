@@ -9,10 +9,8 @@
         <% @presenter.subscriptions.each do |subscription| %>
           <li>
             <% row = @presenter.subscription_rows.find { |candidate| candidate[:identifier] == subscription.identifier } %>
-            <strong><%= row[:identifier] %></strong>: <%= row[:state] %> (<%= row[:currency] %>)
-            <% if row[:lifecycle].present? %><br>Current versions: <%= row[:lifecycle] %><% end %>
-            <% if row[:market].present? %><br>Market: <%= row[:market] %><% end %>
-            <% if row[:benefits].present? %><br>Benefits and allowances: <%= row[:benefits] %><% end %>
+            <strong><%= row[:label] %></strong>: <%= row[:state] %>
+            <% if row[:summary].present? %><br><%= row[:summary] %><% end %>
             <% if subscription.state.in?(%w[trialing active past_due paused]) %>
               <%= link_to "Cancel", helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
             <% end %>

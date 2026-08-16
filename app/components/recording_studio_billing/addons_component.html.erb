@@ -1,19 +1,17 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("addons_title", "Addons"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("addons_title", "Add-ons"), variant: :h1) %>
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :addons) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% if @presenter.purchases.any? %>
   <%= render FlatPack::List::Component.new do %>
     <% @presenter.purchase_rows.each do |purchase| %>
-      <li><strong><%= purchase[:mode] %></strong>: <%= purchase[:quantity] %> x <%= purchase[:amount] %>
-        <% if purchase[:benefits].present? %><br>Benefits: <%= purchase[:benefits] %><% end %>
-        <% if purchase[:grant].present? %><br>Grant: <%= purchase[:grant] %><% end %>
-        <% if purchase[:expiry].present? %><br>Effective: <%= purchase[:expiry] %><% end %>
-        <% if purchase[:refund].present? %><br>Refund policy: <%= purchase[:refund] %><% end %>
+      <li><strong><%= purchase[:label] %></strong>: <%= purchase[:quantity] %> x <%= purchase[:amount] %>
+        <% if purchase[:cadence].present? %> <%= purchase[:cadence] %><% end %>
+        <% if purchase[:expiry].present? %><br><%= @presenter.copy("addons_effective", "Effective") %>: <%= purchase[:expiry] %><% end %>
       </li>
     <% end %>
   <% end %>
 <% else %>
-  <p><%= @presenter.copy("no_addons", "No addons have been purchased.") %></p>
+  <p><%= @presenter.copy("no_addons", "No add-ons have been purchased.") %></p>
 <% end %>
 <% @presenter.eligible_options.to_a.each do |option| %>
   <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
@@ -21,7 +19,8 @@
     <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
     <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
     <% if option.quantity_mode == "adjustable" %>
-      <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity %>
+      <%= label_tag "items_0_quantity", @presenter.copy("quantity_label", "Quantity") %>
+      <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity, id: "items_0_quantity" %>
     <% end %>
     <%= render FlatPack::Button::Component.new(text: @presenter.copy("addons_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
   <% end %>

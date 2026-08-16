@@ -30,6 +30,15 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     assert_equal "billing", billing_admin_for(@admin_root_recording).key
   end
 
+  test "seeds edit access on the workspace for the dummy admin" do
+    user = User.find_by!(email: "admin@admin.com")
+
+    assert RecordingStudio.capability_enabled?(:accessible, for: Workspace)
+    assert RecordingStudioAccessible.authorized?(actor: user, recording: @workspace_root, role: :view)
+    assert RecordingStudioAccessible.authorized?(actor: user, recording: @workspace_root, role: :edit)
+    refute RecordingStudioAccessible.authorized?(actor: user, recording: @admin_root_recording, role: :admin)
+  end
+
   test "seeds the published V1 product and market price matrix" do
     products = catalogue(RecordingStudioBilling::Product)
     prices = catalogue(RecordingStudioBilling::Price)

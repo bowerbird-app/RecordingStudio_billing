@@ -26,9 +26,13 @@ Customer billing views use the host's Recording Studio default layout
 (`recording_studio/default_layout`) when that template exists, then the
 gem-template left sidebar (`flat_pack_sidebar`), then `application`.
 
-The customer area provides Overview, Plan, Addons, Usage & Credits, Invoices,
-Payments, and Billing Settings routes. Every request uses the selected root;
+The customer area provides Overview, Plan, Add-ons, Usage, Invoices,
+Payments, and Billing settings. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
+Customer billing authorizes through RecordingStudio Accessible role grants on
+the workspace root (`view` to read, `edit` to checkout or change a plan).
+Including `RecordingStudioBilling::Billable` enables `:accessible` on that
+root so hosts can grant access with `RecordingStudioAccessible.grant_access`.
 Checkout return pages show the durable intent state only. They never fulfil an
 intent: completion remains provider-webhook and reconciliation work.
 
@@ -98,7 +102,7 @@ class. Hooks run only during rendering; they must not make billing state changes
 ## Recording Studio integration
 
 - `Workspace` is a Recording Studio root that includes
-  `RecordingStudioBilling::Billable`, enabling `:billing`.
+  `RecordingStudioBilling::Billable`, enabling `:billing` and `:accessible`.
 - `AdminRoot` is a Recording Studio root that includes
   `RecordingStudioBilling::BillingAdminSupport`, enabling `:billing_admin`.
 - `RecordingStudioBilling::Account` is the `:billing` child recordable.
@@ -470,16 +474,12 @@ provider-projected hybrid subscription, invoice, payment, refund, adjustment,
 and FeatureOverride journeys. These fixtures use the same command,
 reconciliation, projection, and revision services as production code.
 
-The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage &
-Credits, Invoices, Payments, Billing Settings, and Checkout presentation.
-Subscription cancellation and resumption routes provide integration points, but
-they are not documentation of a complete host customer-subscription-change
-workflow. Admin-action, tax-demo, and lifecycle flows are likewise
-host-extensible integration points unless the host implements and authorizes
-them. Recording Studio Admin registers the site-scoped Products and pricing,
-Financial records, and Billing operations areas. Hosts must apply their own
-Accessible authorization policy for customer and site operations before
-rendering or executing actions.
+The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage,
+Invoices, Payments, Billing settings, and Checkout. Copy on those pages talks
+about plans, prices, tax, invoices, and usage. Dummy seeds grant the seeded
+admin `edit` access on the Studio Workspace, so `/billing` works in development
+without stubbing Accessible. Hosts must grant Accessible roles for customer and
+site operations before rendering or executing actions.
 
 ```bash
 cd test/dummy

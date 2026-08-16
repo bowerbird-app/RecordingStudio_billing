@@ -26,9 +26,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   test "the seeded workspace can be selected before a permitted customer billing visit" do
     select_root(@workspace_root)
 
-    with_billing_access(true) do
-      get "/billing"
-    end
+    get "/billing"
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
@@ -36,14 +34,20 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "flat_pack/application"
     assert_includes response.body, 'data-theme="rounded"'
     assert_includes response.body, 'data-billing-layout="recording-studio-default"'
+    refute_includes response.body, "Current versions"
+    refute_includes response.body, "Market:"
   end
 
   test "customer billing routes reject an actor without billing access" do
-    select_root(@workspace_root)
+    outsider = User.create!(
+      email: "no-billing-#{SecureRandom.hex(4)}@example.test",
+      password: "Password",
+      password_confirmation: "Password"
+    )
+    sign_in outsider
+    select_root(@workspace_root, actor: outsider)
 
-    with_billing_access(false) do
-      get "/billing"
-    end
+    get "/billing"
 
     assert_response :not_found
   end
@@ -51,9 +55,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   test "admin operations reject an actor without Recording Studio Admin access" do
     price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: "demo_monthly_plan_us_price")
 
-    with_billing_access(false) do
-      post "/billing/admin/operations/publish_price/#{price.id}"
-    end
+    post "/billing/admin/operations/publish_price/#{price.id}"
 
     assert_response :forbidden
   end
@@ -130,35 +132,33 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
       "seed:checkout-no-charge" => "No payment is due for this plan."
     }
 
-    with_billing_access(true) do
-      expected.each do |key, copy|
-        intent = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key)
-        get "/billing/checkout/#{intent.id}", params: { root_recording_id: @workspace_root.id }
+    expected.each do |key, copy|
+      intent = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key)
+      get "/billing/checkout/#{intent.id}", params: { root_recording_id: @workspace_root.id }
 
-        assert_response :success, "#{key}: #{response.body}"
-        assert_includes response.body, copy
-        refute_includes response.body, "Market:"
-        refute_includes response.body, "Overage policy"
-        assert_includes response.body, "Tax is calculated at checkout"
+      assert_response :success, "#{key}: #{response.body}"
+      assert_includes response.body, copy
+      refute_includes response.body, "Market:"
+      refute_includes response.body, "Overage policy"
+      assert_includes response.body, "Tax is calculated at checkout"
 
-        get "/billing/checkout/#{intent.id}/return", params: { root_recording_id: @workspace_root.id }
+      get "/billing/checkout/#{intent.id}/return", params: { root_recording_id: @workspace_root.id }
 
-        assert_response :success
-        assert_equal intent.reload.state, RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key).state
-      end
-
-      italy = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-italy")
-      germany = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-germany")
-      get "/billing/checkout/#{italy.id}", params: { root_recording_id: @workspace_root.id }
       assert_response :success
-      assert_includes response.body, "4500 EUR"
-      refute_includes response.body, "4700 EUR"
-
-      get "/billing/checkout/#{germany.id}", params: { root_recording_id: @workspace_root.id }
-      assert_response :success
-      assert_includes response.body, "4700 EUR"
-      refute_includes response.body, "4500 EUR"
+      assert_equal intent.reload.state, RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key).state
     end
+
+    italy = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-italy")
+    germany = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-germany")
+    get "/billing/checkout/#{italy.id}", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "4500 EUR"
+    refute_includes response.body, "4700 EUR"
+
+    get "/billing/checkout/#{germany.id}", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "4700 EUR"
+    refute_includes response.body, "4500 EUR"
   end
 
   test "tax calculator contracts reject disabled and unsupported requests without creating projections" do
@@ -206,7 +206,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
       financial_command: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout").financial_command
     ).invoice
 
-    with_billing_access(true) { get "/billing/invoices/#{invoice.id}/download", headers: { "ACCEPT" => "application/pdf" } }
+    get "/billing/invoices/#{invoice.id}/download", headers: { "ACCEPT" => "application/pdf" }
 
     assert_response :success
     assert_equal "private, no-store", response.headers.fetch("Cache-Control")
@@ -216,23 +216,12 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
   private
 
-  def select_root(root_recording)
+  def select_root(root_recording, actor: @user)
     device_key = "billing-journey-device"
     RecordingStudio::RootSwitchable::Current.device_key = device_key
     RecordingStudio::RootSwitchable::Selection.upsert_for(
-      actor: @user, device_key:, scope_key: "all_workspaces", root_recording:
+      actor:, device_key:, scope_key: "all_workspaces", root_recording:
     )
-  end
-
-  def with_billing_access(allowed)
-    singleton_class = RecordingStudioAccessible.singleton_class
-    original = singleton_class.instance_method(:authorized?)
-    singleton_class.define_method(:authorized?) do |*arguments, **keywords|
-      allowed.respond_to?(:call) ? allowed.call(*arguments, **keywords) : allowed
-    end
-    yield
-  ensure
-    singleton_class.define_method(:authorized?, original) if original
   end
 
   def acquire_database_lock!
