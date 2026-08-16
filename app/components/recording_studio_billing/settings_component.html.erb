@@ -2,6 +2,9 @@
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :settings) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <p><%= @presenter.notice %></p>
+<% if @presenter.portal_available? %>
+  <%= button_to @presenter.copy("settings_payment_details", "Manage payment details"), helpers.portal_billing_path(root_recording_id: @presenter.root_recording.id), method: :post %>
+<% end %>
 <%= form_with url: helpers.update_settings_billing_path(root_recording_id: @presenter.root_recording.id), method: :patch do %>
   <%= render FlatPack::TextInput::Component.new(name: "account[name]", value: @presenter.account.name, label: @presenter.copy("settings_display_name", "Billing display name")) %>
   <%= render FlatPack::EmailInput::Component.new(name: "account[contact_email]", value: @presenter.account.contact_email, label: @presenter.copy("settings_contact_email", "Contact email")) %>
@@ -16,9 +19,6 @@
 <% end %>
 <% if @presenter.support_url.present? %>
   <%= render FlatPack::Button::Component.new(text: @presenter.copy("support_label", "Billing support"), style: :secondary, size: :md, url: @presenter.support_url, target: "_blank") %>
-<% end %>
-<% if @presenter.portal_available? %>
-  <%= button_to @presenter.copy("settings_payment_details", "Manage payment details"), helpers.portal_billing_path(root_recording_id: @presenter.root_recording.id), method: :post %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:settings).each { |content| %><%= render_extension(content) %><% } %>
