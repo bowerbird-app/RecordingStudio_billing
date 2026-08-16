@@ -7,6 +7,22 @@ module RecordingStudioBilling
       @presenter = presenter
     end
 
+    def checkout_status_style
+      case presenter.checkout_intent.state.to_s
+      when "completed" then :success
+      when "failed", "rejected", "cancelled", "expired" then :danger
+      when "requires_review", "requires_requote", "requires_restart" then :warning
+      else :info
+      end
+    end
+
+    def checkout_action_button?
+      action = presenter.checkout_action if presenter.respond_to?(:checkout_action)
+      return true if action.is_a?(Hash) && action[:kind] == :button && action[:url].present?
+
+      presenter.respond_to?(:redirect?) && presenter.redirect? && !presenter.respond_to?(:checkout_action)
+    end
+
     private
 
     attr_reader :presenter

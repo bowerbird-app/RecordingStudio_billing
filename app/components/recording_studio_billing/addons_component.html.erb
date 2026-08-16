@@ -1,29 +1,60 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("addons_title", "Add-ons"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("addons_title", "Add-ons"),
+  subtitle: @presenter.copy("addons_subtitle", "Extras you can add to this workspace."),
+  variant: :h1
+) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<% if @presenter.purchases.any? %>
-  <%= render FlatPack::List::Component.new do %>
-    <% @presenter.purchase_rows.each do |purchase| %>
-      <li><strong><%= purchase[:label] %></strong>: <%= purchase[:quantity] %> x <%= purchase[:amount] %>
-        <% if purchase[:cadence].present? %> <%= purchase[:cadence] %><% end %>
-        <% if purchase[:expiry].present? %><br><%= @presenter.copy("addons_effective", "Effective") %>: <%= purchase[:expiry] %><% end %>
-      </li>
+<div class="flex flex-col gap-6">
+  <% if @presenter.purchases.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.purchase_rows.each do |purchase| %>
+            <%= render FlatPack::List::Item.new do %>
+              <div class="flex flex-col gap-1">
+                <strong><%= purchase[:label] %></strong>
+                <span class="text-sm text-[var(--surface-muted-content-color)]">
+                  <%= purchase[:quantity] %> x <%= purchase[:amount] %><% if purchase[:cadence].present? %> <%= purchase[:cadence] %><% end %>
+                </span>
+                <% if purchase[:expiry].present? %>
+                  <span class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("addons_effective", "Effective") %>: <%= purchase[:expiry] %></span>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render FlatPack::EmptyState::Component.new(
+      title: @presenter.copy("no_addons", "No add-ons have been purchased."),
+      icon: :inbox
+    ) %>
+  <% end %>
+  <% @presenter.eligible_options.to_a.each do |option| %>
+    <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
+      <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+        <% card.body do %>
+          <p class="mb-4"><%= @presenter.offer_summary(option) %></p>
+          <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
+          <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
+          <% if option.quantity_mode == "adjustable" %>
+            <%= render FlatPack::NumberInput::Component.new(
+              name: "items[0][quantity]",
+              value: option.default_quantity,
+              min: option.minimum_quantity,
+              max: option.maximum_quantity,
+              label: @presenter.copy("quantity_label", "Quantity")
+            ) %>
+          <% end %>
+        <% end %>
+        <% card.footer do %>
+          <%= render FlatPack::Button::Component.new(text: @presenter.copy("addons_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
+        <% end %>
+      <% end %>
     <% end %>
   <% end %>
-<% else %>
-  <p><%= @presenter.copy("no_addons", "No add-ons have been purchased.") %></p>
-<% end %>
-<% @presenter.eligible_options.to_a.each do |option| %>
-  <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
-    <p><%= @presenter.offer_summary(option) %></p>
-    <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
-    <%= hidden_field_tag "items[0][billing_option_recording_id]", option.recording.id %>
-    <% if option.quantity_mode == "adjustable" %>
-      <%= label_tag "items_0_quantity", @presenter.copy("quantity_label", "Quantity") %>
-      <%= number_field_tag "items[0][quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity, id: "items_0_quantity" %>
-    <% end %>
-    <%= render FlatPack::Button::Component.new(text: @presenter.copy("addons_continue", "Continue to checkout"), style: :primary, size: :md, type: :submit) %>
-  <% end %>
-<% end %>
+</div>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:addons).each { |content| %><%= render_extension(content) %><% } %>
 <% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

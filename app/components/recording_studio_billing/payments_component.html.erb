@@ -1,24 +1,55 @@
-<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("payments_title", "Payments"), variant: :h1) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("payments_title", "Payments"),
+  subtitle: @presenter.copy("payments_subtitle", "Charges and refunds for this workspace."),
+  variant: :h1
+) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
-<%= render FlatPack::List::Component.new do %>
-  <% @presenter.payments.each do |payment| %>
-    <li>
-      <%= [@presenter.payment_recorded_at(payment), @presenter.display_amount(payment.amount_minor, payment.currency_code)].compact.join(" · ") %>:
-      <%= @presenter.payment_state(payment) %>
-      <% if @presenter.payment_summary(payment).present? %><br><%= @presenter.payment_summary(payment) %><% end %>
-    </li>
+<div class="flex flex-col gap-6">
+  <% if @presenter.payments.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.payments.each do |payment| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: @presenter.payment_state(payment), style: status_badge_style(@presenter.payment_state(payment)), size: :sm))) do %>
+              <div class="flex flex-col gap-1">
+                <span><%= [@presenter.payment_recorded_at(payment), @presenter.display_amount(payment.amount_minor, payment.currency_code)].compact.join(" · ") %></span>
+                <% if @presenter.payment_summary(payment).present? %>
+                  <span class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.payment_summary(payment) %></span>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render FlatPack::EmptyState::Component.new(
+      title: @presenter.copy("no_payments", "No payments yet."),
+      icon: :inbox
+    ) %>
   <% end %>
-<% end %>
-<% if @presenter.refunds.present? %>
-  <%= render FlatPack::List::Component.new do %>
-    <% @presenter.refunds.each do |refund| %><li><%= @presenter.copy("refund_title", "Refund") %>: <%= @presenter.display_amount(refund.amount_minor, refund.currency_code) %> (<%= @presenter.refund_status(refund) %>)</li><% end %>
+  <% if @presenter.refunds.present? || @presenter.pending_refund_rows.present? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.header do %>
+        <h3 class="text-lg font-semibold"><%= @presenter.copy("refund_title", "Refund") %></h3>
+      <% end %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% Array(@presenter.refunds).each do |refund| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: @presenter.refund_status(refund), style: status_badge_style(@presenter.refund_status(refund)), size: :sm))) do %>
+              <%= @presenter.copy("refund_title", "Refund") %>: <%= @presenter.display_amount(refund.amount_minor, refund.currency_code) %>
+            <% end %>
+          <% end %>
+          <% Array(@presenter.pending_refund_rows).each do |row| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: row[:status], style: status_badge_style(row[:status]), size: :sm))) do %>
+              <%= row[:label] %>: <%= row[:amount] %>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
   <% end %>
-<% end %>
-<% if @presenter.pending_refund_rows.present? %>
-  <%= render FlatPack::List::Component.new do %>
-    <% @presenter.pending_refund_rows.each do |row| %><li><%= row[:label] %>: <%= row[:amount] %> (<%= row[:status] %>)</li><% end %>
-  <% end %>
-<% end %>
+</div>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:payments).each { |content| %><%= render_extension(content) %><% } %>
 <% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

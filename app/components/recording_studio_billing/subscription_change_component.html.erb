@@ -1,47 +1,117 @@
 <% if @presenter.result? %>
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_result_title", "Plan change"), variant: :h1) %>
-	<p><%= @presenter.change_kind_label(@presenter.intent.change_kind) %>: <%= @presenter.money_state(@presenter.intent.state) %></p>
-	<%= render FlatPack::List::Component.new do %>
-		<% @presenter.current_terms.each do |term| %><li><%= @presenter.copy("change_current", "Current") %> <%= term[:label] %>: <%= term[:quantity] %> x <%= term[:amount] %> <%= term[:cadence] %></li><% end %>
-		<li><%= @presenter.copy("change_proposed", "Proposed") %>: <%= [@presenter.proposed_terms[:label], @presenter.proposed_terms[:quantity], @presenter.proposed_terms[:amount], @presenter.proposed_terms[:cadence]].compact.join(" ") %></li>
-		<li><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %></li>
-		<li><%= @presenter.result_notice %></li>
-	<% end %>
-<% elsif @presenter.selection? %>
-	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_select_title", "Change plan"), variant: :h1) %>
-	<% @presenter.eligible_options.each do |option| %>
-		<% change_kinds = @presenter.change_kinds_for(option) %>
-		<% next if change_kinds.empty? %>
-		<%= form_with url: helpers.compare_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
-			<p><%= @presenter.catalog_offer_label(option) %></p>
-			<%= hidden_field_tag "subscription_change[billing_option_recording_id]", option.recording.id %>
-			<%= label_tag "subscription_change_change_kind", @presenter.copy("change_kind_label", "Change") %>
-			<%= select_tag "subscription_change[change_kind]", options_for_select(change_kinds.map { |kind| [@presenter.change_kind_label(kind), kind] }), id: "subscription_change_change_kind" %>
-			<%= label_tag "subscription_change_quantity", @presenter.copy("quantity_label", "Quantity") %>
-			<%= number_field_tag "subscription_change[quantity]", option.default_quantity, min: option.minimum_quantity, max: option.maximum_quantity, id: "subscription_change_quantity" %>
-			<%= render FlatPack::Button::Component.new(text: @presenter.copy("change_compare", "Compare"), style: :primary, size: :md, type: :submit) %>
+	<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+		<% card.body do %>
+			<%= render FlatPack::List::Component.new(divider: true) do %>
+				<% @presenter.current_terms.each do |term| %>
+					<%= render FlatPack::List::Item.new do %>
+						<%= @presenter.copy("change_current", "Current") %> <%= term[:label] %>: <%= term[:quantity] %> x <%= term[:amount] %> <%= term[:cadence] %>
+					<% end %>
+				<% end %>
+				<%= render FlatPack::List::Item.new do %>
+					<%= @presenter.copy("change_proposed", "Proposed") %>: <%= [@presenter.proposed_terms[:label], @presenter.proposed_terms[:quantity], @presenter.proposed_terms[:amount], @presenter.proposed_terms[:cadence]].compact.join(" ") %>
+				<% end %>
+				<%= render FlatPack::List::Item.new do %>
+					<%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %>
+				<% end %>
+			<% end %>
 		<% end %>
 	<% end %>
+	<div class="mt-4">
+		<%= render FlatPack::Alert::Component.new(title: @presenter.change_kind_label(@presenter.intent.change_kind), description: @presenter.result_notice, style: :info) %>
+	</div>
+<% elsif @presenter.selection? %>
+	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_select_title", "Change plan"), variant: :h1) %>
+	<div class="flex flex-col gap-6">
+		<% @presenter.eligible_options.each do |option| %>
+			<% change_kinds = @presenter.change_kinds_for(option) %>
+			<% next if change_kinds.empty? %>
+			<%= form_with url: helpers.compare_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
+				<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+					<% card.header do %>
+						<h3 class="text-lg font-semibold"><%= @presenter.catalog_offer_label(option) %></h3>
+					<% end %>
+					<% card.body do %>
+						<%= hidden_field_tag "subscription_change[billing_option_recording_id]", option.recording.id %>
+						<div class="flex flex-col gap-4">
+							<%= render FlatPack::Select::Component.new(
+								name: "subscription_change[change_kind]",
+								options: change_kinds.map { |kind| [@presenter.change_kind_label(kind), kind] },
+								label: @presenter.copy("change_kind_label", "Change")
+							) %>
+							<%= render FlatPack::NumberInput::Component.new(
+								name: "subscription_change[quantity]",
+								value: option.default_quantity,
+								min: option.minimum_quantity,
+								max: option.maximum_quantity,
+								label: @presenter.copy("quantity_label", "Quantity")
+							) %>
+						</div>
+					<% end %>
+					<% card.footer do %>
+						<%= render FlatPack::Button::Component.new(text: @presenter.copy("change_compare", "Compare"), style: :primary, size: :md, type: :submit) %>
+					<% end %>
+				<% end %>
+			<% end %>
+		<% end %>
+	</div>
 <% elsif @presenter.proposal %>
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_compare_title", "Review plan change"), variant: :h1) %>
-	<%= render FlatPack::List::Component.new do %>
-		<% @presenter.current_terms.each do |term| %><li><%= @presenter.copy("change_current", "Current") %> <%= term[:label] %>: <%= term[:quantity] %> x <%= term[:amount] %> <%= term[:cadence] %></li><% end %>
-		<li><%= @presenter.copy("change_proposed", "Proposed") %>: <%= @presenter.proposed_terms[:label] %> <%= @presenter.proposed_terms[:quantity] %> x <%= @presenter.proposed_terms[:amount] %> <%= @presenter.proposed_terms[:cadence] %></li>
-		<li><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %></li>
-		<li><%= @presenter.result_notice %></li>
-	<% end %>
-	<%= form_with url: helpers.confirm_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
-		<%= hidden_field_tag "subscription_change[proposal_key]", @presenter.request_key %>
-		<%= render FlatPack::Button::Component.new(text: @presenter.copy("change_confirm", "Confirm change"), style: :primary, size: :md, type: :submit) %>
+	<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+		<% card.body do %>
+			<%= render FlatPack::List::Component.new(divider: true) do %>
+				<% @presenter.current_terms.each do |term| %>
+					<%= render FlatPack::List::Item.new do %>
+						<%= @presenter.copy("change_current", "Current") %> <%= term[:label] %>: <%= term[:quantity] %> x <%= term[:amount] %> <%= term[:cadence] %>
+					<% end %>
+				<% end %>
+				<%= render FlatPack::List::Item.new do %>
+					<%= @presenter.copy("change_proposed", "Proposed") %>: <%= @presenter.proposed_terms[:label] %> <%= @presenter.proposed_terms[:quantity] %> x <%= @presenter.proposed_terms[:amount] %> <%= @presenter.proposed_terms[:cadence] %>
+				<% end %>
+				<%= render FlatPack::List::Item.new do %>
+					<%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %>
+				<% end %>
+			<% end %>
+		<% end %>
+		<% card.footer do %>
+			<%= form_with url: helpers.confirm_change_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post do %>
+				<%= hidden_field_tag "subscription_change[proposal_key]", @presenter.request_key %>
+				<%= render FlatPack::Button::Component.new(text: @presenter.copy("change_confirm", "Confirm change"), style: :primary, size: :md, type: :submit) %>
+			<% end %>
+		<% end %>
 	<% end %>
 <% else %>
-	<%= render FlatPack::PageTitle::Component.new(title: @presenter.cancellation? ? @presenter.copy("cancel_title", "Cancel plan") : @presenter.copy("resume_title", "Resume plan"), variant: :h1) %>
-	<%= render FlatPack::List::Component.new do %>
-		<% @presenter.consequences.each do |consequence| %><li><%= consequence %></li><% end %>
-		<li><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %></li>
+	<%= render FlatPack::PageTitle::Component.new(
+		title: @presenter.cancellation? ? @presenter.copy("cancel_title", "Cancel plan") : @presenter.copy("resume_title", "Resume plan"),
+		variant: :h1
+	) %>
+	<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+		<% card.body do %>
+			<%= render FlatPack::List::Component.new do %>
+				<% @presenter.consequences.each do |consequence| %>
+					<%= render FlatPack::List::Item.new do %><%= consequence %><% end %>
+				<% end %>
+				<%= render FlatPack::List::Item.new do %>
+					<%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %>
+				<% end %>
+			<% end %>
+		<% end %>
+		<% card.footer do %>
+			<div class="flex flex-wrap gap-2">
+				<%= render FlatPack::Button::Component.new(
+					text: @presenter.cancellation? ? @presenter.copy("cancel_confirm", "Confirm cancellation") : @presenter.copy("resume_confirm", "Confirm resumption"),
+					style: @presenter.cancellation? ? :danger : :primary,
+					url: @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id),
+					method: :post
+				) %>
+				<%= render FlatPack::Button::Component.new(
+					text: @presenter.cancellation? ? @presenter.copy("cancel_keep", "Keep plan") : @presenter.copy("resume_keep", "Keep plan paused"),
+					style: :ghost,
+					url: helpers.root_path(root_recording_id: @presenter.root_recording.id)
+				) %>
+			</div>
+		<% end %>
 	<% end %>
-	<%= button_to @presenter.cancellation? ? @presenter.copy("cancel_confirm", "Confirm cancellation") : @presenter.copy("resume_confirm", "Confirm resumption"), @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post %>
-	<%= link_to @presenter.cancellation? ? @presenter.copy("cancel_keep", "Keep plan") : @presenter.copy("resume_keep", "Keep plan paused"), helpers.plan_billing_path(root_recording_id: @presenter.root_recording.id) %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:subscriptions).each { |content| %><%= render_extension(content) %><% } %>

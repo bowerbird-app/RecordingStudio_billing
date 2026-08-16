@@ -76,7 +76,8 @@ only card action. Cancel is on Overview. Change-request examples live on **Plan 
 (`/billing/billing/plan_requests`). Recurring dummy checkouts share one execution group, so
 the cancelled hybrid journey is history on that same plan. The dummy sidebar renders
 `RecordingStudioBilling::CustomerSidebarComponent` so those screens sit in Recording Studio's
-layout.
+layout. Add-ons, Usage, Invoices, Payments, Billing settings, checkout, invoice detail, and
+the demonstration payment portal use the same FlatPack cards, lists, badges, and buttons.
 
 ## Why this app exists
 

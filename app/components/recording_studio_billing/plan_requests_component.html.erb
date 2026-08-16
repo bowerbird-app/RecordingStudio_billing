@@ -21,7 +21,10 @@
     <% end %>
   <% end %>
 <% else %>
-  <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("no_plan_requests", "There are no plan requests yet.") %></p>
+  <%= render FlatPack::EmptyState::Component.new(
+    title: @presenter.copy("no_plan_requests", "There are no plan requests yet."),
+    icon: :inbox
+  ) %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:plan_requests).each { |content| %><%= render_extension(content) %><% } %>

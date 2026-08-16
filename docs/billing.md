@@ -61,7 +61,7 @@ The dummy seed grants `edit` on Studio Workspace to `admin@admin.com`. Do not st
 
 Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels. Display prices use the same trusted location evidence as checkout, so a US host sees US plan prices rather than the global fallback.
 
-Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation.
+Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation. Those screens, plus Add-ons, Usage, Settings, checkout, and invoice detail, use FlatPack cards, lists, badges, and buttons rather than custom page chrome.
 
 The customer **Plan** page (`/billing/billing/plan`) is title, subtitle, and up to three FlatPack pricing cards (free, monthly, and annual in the dummy). Cards show the resolved customer-market price. The current plan is a badge on its card; choosing another plan is the only action. Cancel lives on Overview. Change-request history is its own **Plan requests** page (`/billing/billing/plan_requests`). Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
 

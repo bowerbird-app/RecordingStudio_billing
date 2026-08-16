@@ -8,13 +8,7 @@ module RecordingStudioBilling
     end
 
     def request_badge_style(state)
-      case state.to_s
-      when "Succeeded", "Applied" then :success
-      when "Failed" then :danger
-      when "Scheduled" then :primary
-      when "Waiting for confirmation" then :warning
-      else :default
-      end
+      status_badge_style(state)
     end
   end
 end

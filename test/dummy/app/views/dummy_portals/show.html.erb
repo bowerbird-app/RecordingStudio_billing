@@ -1,9 +1,18 @@
-<%= render FlatPack::PageTitle::Component.new(title: "Payment details", variant: :h1) %>
-<p>This portal can update payment methods, billing address, tax IDs, and invoice history. Plan changes stay in billing.</p>
-<%= render FlatPack::List::Component.new do %>
-  <li>Payment methods: card on file is updated here, not by changing a plan.</li>
-  <li>Billing address: used for invoices and tax location.</li>
-  <li>Tax IDs: business tax numbers for invoices.</li>
-  <li>Invoice history: open billing invoices to download statements.</li>
+<%= render FlatPack::PageTitle::Component.new(
+  title: "Payment details",
+  subtitle: "Update payment methods, billing address, tax IDs, and invoice history. Plan changes stay in billing.",
+  variant: :h1
+) %>
+<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+  <% card.body do %>
+    <%= render FlatPack::List::Component.new(divider: true) do %>
+      <%= render FlatPack::List::Item.new do %>Payment methods: card on file is updated here, not by changing a plan.<% end %>
+      <%= render FlatPack::List::Item.new do %>Billing address: used for invoices and tax location.<% end %>
+      <%= render FlatPack::List::Item.new do %>Tax IDs: business tax numbers for invoices.<% end %>
+      <%= render FlatPack::List::Item.new do %>Invoice history: open billing invoices to download statements.<% end %>
+    <% end %>
+  <% end %>
+  <% card.footer do %>
+    <%= render FlatPack::Button::Component.new(text: "Back to billing settings", style: :secondary, url: "/billing/billing/settings") %>
+  <% end %>
 <% end %>
-<p><%= link_to "Back to billing settings", "/billing/billing/settings" %></p>
