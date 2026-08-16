@@ -26,9 +26,12 @@ Customer billing views use the host's Recording Studio default layout
 (`recording_studio/default_layout`) when that template exists, then the
 gem-template left sidebar (`flat_pack_sidebar`), then `application`.
 
-The customer area provides Overview, Plan, Add-ons, Usage, Invoices,
-Payments, and Billing settings. The Plan page is a FlatPack pricing-card
-layout with a title, subtitle, and up to three plan cards. Every request uses the selected root;
+The customer area is a set of gem-owned screens the host mounts. Each screen
+is one job: Overview, Plan, Plan requests, Add-ons, Usage, Invoices, Payments,
+and Billing settings. Pages render inside Recording Studio's
+`recording_studio/default_layout`. The Plan page is a title, subtitle, and up
+to three pricing cards. Hosts render `RecordingStudioBilling::CustomerSidebarComponent`
+in that layout's sidebar so billing links update with the gem. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
 Customer billing authorizes through RecordingStudio Accessible role grants on
 the workspace root (`view` to read, `edit` to checkout or change a plan).
@@ -75,10 +78,17 @@ add-on, quantity, or promotion code.
 ### Billing UI extension contracts
 
 The customer UI uses namespaced ViewComponents and presenters for overview,
-plans, add-ons, usage, invoices, payments, checkout, and navigation. Hosts can
-replace a page presenter, add navigation items or page content, customize copy,
-set a support link, and replace a provider-specific component without changing
-engine templates:
+plans, plan requests, add-ons, usage, invoices, payments, checkout, and the
+customer sidebar. Hosts can replace a page presenter, add sidebar items or page
+content, customize copy, set a support link, and replace a provider-specific
+component without copying engine templates. Render the gem sidebar in the host
+Recording Studio layout:
+
+```erb
+<%= render RecordingStudioBilling::CustomerSidebarComponent.new(
+      root_recording_id: current_root_recording&.id
+    ) %>
+```
 
 ```ruby
 RecordingStudioBilling.configure do |config|
@@ -461,7 +471,8 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Signed-in dummy pages use the gem-template
-left sidebar (`flat_pack_sidebar`). Mounted billing pages use Recording Studio's
+left sidebar (`flat_pack_sidebar`). That sidebar mounts
+`RecordingStudioBilling::CustomerSidebarComponent`. Mounted billing pages use Recording Studio's
 `recording_studio/default_layout`, which this dummy implements with the same
 FlatPack sidebar shell. Its credential-free demonstration products include
 fake-provider checkout prices across US, UK, Italy, Germany, and a global

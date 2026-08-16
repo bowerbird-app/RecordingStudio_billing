@@ -69,12 +69,14 @@ plans, prices, and tax at checkout. If a later Charge Market would change the
 price, checkout requotes, restarts, rejects, or holds for review instead of
 keeping the cheaper quote. Browser return does not complete a purchase.
 
-Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace shows FlatPack
-pricing cards for the US free ($0), monthly ($49), and annual ($490) plans, with a title
-and subtitle above the three cards. The live monthly plan is marked current. Change-request
-examples (scheduled, applied, failed, and waiting) sit below the cards. Recurring dummy
-checkouts share one execution group, so the cancelled hybrid journey is history on that
-same plan.
+Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace shows a title,
+subtitle, and three FlatPack pricing cards for the US free ($0), monthly ($49), and
+annual ($490) plans. The live monthly plan is marked current. Choose this plan is the
+only card action. Cancel is on Overview. Change-request examples live on **Plan requests**
+(`/billing/billing/plan_requests`). Recurring dummy checkouts share one execution group, so
+the cancelled hybrid journey is history on that same plan. The dummy sidebar renders
+`RecordingStudioBilling::CustomerSidebarComponent` so those screens sit in Recording Studio's
+layout.
 
 ## Why this app exists
 

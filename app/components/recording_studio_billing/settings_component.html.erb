@@ -1,5 +1,4 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("settings_title", "Billing settings"), variant: :h1) %>
-<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :settings) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <p><%= @presenter.notice %></p>
 <% if @presenter.portal_available? %>

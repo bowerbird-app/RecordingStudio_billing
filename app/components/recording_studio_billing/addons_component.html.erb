@@ -1,5 +1,4 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("addons_title", "Add-ons"), variant: :h1) %>
-<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :addons) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% if @presenter.purchases.any? %>
   <%= render FlatPack::List::Component.new do %>

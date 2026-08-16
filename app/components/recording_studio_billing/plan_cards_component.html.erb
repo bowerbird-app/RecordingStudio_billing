@@ -1,0 +1,5 @@
+<div class="grid gap-6 md:grid-cols-3">
+  <% @presenter.plan_cards.each do |plan| %>
+    <%= render RecordingStudioBilling::PlanCardComponent.new(plan:, presenter: @presenter) %>
+  <% end %>
+</div>

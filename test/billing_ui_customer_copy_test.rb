@@ -40,6 +40,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes html, "View plans"
     assert_includes html, "Billed monthly"
     refute_includes html, "Add-on: 2 x"
+    refute_includes html, "Choose a plan"
   end
 
   def test_plan_and_addon_offers_use_customer_labels
@@ -57,6 +58,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes plan_html, "Choose a plan"
     assert_includes plan_html, "Pick the plan that fits this workspace"
     assert_includes plan_html, "text-3xl font-bold"
+    refute_includes plan_html, "Cancel plan"
+    refute_includes plan_html, "Plan requests"
+    refute_includes plan_html, "Scheduled"
     assert_includes addon_html, "Monthly plan · monthly"
     refute_includes plan_html, option.key
     refute_includes addon_html, option.key
@@ -80,7 +84,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_equal(["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] })
     assert_equal(["$0", "$49", "$490"], cards.map { |card| card[:price_label] })
     assert_equal(["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] })
-    assert_includes html, "Continue to checkout"
+    assert_includes html, "Choose this plan"
   end
 
   def test_usage_hides_raw_keys_and_internal_hashes

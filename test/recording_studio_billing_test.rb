@@ -16,6 +16,13 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes view, "Phase 1 boundary"
   end
 
+  def test_dummy_sidebar_mounts_the_gem_customer_sidebar
+    sidebar = File.read(File.expand_path("dummy/app/views/layouts/flat_pack/_sidebar.html.erb", __dir__))
+
+    assert_includes sidebar, "RecordingStudioBilling::CustomerSidebarComponent"
+    refute_includes sidebar, 'label: "Billing"'
+  end
+
   def test_dummy_keeps_the_flatpack_rounded_theme
     sidebar = File.read(File.expand_path("dummy/app/views/layouts/flat_pack_sidebar.html.erb", __dir__))
     default_layout = File.read(

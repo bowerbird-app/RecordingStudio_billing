@@ -8,6 +8,7 @@ RecordingStudioBilling::Engine.routes.draw do
 
   resource :billing, only: :show, controller: "billing" do
     get :plan
+    get :plan_requests
     get :addons
     get :usage
     get :invoices

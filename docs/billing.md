@@ -63,7 +63,7 @@ Customer screens use plan, price, invoice, and usage language. They do not show 
 
 Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation.
 
-The customer **Plan** page (`/billing/billing/plan`) is a FlatPack pricing-card layout: a title and subtitle, then up to three plan cards (free, monthly, and annual in the dummy). Cards show the resolved customer-market price. The current plan is marked on its card. Change-request history sits in a **Plan requests** card below, not in the pricing grid. Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
+The customer **Plan** page (`/billing/billing/plan`) is title, subtitle, and up to three FlatPack pricing cards (free, monthly, and annual in the dummy). Cards show the resolved customer-market price. The current plan is a badge on its card; choosing another plan is the only action. Cancel lives on Overview. Change-request history is its own **Plan requests** page (`/billing/billing/plan_requests`). Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
 
 ## Restricted payment portal
 
@@ -91,4 +91,4 @@ Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, g
 
 ## Host layouts
 
-Customer billing controllers render inside the host's Recording Studio default layout (`recording_studio/default_layout`) when that template exists. Gem-template hosts that only ship `flat_pack_sidebar` fall back to that left sidebar. Sign-in stays on the host `application` layout. Rebuild Tailwind after install so FlatPack component classes are present.
+Customer billing controllers render inside the host's Recording Studio default layout (`recording_studio/default_layout`) when that template exists. Gem-template hosts that only ship `flat_pack_sidebar` fall back to that left sidebar. Sign-in stays on the host `application` layout. Hosts render `RecordingStudioBilling::CustomerSidebarComponent` in the layout sidebar so Overview, Plan, Plan requests, and the other billing screens stay in Recording Studio chrome and update with the gem. Rebuild Tailwind after install so FlatPack component classes are present.

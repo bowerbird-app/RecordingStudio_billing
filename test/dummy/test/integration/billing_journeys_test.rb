@@ -233,8 +233,15 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Annual plan"
     assert_includes response.body, "Choose a plan"
     assert_includes response.body, "Pick the plan that fits this workspace"
+    assert_includes response.body, "Choose this plan"
     refute_includes response.body, "$51"
     refute_includes response.body, "Usage ·"
+    refute_includes response.body, "Cancel plan"
+    refute_includes response.body, "Scheduled"
+
+    get "/billing/billing/plan_requests", params: { root_recording_id: @workspace_root.id }
+    assert_response :success, response.body
+    assert_includes response.body, "Plan requests"
     assert_includes response.body, "Scheduled"
     assert_includes response.body, "Applied"
     assert_includes response.body, "Failed"

@@ -5,21 +5,28 @@ module RecordingStudioBilling
     before_action :authorize_billing_screen!
 
     def index
-      @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
-      @checkout_intents = CheckoutIntent.for_root(root_recording).order(created_at: :desc)
-      @presenter = billing_presenter(:overview, subscriptions: @subscriptions, checkout_intents: @checkout_intents)
-      @billing_page = :overview
+      load_overview
+    end
+
+    def show
+      load_overview
+      render :index
     end
 
     def plan
       @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
       @presenter = billing_presenter(
         :subscriptions, subscriptions: @subscriptions, account_recording:,
-                        eligible_options: customer_offers_for("plan"),
+                        eligible_options: customer_offers_for("plan")
+      )
+    end
+
+    def plan_requests
+      @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
+      @presenter = billing_presenter(
+        :plan_requests, subscriptions: @subscriptions, account_recording:,
                         change_intents: SubscriptionChangeIntent.where(root_recording:, account_recording:).order(created_at: :desc)
       )
-      @billing_page = :subscriptions
-      render :index
     end
 
     def addons
@@ -77,6 +84,12 @@ module RecordingStudioBilling
     end
 
     private
+
+    def load_overview
+      @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
+      @checkout_intents = CheckoutIntent.for_root(root_recording).order(created_at: :desc)
+      @presenter = billing_presenter(:overview, subscriptions: @subscriptions, checkout_intents: @checkout_intents)
+    end
 
     def authorize_billing_screen!
       action = case action_name

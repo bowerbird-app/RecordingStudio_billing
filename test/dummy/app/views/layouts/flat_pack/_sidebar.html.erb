@@ -14,10 +14,8 @@
         href: main_app.root_path,
         icon: :home
       ) %>
-      <%= render FlatPack::Sidebar::Item::Component.new(
-        label: "Billing",
-        href: recording_studio_billing.root_path,
-        icon: :credit_card
+      <%= render RecordingStudioBilling::CustomerSidebarComponent.new(
+        root_recording_id: (current_root_recording.id if respond_to?(:current_root_recording) && current_root_recording)
       ) %>
     </nav>
   <% end %>

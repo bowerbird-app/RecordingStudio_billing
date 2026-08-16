@@ -1,5 +1,4 @@
 <%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("invoices_title", "Invoices"), variant: :h1) %>
-<%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :invoices) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::List::Component.new do %>
   <% @presenter.invoices.each do |invoice| %><li><%= link_to @presenter.invoice_label(invoice), helpers.invoice_path(invoice, root_recording_id: @presenter.root_recording.id) %>: <%= @presenter.invoice_status(invoice) %></li><% end %>

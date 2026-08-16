@@ -1,1 +1,1 @@
-<%= render @billing_page == :subscriptions ? RecordingStudioBilling::SubscriptionsComponent.new(presenter: @presenter) : RecordingStudioBilling::BillingOverviewComponent.new(presenter: @presenter) %>
+<%= render RecordingStudioBilling::BillingOverviewComponent.new(presenter: @presenter) %>
