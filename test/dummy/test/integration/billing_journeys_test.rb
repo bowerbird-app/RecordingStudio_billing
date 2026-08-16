@@ -78,7 +78,10 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   end
 
   test "hybrid subscription changes and plan-update states are seeded through provider commands" do
-    subscription = RecordingStudioBilling::Subscription.find_by!(root_recording: @workspace_root)
+    hybrid = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout")
+    subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
+      checkout_intent_item_id: hybrid.items.first.id
+    ).subscription
     modes = subscription.item_versions.order(:line_key).pluck(:mode)
 
     assert_includes modes, "monthly_subscription"
@@ -96,16 +99,18 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   end
 
   test "invoice payment refund and adjustment are projected from completed provider commands" do
-    payment = RecordingStudioBilling::Payment.find_by!(root_recording: @workspace_root)
+    command = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout").financial_command
+    payment = RecordingStudioBilling::Payment.find_by!(financial_command: command)
 
     assert_equal "captured", payment.state
     assert_equal "captured", payment.invoice.state
     assert_equal 200, RecordingStudioBilling::Refund.find_by!(refund_intent: RecordingStudioBilling::RefundIntent.find_by!(local_idempotency_key: "seed:refund")).amount_minor
     assert_equal "credit", RecordingStudioBilling::FinancialAdjustment.find_by!(adjustment_intent: RecordingStudioBilling::AdjustmentIntent.find_by!(local_idempotency_key: "seed:adjustment")).kind
+    assert_equal "requires_reconciliation", RecordingStudioBilling::RefundIntent.find_by!(local_idempotency_key: "seed:uncertain-refund").financial_command.state
   end
 
   test "seeded checkout commands retain their executor-created provider references before reconciliation" do
-    %w[seed:hybrid-checkout seed:active-monthly-checkout seed:usage-checkout].each do |key|
+    %w[seed:hybrid-checkout seed:active-monthly-checkout seed:usage-checkout seed:credit-pack-checkout].each do |key|
       command = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: key).financial_command
       reference = RecordingStudioBilling::ProviderReference.find_by!(financial_command: command,
                                                                       provider_adapter_key: "fake", remote_type: "operation",
@@ -141,9 +146,10 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     allocation = RecordingStudioBilling::UsageAllocation.find_by!(rated_usage: rated)
     overage = RecordingStudioBilling::OverageCalculation.find_by!(usage_allocation: allocation)
 
-    assert_equal 6, event.quantity
-    assert_equal 6, rated.quantity
+    assert_equal 11, event.quantity
+    assert_equal 11, rated.quantity
     assert_equal "closed", allocation.usage_period.state
+    assert_equal 5, allocation.credited_quantity
     assert_equal 6, allocation.excess_quantity
     assert_equal 30, overage.amount_minor
     overage_price = RecordingStudioBilling::OveragePrice.with_current_recording.find_by!(key: "demo_usage_api_overage")
@@ -156,7 +162,9 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
   test "authorized invoice download streams the dummy adapter PDF privately" do
     select_root(@workspace_root)
-    invoice = RecordingStudioBilling::Payment.find_by!(root_recording: @workspace_root).invoice
+    invoice = RecordingStudioBilling::Payment.find_by!(
+      financial_command: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout").financial_command
+    ).invoice
 
     with_billing_access(true) { get "/billing/invoices/#{invoice.id}/download", headers: { "ACCEPT" => "application/pdf" } }
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_financial_adapter", __dir__)
+require File.expand_path("../../../../app/services/recording_studio_billing/fake_tax_calculator", __dir__)
 
 module RecordingStudioBilling
   class DummyFinancialAdapter < FakeFinancialAdapter
@@ -110,9 +111,21 @@ Rails.application.config.to_prepare do
       validation: {}
     },
     "demo_api_calls" => {
-      source: "catalogue", merge_rule: "replace", default: true, type: "boolean", meter_key: "demo_api_calls",
-      usage_unit_key: "demo_api_call", replenishment: "none", lifecycle: "purchase", consumption: "metered", ordering: 2,
-      validation: {}
+      source: "catalogue", merge_rule: "replace", default: 5, type: "allowance", meter_key: "demo_api_calls",
+      usage_unit_key: "demo_api_call", replenishment: "period", lifecycle: "subscription", consumption: "metered",
+      ordering: 2, validation: { "minimum" => 0 }
     }
   }
+
+  registry = RecordingStudioBilling.configuration.tax_calculator_registry
+  unless registry.keys.include?("dummy_exclusive")
+    RecordingStudioBilling.register_tax_calculator(
+      :dummy_exclusive, RecordingStudioBilling::FakeTaxCalculator.new(outcome: :exclusive)
+    )
+  end
+  unless registry.keys.include?("dummy_inclusive")
+    RecordingStudioBilling.register_tax_calculator(
+      :dummy_inclusive, RecordingStudioBilling::FakeTaxCalculator.new(outcome: :inclusive)
+    )
+  end
 end

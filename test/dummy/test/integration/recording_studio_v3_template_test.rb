@@ -108,7 +108,14 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_equal "stripe", stripe_provider.adapter_key
     assert_equal({ "display_name" => "Stripe test" }, stripe_provider.configuration)
     assert_equal %w[demo_annual_plan demo_checkout_product demo_credit_pack demo_free_plan demo_monthly_plan demo_quantity_addon demo_usage_product], catalogue.call(RecordingStudioBilling::Product).order(:key).pluck(:key)
+    assert_equal "service", catalogue.call(RecordingStudioBilling::Product).find_by!(key: "demo_usage_product").kind
+    assert_equal "credit_pack", catalogue.call(RecordingStudioBilling::Product).find_by!(key: "demo_credit_pack").kind
     assert_equal 7, catalogue.call(RecordingStudioBilling::BillingOption).count
+    assert_equal 14, catalogue.call(RecordingStudioBilling::BillingOption).find_by!(key: "demo_annual_plan_option").trial_days
+    assert_equal "allowance", catalogue.call(RecordingStudioBilling::Feature).find_by!(
+      key: "demo_api_calls",
+      product_recording_id: catalogue.call(RecordingStudioBilling::Product).find_by!(key: "demo_usage_product").recording.id
+    ).kind
     assert_equal %w[demo_api_call], catalogue.call(RecordingStudioBilling::UsageUnit).order(:key).pluck(:key)
     assert_equal %w[demo_api_calls], catalogue.call(RecordingStudioBilling::Meter).order(:key).pluck(:key)
     assert_equal %w[demo_usage_rates], catalogue.call(RecordingStudioBilling::RateCard).order(:key).pluck(:key)
@@ -132,6 +139,12 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
       catalogue.call(RecordingStudioBilling::Price).find_by!(key: "#{key}_us_price").amount_minor
     end
     assert_equal [0, 4_900, 49_000], plan_amounts.sort
+    monthly_it = catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_monthly_plan_it_price")
+    monthly_de = catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_monthly_plan_de_price")
+    assert_equal ["EUR", 4_500], [monthly_it.currency_code, monthly_it.amount_minor]
+    assert_equal ["EUR", 4_700], [monthly_de.currency_code, monthly_de.amount_minor]
+    refute_equal catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_annual_plan_it_price").amount_minor,
+                 catalogue.call(RecordingStudioBilling::Price).find_by!(key: "demo_annual_plan_de_price").amount_minor
     assert_equal "requires", catalogue.call(RecordingStudioBilling::ProductRule).find_by!(key: "demo_addon_requires_plan").rule_type
     assert_equal "published", catalogue.call(RecordingStudioBilling::PlanUpdate).find_by!(key: "demo_monthly_plan_review").state
 

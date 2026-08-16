@@ -445,13 +445,17 @@ The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Signed-in dummy pages use the gem-template
 left sidebar (`flat_pack_sidebar`). Mounted billing pages use Recording Studio's
 `recording_studio/default_layout`, which this dummy implements with the same
-FlatPack sidebar shell. Its credential-free demonstration products
-include fake-provider checkout prices across US, UK, Italy, Germany, and a
-global fallback, plus a metered API-call product with rates, costs, and US
-overage pricing. It creates one named Workspace/Billing Account and one named
-AdminRoot/BillingAdmin for root-switch demonstrations, as well as free,
-monthly, annual, quantity-addon, credit-pack, product-rule, and published
-plan-update examples. It does not contact Stripe or any other network provider.
+FlatPack sidebar shell. Its credential-free demonstration products include
+fake-provider checkout prices across US, UK, Italy, Germany, and a global
+fallback. Monthly and annual plans have distinct Italy and Germany euro prices. The dummy also
+seeds a metered API-call service with an allowance, rates, costs, and US
+overage caps, plus free, $49 monthly, $490 annual (with a trial), quantity
+add-on, and prepaid credit-pack examples. It creates one named
+Workspace/Billing Account and one named AdminRoot/BillingAdmin for
+root-switch demonstrations, as well as product-rule, plan-update, checkout
+presentation, hybrid subscription, usage, refund, adjustment, and
+reconciliation fixtures. Fake tax calculators are registered with tax left
+off. It does not contact Stripe or any other network provider.
 
 The dummy suite exercises seeded hierarchy and product assertions, root
 switching, permitted customer billing, restricted customer/admin access, and
