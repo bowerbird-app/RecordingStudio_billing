@@ -92,6 +92,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_equal "applied", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:applied-change").state
     assert_equal "failed", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:failed-change").state
     assert_equal "requires_review", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:uncertain-change").state
+    assert_equal "active", subscription.reload.state
+    assert subscription.item_versions.where(effective_ends_at: nil, mode: "monthly_subscription").exists?
     plan_updates = RecordingStudioBilling::PlanUpdate.where(id: RecordingStudio::Recording.unscoped.where(
       root_recording: @admin_root, recordable_type: "RecordingStudioBilling::PlanUpdate"
     ).select(:recordable_id))
@@ -220,10 +222,13 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     get "/billing/billing/plan", params: { root_recording_id: @workspace_root.id }
     assert_response :success, response.body
     assert_includes response.body, "Monthly plan"
+    assert_includes response.body, "Active"
+    assert_includes response.body, "4900 USD"
     assert_includes response.body, "Scheduled"
     assert_includes response.body, "Applied"
     assert_includes response.body, "Failed"
     assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "Choose a plan"
 
     subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
       checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id

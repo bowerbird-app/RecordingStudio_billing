@@ -63,6 +63,8 @@ Customer screens use plan, price, invoice, and usage language. They do not show 
 
 Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation.
 
+The customer **Plan** page (`/billing/billing/plan`) lists the current plan and add-on lines, change-request states, and a **Choose a plan** checkout. Dummy seeds keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts share an execution group, so the applied cancellation is recorded first, then the live monthly checkout reactivates that same plan.
+
 ## Restricted payment portal
 
 Provider portals may update payment methods, billing address, tax IDs, and invoice history. They must not change plans, prices, add-ons, quantities, or promotion codes. Those changes stay on Billing Intents. Dummy settings open a local demonstration portal at `/dummy_portal`. Stripe sessions use a restricted portal configuration unless the host supplies its own configuration id.

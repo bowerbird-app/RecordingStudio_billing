@@ -796,6 +796,26 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { RecordingStudioBilling::SubscriptionLifecycle.resume(subscription:, root_recording: graph[:customer_root]) }
   end
 
+  test "projecting a later checkout reactivates a cancelled execution-group subscription" do
+    use_subscription_change_adapter!
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    subscription = project_subscription!(graph, key: "before-cancel")
+    cancel = create_subscription_change!(subscription, graph, key: "cancel-then-buy", kind: "cancellation")
+    complete_subscription_change!(cancel)
+    RecordingStudioBilling.apply_subscription_change_intent(subscription_change_intent: cancel,
+                                                            root_recording: graph[:customer_root])
+
+    assert_equal "cancelled", subscription.reload.state
+    assert_equal 0, subscription.item_versions.where(effective_ends_at: nil).count
+
+    repurchase = project_subscription!(graph, key: "after-cancel")
+
+    assert_equal subscription.id, repurchase.id
+    assert_equal "active", repurchase.state
+    assert_equal "active", repurchase.items.sole.state
+    assert_equal 1, repurchase.item_versions.where(effective_ends_at: nil).count
+  end
+
   test "lifecycle snapshots reject unsafe payloads and tampered manifests" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     intent = create_intent(graph, country: "IT", key: "lifecycle-safe").intent

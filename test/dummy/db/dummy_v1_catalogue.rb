@@ -571,6 +571,9 @@ class DummyV1Catalogue
                        local_idempotency_key: "seed:applied-change", change_kind: "cancellation"
                      ).intent
     execute_pending_command!(applied_change.financial_command)
+    RecordingStudioBilling.apply_subscription_change_intent(
+      subscription_change_intent: applied_change, root_recording: @root_recording
+    ) unless applied_change.reload.state == "applied"
 
     active_checkout = complete_checkout("seed:active-monthly-checkout", [
                                           { billing_option_recording_id: @catalogue.fetch("demo_monthly_plan").fetch(:option).recording.id, quantity: 1 }
@@ -594,7 +597,6 @@ class DummyV1Catalogue
       raise unless error.message == "subscription change provider outcome is requires_review"
     end
     @uncertain_change = uncertain_change
-    @applied_change = applied_change
     scheduled_change
   end
 
@@ -613,9 +615,6 @@ class DummyV1Catalogue
     apply_plan_run("demo_plan_update_applied", "seed:plan-applied", replacement_manifest, :success)
     apply_plan_run("demo_plan_update_failed", "seed:plan-failed", replacement_manifest, :provider_rejection)
     apply_plan_run("demo_plan_update_uncertain", "seed:plan-uncertain", replacement_manifest, :timeout_after_possible_success)
-    RecordingStudioBilling.apply_subscription_change_intent(
-      subscription_change_intent: @applied_change, root_recording: @root_recording
-    ) unless @applied_change.reload.state == "applied"
   end
 
   def plan_update_for(key, replacement_manifest, effective_at: nil)

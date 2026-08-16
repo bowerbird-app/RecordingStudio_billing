@@ -13,7 +13,7 @@ without calling Stripe.
 - Tailwind source scanning for dummy views, billing views/components, and FlatPack
 - Mounted customer billing. RecordingStudioAdmin **Products and pricing** is registered for later host wiring
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
-- Seeded checkout presentations, Italy vs Germany euro checkout quotes, hybrid subscription, usage, refund/adjustment (including an uncertain refund), plan-change states, a restricted payment portal, and a reconciliation issue. Tax calculators are registered and tax stays off
+- Seeded checkout presentations, Italy vs Germany euro checkout quotes, a live monthly plan on the Plan page, usage, refund/adjustment (including an uncertain refund), plan-change states, a restricted payment portal, and a reconciliation issue. Tax calculators are registered and tax stays off
 
 ## Quick start
 
@@ -68,6 +68,11 @@ contract: `embedded`, `redirect`, `payment_link`, `invoice`, `no_charge` and
 plans, prices, and tax at checkout. If a later Charge Market would change the
 price, checkout requotes, restarts, rejects, or holds for review instead of
 keeping the cheaper quote. Browser return does not complete a purchase.
+
+Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace has a
+current monthly plan (and change-request examples for scheduled, applied, failed,
+and waiting-for-confirmation). Recurring dummy checkouts share one execution
+group, so the cancelled hybrid journey is history on that same plan.
 
 ## Why this app exists
 
