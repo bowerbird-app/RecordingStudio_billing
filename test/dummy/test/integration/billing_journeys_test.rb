@@ -88,7 +88,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     ).select(:recordable_id))
     plan_runs = RecordingStudioBilling::PlanUpdateRun.where(plan_update: plan_updates,
                                                             idempotency_key: %w[seed:plan-scheduled seed:plan-applied seed:plan-failed seed:plan-uncertain])
-    assert_equal %w[applying applying applying scheduled], plan_runs.order(:state).pluck(:state)
+    assert_equal %w[applied failed requires_review scheduled], plan_runs.order(:state).pluck(:state)
   end
 
   test "invoice payment refund and adjustment are projected from completed provider commands" do
