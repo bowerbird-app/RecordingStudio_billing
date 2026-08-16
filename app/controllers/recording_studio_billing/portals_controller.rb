@@ -8,8 +8,12 @@ module RecordingStudioBilling
       adapter = RecordingStudioBilling.provider_adapter(context.fetch(:adapter_key))
       raise ActiveRecord::RecordNotFound unless adapter.respond_to?(:portal_session)
 
-      session = adapter.portal_session(customer_reference: context.fetch(:customer_reference), return_url: billing_settings_url,
-                                       **context.fetch(:options, {}))
+      session = adapter.portal_session(
+        customer_reference: context.fetch(:customer_reference),
+        return_url: billing_settings_url,
+        features: RestrictedPortal.validate_features!(context[:features]),
+        **context.fetch(:options, {}).to_h.symbolize_keys.except(:features)
+      )
       raise ActiveRecord::RecordNotFound unless session.is_a?(Hash)
 
       portal_url = session[:url]
@@ -34,7 +38,7 @@ module RecordingStudioBilling
       context = context.to_h.symbolize_keys
       raise ActiveRecord::RecordNotFound if context[:adapter_key].blank? || context[:customer_reference].blank?
 
-      context.slice(:adapter_key, :customer_reference).merge(options: context[:options] || {})
+      context.slice(:adapter_key, :customer_reference, :features).merge(options: context[:options] || {})
     rescue ArgumentError, KeyError, NoMethodError
       raise ActiveRecord::RecordNotFound
     end
@@ -48,7 +52,7 @@ module RecordingStudioBilling
 
       portal_uri = URI.parse(url.to_s)
       return false unless portal_uri.host.present? && portal_uri.userinfo.blank?
-      return false unless Rails.env.development? || portal_uri.scheme == "https"
+      return false unless Rails.env.local? || portal_uri.scheme == "https"
 
       portal_origin = origin_components(portal_uri)
       Array(adapter.trusted_portal_origins).any? do |origin|

@@ -2,6 +2,8 @@
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.copy("subscription_change_result_title", "Plan change"), variant: :h1) %>
 	<p><%= @presenter.change_kind_label(@presenter.intent.change_kind) %>: <%= @presenter.money_state(@presenter.intent.state) %></p>
 	<%= render FlatPack::List::Component.new do %>
+		<% @presenter.current_terms.each do |term| %><li><%= @presenter.copy("change_current", "Current") %> <%= term[:label] %>: <%= term[:quantity] %> x <%= term[:amount] %> <%= term[:cadence] %></li><% end %>
+		<li><%= @presenter.copy("change_proposed", "Proposed") %>: <%= [@presenter.proposed_terms[:label], @presenter.proposed_terms[:quantity], @presenter.proposed_terms[:amount], @presenter.proposed_terms[:cadence]].compact.join(" ") %></li>
 		<li><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %></li>
 		<li><%= @presenter.result_notice %></li>
 	<% end %>
@@ -34,8 +36,10 @@
 	<% end %>
 <% else %>
 	<%= render FlatPack::PageTitle::Component.new(title: @presenter.cancellation? ? @presenter.copy("cancel_title", "Cancel plan") : @presenter.copy("resume_title", "Resume plan"), variant: :h1) %>
-	<p><%= @presenter.cancellation? ? @presenter.copy("cancel_notice", "Your plan remains available until this cancellation is confirmed.") : @presenter.copy("resume_notice", "Your plan resumes only after this request is confirmed.") %></p>
-	<p><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %>. <%= @presenter.result_notice %></p>
+	<%= render FlatPack::List::Component.new do %>
+		<% @presenter.consequences.each do |consequence| %><li><%= consequence %></li><% end %>
+		<li><%= @presenter.copy("change_effective", "Effective") %>: <%= @presenter.effective_description %></li>
+	<% end %>
 	<%= button_to @presenter.cancellation? ? @presenter.copy("cancel_confirm", "Confirm cancellation") : @presenter.copy("resume_confirm", "Confirm resumption"), @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id), method: :post %>
 	<%= link_to @presenter.cancellation? ? @presenter.copy("cancel_keep", "Keep plan") : @presenter.copy("resume_keep", "Keep plan paused"), helpers.plan_billing_path(root_recording_id: @presenter.root_recording.id) %>
 <% end %>

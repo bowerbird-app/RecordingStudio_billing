@@ -5,7 +5,7 @@ module RecordingStudioBilling
     DIMENSIONS = %i[
       operations currencies markets collection_methods checkout_modes tax_modes
       quantities composition refunds adjustments subscription_change_kinds
-      usage_settlement_representations
+      usage_settlement_representations portal_features
     ].freeze
 
     Evaluation = Data.define(:supported, :reason, :explanation, :constraints) do

@@ -7,7 +7,7 @@ require "uri"
 require "recording_studio_billing/v1_contract"
 
 module RecordingStudioBilling
-  class StripeAdapter
+  class StripeAdapter # rubocop:disable Metrics/ClassLength
     STRIPE_BROWSER_ORIGINS = %w[
       https://billing.stripe.com
       https://checkout.stripe.com
@@ -81,16 +81,17 @@ module RecordingStudioBilling
 
     # The caller owns customer authorization and supplies only an opaque Stripe
     # customer reference. The returned URL is transient and must not be stored.
-    def portal_session(customer_reference:, return_url:, configuration_id: nil)
+    def portal_session(customer_reference:, return_url:, configuration_id: nil, features: nil, **)
       credential = credentials
       return {} unless credential && trusted_return_url?(return_url)
 
+      RestrictedPortal.validate_features!(features)
       customer = normalize_reference(customer_reference, "Stripe customer reference")
       params = { "customer" => customer, "return_url" => return_url }
-      if configuration_id.present?
-        params["configuration"] =
-          normalize_reference(configuration_id, "Stripe portal configuration")
-      end
+      configuration = configuration_id.presence || restricted_portal_configuration_id(credential)
+      return {} if configuration.blank?
+
+      params["configuration"] = normalize_reference(configuration, "Stripe portal configuration")
       session = stripe_client(credential).v1.billing_portal.sessions.create(params, {})
       url = stripe_hash(session)["url"]
       stripe_browser_url?(url) ? { url: } : {}
@@ -515,6 +516,17 @@ module RecordingStudioBilling
 
     def recurring?(items)
       items.any? { |item| item["recurrence"] == "recurring" || item[:recurrence] == "recurring" }
+    end
+
+    def restricted_portal_configuration_id(credential)
+      configuration = stripe_hash(
+        stripe_client(credential).v1.billing_portal.configurations.create(
+          { "features" => RestrictedPortal.stripe_configuration_features }, {}
+        )
+      )
+      configuration["id"]
+    rescue Stripe::StripeError, ArgumentError, NoMethodError
+      nil
     end
 
     def stripe_client(credential)

@@ -47,6 +47,9 @@ module RecordingStudioBilling
     end
 
     def proposed_terms
+      return cancellation_terms if cancellation? || intent&.change_kind.to_s == "cancellation"
+      return resumption_terms if intent&.change_kind.to_s == "resumption"
+
       terms = proposal&.canonical_data || intent&.frozen_terms&.dig("proposed", "canonical_data")
       return {} unless terms
 
@@ -66,6 +69,21 @@ module RecordingStudioBilling
       }
     end
 
+    def consequences
+      if cancellation?
+        [
+          copy("cancel_consequence_access", "Your plan stays available until the provider confirms this request."),
+          copy("cancel_consequence_usage", "New purchases and extra usage stop after the change takes effect."),
+          copy("cancel_consequence_charges", "Past charges stay on your invoices. This request is not a refund.")
+        ]
+      else
+        [
+          copy("resume_consequence_access", "Your plan resumes only after the provider confirms this request."),
+          copy("resume_consequence_charges", "Billing continues from the effective date.")
+        ]
+      end
+    end
+
     def effective_description
       return intent.effective_at.to_fs(:long) if intent&.effective_at
 
@@ -77,5 +95,25 @@ module RecordingStudioBilling
     end
 
     def page = :subscriptions
+
+    private
+
+    def cancellation_terms
+      {
+        label: copy("change_cancel_proposed", "Plan cancelled"),
+        quantity: nil,
+        amount: nil,
+        cadence: nil
+      }
+    end
+
+    def resumption_terms
+      {
+        label: copy("change_resume_proposed", "Plan resumed"),
+        quantity: nil,
+        amount: nil,
+        cadence: nil
+      }
+    end
   end
 end

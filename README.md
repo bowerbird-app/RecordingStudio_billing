@@ -65,6 +65,12 @@ Applications must supply a trusted invoice document stream or a short-lived
 provider redirect through their adapter integration; never expose provider
 credentials or long-lived invoice URLs to the browser.
 
+Plan changes use select → compare → confirm → result. Cancel and resume require
+an explicit confirmation that names the effective date and consequences. Those
+requests are never GET. The provider portal is restricted to payment methods,
+billing address, tax IDs, and invoice history. It cannot change a plan, price,
+add-on, quantity, or promotion code.
+
 ### Billing UI extension contracts
 
 The customer UI uses namespaced ViewComponents and presenters for overview,
@@ -471,7 +477,7 @@ off. It does not contact Stripe or any other network provider.
 The dummy suite exercises seeded hierarchy and product assertions, root
 switching, permitted customer billing, restricted customer/admin access, and
 provider-projected hybrid subscription, invoice, payment, refund, adjustment,
-and FeatureOverride journeys. These fixtures use the same command,
+plan-change, restricted portal, and FeatureOverride journeys. These fixtures use the same command,
 reconciliation, projection, and revision services as production code.
 
 The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage,

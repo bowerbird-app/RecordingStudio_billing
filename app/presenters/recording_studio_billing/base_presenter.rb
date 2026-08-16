@@ -104,7 +104,22 @@ module RecordingStudioBilling
     end
 
     def money_state(value)
-      value.to_s.humanize
+      case value.to_s
+      when "requires_review", "requires_reconciliation", "pending_provider", "awaiting_confirmation",
+           "executing", "pending", "uncertain", "processing"
+        copy("money_state_waiting", "Waiting for confirmation")
+      when "scheduled" then copy("money_state_scheduled", "Scheduled")
+      when "applied" then copy("money_state_applied", "Applied")
+      when "completed", "succeeded", "captured", "paid" then copy("money_state_complete", "Succeeded")
+      when "failed" then copy("money_state_failed", "Failed")
+      when "cancelled", "canceled" then copy("money_state_cancelled", "Cancelled")
+      when "trialing" then copy("money_state_trialing", "Trial")
+      when "active" then copy("money_state_active", "Active")
+      when "past_due" then copy("money_state_past_due", "Past due")
+      when "paused" then copy("money_state_paused", "Paused")
+      else
+        value.to_s.humanize
+      end
     end
 
     private

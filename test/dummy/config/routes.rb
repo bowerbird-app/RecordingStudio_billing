@@ -7,6 +7,7 @@ Rails.application.routes.draw do
   mount RecordingStudio::Engine, at: "/recording_studio"
   mount RecordingStudioRootSwitchable::Engine, at: "/recording_studio_root_switchable"
   mount RecordingStudioBilling::Engine, at: "/billing"
+  get "/dummy_portal", to: "dummy_portals#show"
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

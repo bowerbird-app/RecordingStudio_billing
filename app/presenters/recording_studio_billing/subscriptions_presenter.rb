@@ -2,7 +2,7 @@
 
 module RecordingStudioBilling
   class SubscriptionsPresenter < BasePresenter
-    attr_accessor :subscriptions, :eligible_options
+    attr_accessor :subscriptions, :eligible_options, :change_intents
 
     def page = :subscriptions
 
@@ -22,6 +22,20 @@ module RecordingStudioBilling
           cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
         }
       end
+    end
+
+    def change_rows(subscription)
+      Array(change_intents).select { |intent| intent.subscription_id == subscription.id }.map do |intent|
+        {
+          label: change_kind_label(intent.change_kind),
+          state: money_state(intent.state),
+          effective: intent.effective_at&.to_fs(:long) || copy("change_effective_after_confirmation", "After provider confirmation")
+        }
+      end
+    end
+
+    def change_kind_label(kind)
+      copy("change_kind_#{kind}", kind.to_s.humanize)
     end
 
     def subscription_label(subscription)

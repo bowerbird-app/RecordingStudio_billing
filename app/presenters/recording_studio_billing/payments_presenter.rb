@@ -18,8 +18,22 @@ module RecordingStudioBilling
       nil
     end
 
+    def payment_recorded_at(payment)
+      payment.try(:recorded_at)&.to_fs(:long)
+    end
+
     def refund_status(refund)
       money_state(refund.financial_command.state)
+    end
+
+    def pending_refund_rows
+      Array(refund_intents).reject { |intent| intent.try(:refund) }.map do |intent|
+        {
+          label: copy("refund_title", "Refund"),
+          amount: display_amount(intent.amount_minor, intent.currency_code),
+          status: money_state(intent.financial_command&.state || intent.state)
+        }
+      end
     end
   end
 end

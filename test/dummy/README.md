@@ -13,7 +13,7 @@ without calling Stripe.
 - Tailwind source scanning for dummy views, billing views/components, and FlatPack
 - Mounted customer billing. RecordingStudioAdmin **Products and pricing** is registered for later host wiring
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
-- Seeded checkout presentations, Italy vs Germany euro checkout quotes, hybrid subscription, usage, refund/adjustment (including an uncertain refund), and a reconciliation issue. Tax calculators are registered and tax stays off
+- Seeded checkout presentations, Italy vs Germany euro checkout quotes, hybrid subscription, usage, refund/adjustment (including an uncertain refund), plan-change states, a restricted payment portal, and a reconciliation issue. Tax calculators are registered and tax stays off
 
 ## Quick start
 
@@ -47,6 +47,7 @@ bin/rails db:reset
 
 - `/` — dummy home
 - `/billing` — customer billing
+- `/dummy_portal` — demonstration payment portal (payment methods, address, tax IDs, invoice history)
 - `/users/sign_in` — Devise sign-in
 - `/up` — Rails health check
 

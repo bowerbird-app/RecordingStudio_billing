@@ -61,6 +61,22 @@ The dummy seed grants `edit` on Studio Workspace to `admin@admin.com`. Do not st
 
 Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels.
 
+Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation.
+
+## Restricted payment portal
+
+Provider portals may update payment methods, billing address, tax IDs, and invoice history. They must not change plans, prices, add-ons, quantities, or promotion codes. Those changes stay on Billing Intents. Dummy settings open a local demonstration portal at `/dummy_portal`. Stripe sessions use a restricted portal configuration unless the host supplies its own configuration id.
+
+Hosts wire the portal with a provider-neutral resolver:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.billing_portal_context_resolver = lambda do |account_recording:, **|
+    { adapter_key: :stripe, customer_reference: account_recording.id.to_s }
+  end
+end
+```
+
 ## Products and pricing
 
 Admin inventory lives under **Products and pricing**. The section key remains `billing_commercial` for hosts that already registered that navigation id.
@@ -69,7 +85,7 @@ Commercial publication still writes `rs_v3_commercial_configurations`. Capabilit
 
 ## What V1 does not include
 
-Do not add these in this gem: quotes, trials, coupons, credits, dunning, retries, metered billing keys, proration, multiple providers in one install, or a customer self-serve portal. See `README.md`.
+Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, graduated pricing, public usage HTTP ingest, or a customer self-serve portal that changes plans. The restricted provider portal above is the V1 payment-details surface. See `README.md`.
 
 ## Host layouts
 

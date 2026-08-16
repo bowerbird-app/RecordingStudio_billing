@@ -12,12 +12,13 @@ class BillingUiCustomerCopyTest < Minitest::Test
                       keyword_init: true)
   Version = Struct.new(:line_key, :mode, :quantity, :amount_minor, :currency_code, :interval, :commercial_snapshot,
                        keyword_init: true)
-  Subscription = Struct.new(:identifier, :state, :currency_code, :item_versions, keyword_init: true)
+  Subscription = Struct.new(:id, :identifier, :state, :currency_code, :item_versions, keyword_init: true)
   Period = Struct.new(:usage_key, :starts_at, :ends_at, :state, :usage_allowance_policies, keyword_init: true)
   Policy = Struct.new(:consumed_quantity, :limit_quantity, keyword_init: true)
   Invoice = Struct.new(:id, :total_minor, :currency_code, :state, :issued_at, keyword_init: true)
   Payment = Struct.new(:amount_minor, :currency_code, :state, :financial_command, :safe_snapshot, keyword_init: true)
   Command = Struct.new(:state)
+  RefundIntent = Struct.new(:amount_minor, :currency_code, :state, :financial_command, :refund, keyword_init: true)
 
   def test_overview_uses_plan_labels_instead_of_identifiers_and_markets
     presenter = RecordingStudioBilling::OverviewPresenter.new(
@@ -91,6 +92,31 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes invoices.invoice_label(invoice), "1000 USD"
     refute_includes invoices.invoice_label(invoice), invoice.id
     assert_equal "Paid by card", payments.payment_summary(payment)
+    assert_equal "Succeeded", payments.payment_state(payment)
+  end
+
+  def test_cancel_confirmation_lists_consequences_and_an_effective_date
+    html = render_component(
+      RecordingStudioBilling::SubscriptionChangeComponent,
+      RecordingStudioBilling::SubscriptionChangePresenter.new(
+        root_recording: root, subscription:, change_kind: :cancellation
+      )
+    )
+
+    assert_includes html, "Cancel plan"
+    assert_includes html, "Past charges stay on your invoices"
+    assert_includes html, "Effective"
+    refute_includes html, "recordable"
+  end
+
+  def test_pending_refunds_use_waiting_copy
+    intent = RefundIntent.new(amount_minor: 50, currency_code: "USD", state: "requires_review",
+                              financial_command: Command.new("requires_reconciliation"), refund: nil)
+    payments = RecordingStudioBilling::PaymentsPresenter.new(
+      root_recording: root, payments: [], refunds: [], refund_intents: [intent]
+    )
+
+    assert_equal "Waiting for confirmation", payments.pending_refund_rows.sole.fetch(:status)
   end
 
   private
@@ -109,7 +135,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
     versions = [version]
     versions.define_singleton_method(:where) { |**| versions }
     versions.define_singleton_method(:order) { |*| versions }
-    Subscription.new(identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
+    Subscription.new(id: "sub-1", identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
   end
 
   def offer_option(kind:, interval:, recurrence:)

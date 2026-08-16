@@ -14,6 +14,11 @@
     <% @presenter.refunds.each do |refund| %><li><%= @presenter.refund_label(refund) %> (<%= @presenter.money_state(refund.financial_command.state) %>)</li><% end %>
   <% end %>
 <% end %>
+<% if @presenter.pending_money_rows.present? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.pending_money_rows.each do |row| %><li><%= row %></li><% end %>
+  <% end %>
+<% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:invoices).each { |content| %><%= render_extension(content) %><% } %>
 <% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

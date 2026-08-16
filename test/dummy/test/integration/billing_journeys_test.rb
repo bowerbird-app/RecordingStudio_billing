@@ -214,6 +214,57 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "%PDF-1.4"
   end
 
+  test "plan invoices payments and portal show hybrid money changes and restricted payment details" do
+    select_root(@workspace_root)
+
+    get "/billing/billing/plan", params: { root_recording_id: @workspace_root.id }
+    assert_response :success, response.body
+    assert_includes response.body, "Monthly plan"
+    assert_includes response.body, "Scheduled"
+    assert_includes response.body, "Applied"
+    assert_includes response.body, "Failed"
+    assert_includes response.body, "Waiting for confirmation"
+
+    subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
+      checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id
+    ).subscription
+    change_count = RecordingStudioBilling::SubscriptionChangeIntent.count
+    get "/billing/subscriptions/#{subscription.id}/cancel_confirmation", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "Past charges stay on your invoices"
+    assert_includes response.body, "Effective"
+    assert_equal change_count, RecordingStudioBilling::SubscriptionChangeIntent.count
+
+    get "/billing/subscriptions/#{subscription.id}/cancel", params: { root_recording_id: @workspace_root.id }
+    assert_response :not_found
+    assert_equal change_count, RecordingStudioBilling::SubscriptionChangeIntent.count
+
+    get "/billing/billing/invoices", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "Waiting for confirmation"
+
+    get "/billing/billing/payments", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "Refund"
+    assert_includes response.body, "Waiting for confirmation"
+
+    get "/billing/billing/settings", params: { root_recording_id: @workspace_root.id }
+    assert_response :success
+    assert_includes response.body, "Manage payment details"
+    assert_includes response.body, "payment portal"
+
+    post "/billing/billing/portal", params: { root_recording_id: @workspace_root.id }
+    assert_redirected_to "http://www.example.com/dummy_portal"
+    follow_redirect!
+    assert_response :success
+    assert_includes response.body, "Payment methods"
+    assert_includes response.body, "Tax IDs"
+    assert_includes response.body, "Invoice history"
+    refute_includes response.body, "Cancel plan"
+    refute_includes response.body, "Change plan"
+    refute_includes response.body, "Confirm cancellation"
+  end
+
   private
 
   def select_root(root_recording, actor: @user)

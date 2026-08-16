@@ -10,6 +10,13 @@
           <li><%= item[:label] %>: <%= item[:quantity] %> x <%= item[:amount] %> <%= item[:cadence] %></li>
         <% end %>
       <% end %>
+      <% if @presenter.change_rows(subscription).present? %>
+        <%= render FlatPack::List::Component.new do %>
+          <% @presenter.change_rows(subscription).each do |change| %>
+            <li><%= change[:label] %>: <%= change[:state] %> · <%= @presenter.copy("change_effective", "Effective") %>: <%= change[:effective] %></li>
+          <% end %>
+        <% end %>
+      <% end %>
       <%= link_to @presenter.copy("change_subscription", "Change plan"), helpers.change_selection_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
       <% if subscription.state.in?(%w[trialing active past_due paused]) %>
         <%= link_to @presenter.copy("cancel_subscription", "Cancel plan"), helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>

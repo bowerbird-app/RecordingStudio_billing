@@ -19,6 +19,11 @@ module RecordingStudioBilling
     PROVIDER_REFUNDS = %w[full partial].freeze
     PROVIDER_ADJUSTMENTS = %w[credit debit].freeze
     PROVIDER_SUBSCRIPTION_CHANGE_KINDS = %w[cancellation resumption plan interval addon quantity].freeze
+    PORTAL_FEATURES = %w[payment_method_update customer_address customer_tax_id invoice_history].freeze
+    PORTAL_FORBIDDEN_FEATURES = %w[
+      subscription_cancel subscription_update subscription_pause promotion_codes
+      subscription_product subscription_quantity
+    ].freeze
 
     def self.provider_capabilities(**overrides)
       ProviderCapabilities.new(
@@ -33,6 +38,7 @@ module RecordingStudioBilling
         refunds: PROVIDER_REFUNDS,
         adjustments: PROVIDER_ADJUSTMENTS,
         subscription_change_kinds: PROVIDER_SUBSCRIPTION_CHANGE_KINDS,
+        portal_features: PORTAL_FEATURES,
         **overrides
       )
     end

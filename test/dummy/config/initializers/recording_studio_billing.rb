@@ -28,6 +28,18 @@ module RecordingStudioBilling
       end
     end
 
+    def portal_session(customer_reference:, return_url:, features: nil, **)
+      raise ArgumentError, "customer reference is missing" if customer_reference.blank?
+      raise ArgumentError, "return URL is missing" if return_url.blank?
+
+      RecordingStudioBilling::RestrictedPortal.validate_features!(features)
+      { url: "#{dummy_portal_origin}/dummy_portal", features: RecordingStudioBilling::RestrictedPortal::ALLOWED_FEATURES }
+    end
+
+    def trusted_portal_origins
+      [ dummy_portal_origin ]
+    end
+
     def retrieve(command:)
       return unless command.command_type == "checkout"
 
@@ -56,6 +68,14 @@ module RecordingStudioBilling
     end
 
     private
+
+    def dummy_portal_origin
+      if Rails.env.development?
+        "http://127.0.0.1:3000"
+      else
+        "http://www.example.com"
+      end
+    end
 
     def checkout_command_response(command, status)
       intent = CheckoutIntent.find_by!(financial_command: command)
@@ -132,6 +152,9 @@ RecordingStudioBilling.configure do |config|
   config.commercial_authorizer = ->(**) { true }
   config.billing_location_context_resolver = lambda do |**|
     { host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("US", :host) }
+  end
+  config.billing_portal_context_resolver = lambda do |account_recording:, **|
+    { adapter_key: :fake, customer_reference: account_recording.id.to_s }
   end
 end
 

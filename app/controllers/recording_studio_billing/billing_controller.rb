@@ -13,8 +13,11 @@ module RecordingStudioBilling
 
     def plan
       @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
-      @presenter = billing_presenter(:subscriptions, subscriptions: @subscriptions,
-                                                     eligible_options: customer_offers_for("plan"))
+      @presenter = billing_presenter(
+        :subscriptions, subscriptions: @subscriptions,
+                        eligible_options: customer_offers_for("plan"),
+                        change_intents: SubscriptionChangeIntent.where(root_recording:, account_recording:).order(created_at: :desc)
+      )
       @billing_page = :subscriptions
       render :index
     end
@@ -40,15 +43,22 @@ module RecordingStudioBilling
     def invoices
       @invoices = Invoice.where(root_recording:, account_recording:).order(issued_at: :desc)
       @adjustments = FinancialAdjustment.joins(:invoice).merge(Invoice.where(root_recording:, account_recording:))
-      @presenter = billing_presenter(:invoices, invoices: @invoices, adjustments: @adjustments,
-                                                refunds: Refund.joins(:payment).merge(Payment.where(root_recording:, account_recording:)))
+      @presenter = billing_presenter(
+        :invoices, invoices: @invoices, adjustments: @adjustments,
+                   refunds: Refund.joins(:payment).merge(Payment.where(root_recording:, account_recording:)),
+                   refund_intents: RefundIntent.where(root_recording:, account_recording:).includes(:refund, :financial_command),
+                   adjustment_intents: AdjustmentIntent.where(root_recording:,
+                                                              account_recording:).includes(:financial_adjustment, :financial_command)
+      )
     end
 
     def payments
       @payments = Payment.where(root_recording:, account_recording:).order(recorded_at: :desc)
       @refunds = Refund.joins(:payment).merge(Payment.where(root_recording:, account_recording:))
-      @presenter = billing_presenter(:payments, payments: @payments, refunds: @refunds,
-                                                refund_intents: RefundIntent.where(root_recording:, account_recording:))
+      @presenter = billing_presenter(
+        :payments, payments: @payments, refunds: @refunds,
+                   refund_intents: RefundIntent.where(root_recording:, account_recording:).includes(:refund, :financial_command)
+      )
     end
 
     def settings

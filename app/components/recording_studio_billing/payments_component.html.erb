@@ -2,11 +2,22 @@
 <%= render RecordingStudioBilling::BillingNavigationComponent.new(presenter: @presenter, current_page: :payments) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <%= render FlatPack::List::Component.new do %>
-  <% @presenter.payments.each do |payment| %><li><%= @presenter.display_amount(payment.amount_minor, payment.currency_code) %>: <%= @presenter.payment_state(payment) %><% if @presenter.payment_summary(payment).present? %><br><%= @presenter.payment_summary(payment) %><% end %></li><% end %>
+  <% @presenter.payments.each do |payment| %>
+    <li>
+      <%= [@presenter.payment_recorded_at(payment), @presenter.display_amount(payment.amount_minor, payment.currency_code)].compact.join(" · ") %>:
+      <%= @presenter.payment_state(payment) %>
+      <% if @presenter.payment_summary(payment).present? %><br><%= @presenter.payment_summary(payment) %><% end %>
+    </li>
+  <% end %>
 <% end %>
 <% if @presenter.refunds.present? %>
   <%= render FlatPack::List::Component.new do %>
     <% @presenter.refunds.each do |refund| %><li><%= @presenter.copy("refund_title", "Refund") %>: <%= @presenter.display_amount(refund.amount_minor, refund.currency_code) %> (<%= @presenter.refund_status(refund) %>)</li><% end %>
+  <% end %>
+<% end %>
+<% if @presenter.pending_refund_rows.present? %>
+  <%= render FlatPack::List::Component.new do %>
+    <% @presenter.pending_refund_rows.each do |row| %><li><%= row[:label] %>: <%= row[:amount] %> (<%= row[:status] %>)</li><% end %>
   <% end %>
 <% end %>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

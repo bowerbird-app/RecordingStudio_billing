@@ -1,0 +1,9 @@
+<%= render FlatPack::PageTitle::Component.new(title: "Payment details", variant: :h1) %>
+<p>This portal can update payment methods, billing address, tax IDs, and invoice history. Plan changes stay in billing.</p>
+<%= render FlatPack::List::Component.new do %>
+  <li>Payment methods: card on file is updated here, not by changing a plan.</li>
+  <li>Billing address: used for invoices and tax location.</li>
+  <li>Tax IDs: business tax numbers for invoices.</li>
+  <li>Invoice history: open billing invoices to download statements.</li>
+<% end %>
+<p><%= link_to "Back to billing settings", "/billing/billing/settings" %></p>

@@ -338,13 +338,20 @@ class StripeAdapterTest < Minitest::Test
   end
 
   def test_portal_session_requires_a_configured_return_origin_and_keeps_only_a_transient_stripe_url
-    captured = nil
+    captured_session = nil
+    captured_configuration = nil
     sessions = Object.new
     sessions.define_singleton_method(:create) do |params, _options|
-      captured = params
+      captured_session = params
       { "url" => "https://billing.stripe.com/session/test" }
     end
-    client = Struct.new(:v1).new(Struct.new(:billing_portal).new(Struct.new(:sessions).new(sessions)))
+    configurations = Object.new
+    configurations.define_singleton_method(:create) do |params, _options|
+      captured_configuration = params
+      { "id" => "bpc_restricted" }
+    end
+    portal = Struct.new(:sessions, :configurations).new(sessions, configurations)
+    client = Struct.new(:v1).new(Struct.new(:billing_portal).new(portal))
     adapter = RecordingStudioBilling::StripeAdapter.new(
       credential_resolver: -> { "sk_test" }, trusted_origins_resolver: -> { ["https://app.example.test/"] },
       client_factory: ->(_secret) { client }
@@ -352,8 +359,22 @@ class StripeAdapterTest < Minitest::Test
 
     assert_equal({ url: "https://billing.stripe.com/session/test" },
                  adapter.portal_session(customer_reference: "cus_123", return_url: "https://app.example.test/billing"))
-    assert_equal({ "customer" => "cus_123", "return_url" => "https://app.example.test/billing" }, captured)
+    assert_equal({ "customer" => "cus_123", "return_url" => "https://app.example.test/billing",
+                   "configuration" => "bpc_restricted" }, captured_session)
+    assert_equal false, captured_configuration.dig("features", "subscription_cancel", "enabled")
+    assert_equal false, captured_configuration.dig("features", "subscription_update", "enabled")
+    assert_equal true, captured_configuration.dig("features", "payment_method_update", "enabled")
     assert_equal({}, adapter.portal_session(customer_reference: "cus_123", return_url: "https://evil.example.test/billing"))
+  end
+
+  def test_portal_session_rejects_subscription_mutation_features
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: -> { "sk_test" }, trusted_origins_resolver: -> { ["https://app.example.test"] },
+      client_factory: ->(_secret) { Object.new }
+    )
+
+    assert_equal({}, adapter.portal_session(customer_reference: "cus_123", return_url: "https://app.example.test/billing",
+                                            features: ["subscription_cancel"]))
   end
 
   def test_portal_origins_are_provider_hosts_not_host_return_origins

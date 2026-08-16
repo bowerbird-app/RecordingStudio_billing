@@ -4,20 +4,19 @@
 <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
   <% card.header { render FlatPack::PageTitle::Component.new(title: @presenter.copy("plan_title", "Plan"), variant: :h2) } %>
   <% card.body do %>
-    <% if @presenter.subscriptions.present? %>
+    <% if @presenter.subscription_rows.present? %>
       <%= render FlatPack::List::Component.new do %>
-        <% @presenter.subscriptions.each do |subscription| %>
+        <% @presenter.subscription_rows.each do |row| %>
           <li>
-            <% row = @presenter.subscription_rows.find { |candidate| candidate[:identifier] == subscription.identifier } %>
             <strong><%= row[:label] %></strong>: <%= row[:state] %>
             <% if row[:summary].present? %><br><%= row[:summary] %><% end %>
-            <% if subscription.state.in?(%w[trialing active past_due paused]) %>
-              <%= link_to "Cancel", helpers.cancel_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+            <% if row[:current] %>
+              <%= link_to @presenter.copy("cancel_subscription", "Cancel plan"), helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id) %>
             <% end %>
-            <% if subscription.state == "paused" %>
-              <%= link_to "Resume", helpers.resume_confirmation_subscription_path(subscription, root_recording_id: @presenter.root_recording.id) %>
+            <% if row[:subscription].state == "paused" %>
+              <%= link_to @presenter.copy("resume_subscription", "Resume plan"), helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id) %>
             <% end %>
-            <br>Cancellation and resumption are requests; the current plan changes only after provider reconciliation.
+            <br><%= @presenter.copy("change_request_notice", "Cancellation and resumption are requests; the current plan changes only after the provider confirms.") %>
           </li>
         <% end %>
       <% end %>

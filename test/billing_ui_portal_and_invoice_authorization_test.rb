@@ -94,7 +94,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     with_authorization(true) { get "/billing/billing/payments", params: { root_recording_id: @root.id } }
     assert_response :success
     assert_includes response.body, "1000 USD"
-    assert_includes response.body, command.state.humanize
+    assert_includes response.body, "Waiting for confirmation"
     assert_includes response.body, "Paid by card"
     refute_includes response.body, "Source, reason and tax"
   end
@@ -127,7 +127,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     assert_response :success
     assert_includes response.body, "Credit: 100 USD"
     assert_includes response.body, "Refund: 200 USD"
-    assert_includes response.body, refund_command.state.humanize
+    assert_includes response.body, "Waiting for confirmation"
   end
 
   test "usage route renders only the selected root's periods grants and included amounts" do
@@ -256,6 +256,24 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
 
       assert_response :not_found, response.inspect
     end
+  end
+
+  test "portal rejects subscription mutation features from resolver context" do
+    RecordingStudioBilling.configuration.billing_portal_context_resolver = lambda { |**|
+      { adapter_key: "portal", customer_reference: "cus_server", features: ["subscription_cancel"] }
+    }
+    RecordingStudioBilling.register_provider("portal", PortalAdapter.new(url: "https://billing.stripe.com/session/test", calls: [],
+                                                                         origins: ["https://billing.stripe.com"]))
+
+    with_authorization(true) { post "/billing/billing/portal" }
+
+    assert_response :not_found
+  end
+
+  test "portal GET is not a billing action" do
+    with_authorization(true) { get "/billing/billing/portal" }
+
+    assert_response :not_found
   end
 
   private
