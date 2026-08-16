@@ -191,7 +191,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing", params: { root_recording_id: root.id }
     assert_response :success
     assert_includes response.body, "Monthly plan"
-    assert_includes response.body, "Cancellation and resumption are requests"
+    assert_includes response.body, "View plans"
+    assert_includes response.body, "Cancel plan"
     refute_includes response.body, "Current versions"
     refute_includes response.body, "Market:"
 
