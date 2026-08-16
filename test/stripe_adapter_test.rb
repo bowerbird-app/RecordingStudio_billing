@@ -317,6 +317,7 @@ class StripeAdapterTest < Minitest::Test
       assert_predicate adapter.capabilities.evaluate(operation: "checkout", checkout_mode: mode), :supported?, mode
     end
     assert_predicate adapter.capabilities.evaluate(operation: "checkout", collection_method: "send_invoice"), :supported?
+    assert_predicate adapter.capabilities.evaluate(operation: "checkout", market: "us"), :supported?
     refute adapter.capabilities.evaluate(operation: "checkout", checkout_mode: "elements").supported?
     %w[cancellation resumption plan interval addon quantity].each do |kind|
       assert_predicate adapter.capabilities.evaluate(operation: "subscription_change", subscription_change_kind: kind),

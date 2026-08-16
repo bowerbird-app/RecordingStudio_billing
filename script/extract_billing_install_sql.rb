@@ -14,7 +14,10 @@ kept = []
 objects.each_with_index do |object, index|
   body = index.zero? ? object : "-- Name: #{object}"
   next unless body.match?(/recording_studio_billing_|rs_billing_/)
-  next if body.match?(/schema_migrations|ar_internal_metadata/)
+
+  body = body.split(/\n--\n-- PostgreSQL database dump complete/).first
+  next if body.match?(/\A(?:--|SET |SELECT pg_catalog|INSERT INTO "schema_migrations"|INSERT INTO "ar_internal_metadata")/)
+  next if body.match?(/CREATE TABLE public\.(schema_migrations|ar_internal_metadata)/)
 
   kept << body.strip
 end

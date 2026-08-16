@@ -10,6 +10,7 @@ module RecordingStudioBilling
 
     PROVIDER_OPERATIONS = %w[checkout subscription_change refund adjustment].freeze
     PROVIDER_CURRENCIES = %w[usd eur gbp].freeze
+    PROVIDER_MARKETS = %w[au ca de es fr gb ie it nl nz us].freeze
     PROVIDER_QUANTITIES = %w[fixed adjustable].freeze
     PROVIDER_COMPOSITION = %w[single mixed].freeze
     PROVIDER_REFUNDS = %w[full partial].freeze
@@ -20,6 +21,7 @@ module RecordingStudioBilling
       ProviderCapabilities.new(
         operations: PROVIDER_OPERATIONS,
         currencies: PROVIDER_CURRENCIES,
+        markets: PROVIDER_MARKETS,
         collection_methods: COLLECTION_METHODS,
         checkout_modes: CHECKOUT_MODES,
         tax_modes: %w[provider],

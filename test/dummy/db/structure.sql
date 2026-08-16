@@ -6898,6 +6898,14 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_publication_candidat
 
 
 --
+-- Name: recording_studio_billing_commercial_manifests fk_rs_billing_manifests_root; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
+    ADD CONSTRAINT fk_rs_billing_manifests_root FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 

@@ -17,7 +17,7 @@ earlier experimental schemas.
 
 ### Added
 
-- `RecordingStudioBilling::V1Contract` for canonical V1 vocabulary and Stripe-shaped provider capabilities.
+- `RecordingStudioBilling::V1Contract` for canonical V1 vocabulary and Stripe-shaped provider capabilities, including the shared market list used at checkout.
 - Stripe checkout support for invoice presentation and `send_invoice` collection.
 
 ## 0.1.2

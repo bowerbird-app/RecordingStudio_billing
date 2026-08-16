@@ -43,6 +43,7 @@ class WebhookReceiptSchemaTest < ActiveSupport::TestCase
     schema = File.read(File.expand_path("../db/schema/install_recording_studio_billing.sql", __dir__))
     assert_includes schema, "idx_rs_billing_webhook_effect_receipt_identity"
     assert_includes schema, "idx_rs_billing_unresolved_webhook_receipt"
+    assert_includes schema, "fk_rs_billing_manifests_root"
     refute_match(/scope = 'default'|collection_method.*'invoice'|tax_policy.*'automatic'/, schema)
   end
 end

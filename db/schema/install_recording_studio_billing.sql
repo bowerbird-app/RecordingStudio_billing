@@ -5146,4 +5146,10 @@ ALTER TABLE ONLY public.recording_studio_billing_usage_units
 ALTER TABLE ONLY public.recording_studio_billing_commercial_publication_candidates
     ADD CONSTRAINT fk_rs_billing_candidates_root FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
 
+-- Name: recording_studio_billing_commercial_manifests fk_rs_billing_manifests_root; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
+    ADD CONSTRAINT fk_rs_billing_manifests_root FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
 SET search_path TO "$user", public;
