@@ -375,6 +375,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       "reject" => "rejected",
       "review" => "requires_review"
     }.each do |policy, state|
+      RecordingStudioBilling.configuration.reset_registries!
       graph = published_catalogue(germany_verification_policy: policy)
       intent = create_intent(graph, country: "IT", key: "final-policy-#{policy}").intent
       frozen_item = intent.items.first

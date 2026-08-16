@@ -30,7 +30,9 @@ module RecordingStudioBilling
     def page = :checkout
 
     def presentation_mode
-      (presentation_value(:mode).presence || checkout_intent.items.first&.presentation).to_s
+      item = checkout_intent.items.first
+      item_presentation = item.respond_to?(:presentation) ? item.presentation : nil
+      (presentation_value(:mode).presence || item_presentation).to_s
     end
 
     def presentation_url
@@ -87,7 +89,8 @@ module RecordingStudioBilling
     private
 
     def presentation_value(key)
-      presentation.to_h[key] || presentation.to_h[key.to_s]
+      values = presentation.respond_to?(:to_h) ? presentation.to_h : {}
+      values[key] || values[key.to_s]
     end
 
     def blocked_checkout?

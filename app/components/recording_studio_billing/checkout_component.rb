@@ -37,18 +37,21 @@ module RecordingStudioBilling
 
     def render_checkout_action
       action = presenter.checkout_action if presenter.respond_to?(:checkout_action)
-      if action
-        render_action(action)
-      elsif presenter.respond_to?(:embedded?) && presenter.embedded?
-        helpers.tag.p(presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation."))
-      elsif presenter.respond_to?(:redirect?) && presenter.redirect?
-        render FlatPack::Button::Component.new(
-          text: presenter.copy("checkout_continue", "Continue to secure checkout"),
-          style: :primary, size: :md, url: presenter.presentation[:url], data: { turbo: false }
-        )
-      else
-        helpers.tag.p(presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation."))
-      end
+      return render_action(action) if action
+      return redirect_button if presenter.respond_to?(:redirect?) && presenter.redirect?
+
+      helpers.tag.p(pending_copy)
+    end
+
+    def redirect_button
+      render FlatPack::Button::Component.new(
+        text: presenter.copy("checkout_continue", "Continue to secure checkout"),
+        style: :primary, size: :md, url: presenter.presentation[:url], data: { turbo: false }
+      )
+    end
+
+    def pending_copy
+      presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.")
     end
 
     def render_action(action)
