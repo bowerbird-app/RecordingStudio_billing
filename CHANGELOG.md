@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Upgraded the dummy app to RecordingStudio `v4.0.0`, RecordingStudioAccessible `0.6.0` (RS 4 support branch), and RecordingStudioRootSwitchable `v0.4.0`
 - Bumped FlatPack from `v0.1.129` to `v0.1.132`
-- Refreshed root and dummy lockfiles to current Rails `8.1.3.1` and compatible dependency updates (including Solid Cable 4, Solid Queue 1.6, image_processing 2 / ruby-vips, Puma 8, SimpleCov 1)
+- Refreshed root and dummy lockfiles to current Rails `8.1.3.1` and compatible dependency updates (including Solid Cable 4, Solid Queue 1.6, Puma 8, SimpleCov 1). `image_processing` stays on 1.x to avoid a system `libvips` requirement in CI
 - Enabled `:accessible` on `Workspace`, added Accessible initializer allowlisting `User`, and installed the RecordingStudio 4.0 harden indexes migration plus Accessible accesses table recreation
 - Updated FlatPack sidebar items to the `text:` API required by `v0.1.132`
 - Removed unused root `sprockets-rails` dependency (dummy app uses Propshaft)
