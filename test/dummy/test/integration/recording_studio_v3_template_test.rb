@@ -9,22 +9,28 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_includes ApplicationController.ancestors, RecordingStudio::RootSwitchable::ControllerSupport
   end
 
-  test "dummy app validates v3 recordable declarations" do
+  test "dummy app validates recordable declarations" do
     assert RecordingStudio.validate_recordable_declarations!
     assert_equal [ "Workspace" ], RecordingStudio.root_recordable_types
     assert_equal [ "Workspace", "Folder" ], RecordingStudio.allowed_parent_types_for("Page")
   end
 
-  test "dummy app schema excludes removed access control tables" do
+  test "dummy app schema includes accessible grants and excludes removed core tables" do
     connection = ActiveRecord::Base.connection
 
     assert connection.column_exists?(:recording_studio_recordings, :root_recording_id)
-    refute connection.table_exists?(:recording_studio_accesses)
+    assert connection.table_exists?(:recording_studio_accesses)
+    assert connection.index_exists?(:recording_studio_recordings, %i[recordable_type recordable_id],
+                                    name: "index_rs_unique_root_recording_per_recordable")
     refute connection.table_exists?(:recording_studio_access_boundaries)
     refute connection.table_exists?(:recording_studio_device_sessions)
   end
 
-  test "dummy seeds use v3 hierarchy idempotently and restore current actor" do
+  test "workspace enables the accessible capability" do
+    assert_includes Array(RecordingStudio.capabilities_for("Workspace")), :accessible
+  end
+
+  test "dummy seeds use hierarchy helpers idempotently and restore current actor" do
     Current.actor = nil
 
     load Rails.root.join("db/seeds.rb").to_s

@@ -10,6 +10,9 @@ RecordingStudio.configure do |config|
   # Actor resolver for events when no actor is explicitly supplied
   config.actor = -> { Current.actor }
 
+  # Prefer an explicit actor on write paths in non-test environments.
+  config.require_actor = !Rails.env.test?
+
   # Emit ActiveSupport::Notifications events
   config.event_notifications_enabled = true
 

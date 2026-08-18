@@ -50,7 +50,7 @@ class DocsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", text: "Recordable types"
     assert_includes(
       response.body,
-      "The list below comes from RecordingStudio.recordable_declarations and v3 parent/root introspection."
+      "The list below comes from RecordingStudio.recordable_declarations and parent/root introspection."
     )
     assert_includes response.body, "Workspace"
     assert_includes response.body, "Folder"

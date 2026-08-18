@@ -194,12 +194,13 @@ redirect_to gem_template.root_path
 
 The `gem_template` helper provides access to all engine routes.
 
-## RecordingStudio v3 Host-App Check
+## RecordingStudio Host-App Check
 
-This template's dummy app uses RecordingStudio `recording_studio/v3.0.0`. Keep
+This template's dummy app uses RecordingStudio `v4.0.0` with Accessible `0.6` and Root Switchable `0.4`. Keep
 `config.require_recordable_declarations = true`, declare every configured recordable with
-`recording_studio_recordable(...)`, and create roots with `RecordingStudio.root_recording_for(recordable)`.
-Child recordings must be created with an explicit `parent_recording`.
+`recording_studio_recordable(...)`, enable `:accessible` on roots that receive grants, and create roots with
+`RecordingStudio.root_recording_for(recordable)`. Child recordings must be created with an explicit `parent_recording`.
+Prefer `Recording.recent` or explicit `order:` after the RecordingStudio 4.0 ordering change.
 
 ---
 

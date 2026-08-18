@@ -1,31 +1,42 @@
-# Migration Notes - Private Gems to Public Gems
-
-## Completed Changes
-
-1. Removed repository access entries from `.devcontainer/devcontainer.json`.
-2. Updated `docs/gem_template/CODESPACES.md` and `docs/gem_template/PRIVATE_GEMS.md` for public dependencies.
-3. Replaced MakeupArtist with FlatPack in the dummy app dependency, views, layouts, and Tailwind sources.
-4. Pinned the dummy app to FlatPack `v0.1.129` in `test/dummy/Gemfile` and its lockfile.
-5. Regenerated the dummy app bundle and completed the FlatPack installation work.
+# Migration Notes
 
 ## Current Requirements
 
 - Ruby 3.3 or newer
 - Rails 8.1 or newer
+- RecordingStudio `v4.0.0` (or compatible `~> 4.0`)
+- RecordingStudioAccessible `~> 0.6` (RS 4 support branch until tagged)
+- RecordingStudioRootSwitchable `~> 0.4`
+- FlatPack `v0.1.132` or newer ViewComponent 4 release
 - Public RubyGems and GitHub access for dependency installation
-- No private gem credentials for the template dependencies
+
+## Upgrading This Template To RecordingStudio 4
+
+1. Pin sibling gems:
+
+```ruby
+gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "v4.0.0"
+gem "recording_studio_accessible",
+    github: "bowerbird-app/RecordingStudio_accessible",
+    branch: "cursor/support-recording-studio-4-8e1e"
+gem "recording_studio_root_switchable",
+    github: "bowerbird-app/RecordingStudio_root_switchable",
+    tag: "v0.4.0"
+gem "flat_pack", github: "bowerbird-app/flatpack", tag: "v0.1.132"
+```
+
+2. Install and migrate RecordingStudio harden indexes plus Accessible accesses recreation / root-switchable FK updates.
+3. Enable `:accessible` on root recordables and configure `access_actor_types`.
+4. Prefer `Recording.recent` or explicit `order:` — RecordingStudio 4 has no default newest-first order.
+5. Follow RecordingStudio `docs/UPGRADING.md` for Event append-only and unsafe-query opt-in rules.
 
 ## Verification
-
-Install both bundles and run the complete gem and dummy app test path:
 
 ```bash
 bundle install
 BUNDLE_GEMFILE=test/dummy/Gemfile bundle install
 bundle exec rake test:all
 ```
-
-Run the dummy app from its directory for browser verification:
 
 ```bash
 cd test/dummy

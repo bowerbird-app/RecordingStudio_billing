@@ -87,13 +87,14 @@ To add new recordable types:
    end
    ```
 
-### RecordingStudio v3 Declarations
+### RecordingStudio Declarations And Accessible
 
-RecordingStudio v3 expects every configured ActiveRecord recordable type to declare its hierarchy rules:
+RecordingStudio expects every configured ActiveRecord recordable type to declare its hierarchy rules:
 
-- `Workspace` declares `root: true`
+- `Workspace` declares `root: true` and enables `:accessible`
 - `Folder` and `Page` declare `root: false, allowed_parent_types: ["Workspace", "Folder"]`
 - `config.require_recordable_declarations = true` remains enabled in the dummy app initializer
+- `RecordingStudioAccessible` allowlists `User` via `config.access_actor_types`
 
 Useful console checks:
 
@@ -101,6 +102,7 @@ Useful console checks:
 RecordingStudio.validate_recordable_declarations!
 RecordingStudio.root_recordable_types
 RecordingStudio.allowed_parent_types_for("Page")
+RecordingStudio.capabilities_for("Workspace")
 ```
 
 ### FlatPack UI Components
@@ -130,8 +132,10 @@ See the [FlatPack README](https://github.com/bowerbird-app/flatpack) for full do
 | Rails           | 8.1+    |
 | PostgreSQL      | 16      |
 | TailwindCSS     | 4       |
-| RecordingStudio | v3.0.0 (pinned to `recording_studio/v3.0.0` in `test/dummy/Gemfile`) |
-| FlatPack        | v0.1.129 (pinned in `test/dummy/Gemfile`) |
+| RecordingStudio | v4.0.0 (pinned to `v4.0.0` in `test/dummy/Gemfile`) |
+| Accessible      | 0.6.0 (RS 4 support branch until tagged on main) |
+| Root Switchable | v0.4.0 |
+| FlatPack        | v0.1.132 (pinned in `test/dummy/Gemfile`) |
 | Devise          | latest  |
 
 ## Documentation
