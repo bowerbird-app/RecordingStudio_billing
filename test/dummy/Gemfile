@@ -3,12 +3,15 @@ source "https://rubygems.org"
 # Use the gem_template engine
 gem "gem_template", path: "../.."
 
-# RecordingStudio engine
-gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "recording_studio/v3.0.0"
-gem "recording_studio_accessible", github: "bowerbird-app/RecordingStudio_accessible", tag: "0.3.1"
+# RecordingStudio engine (4.0)
+gem "recording_studio", github: "bowerbird-app/RecordingStudio", tag: "v4.0.0"
+# Pin to the RecordingStudio 4.0 support branch until Accessible 0.6.0 is tagged on main.
+gem "recording_studio_accessible",
+    github: "bowerbird-app/RecordingStudio_accessible",
+    branch: "cursor/support-recording-studio-4-8e1e"
 
 # Root switcher for the top nav
-gem "recording_studio_root_switchable", github: "bowerbird-app/RecordingStudio_root_switchable", tag: "0.3.0"
+gem "recording_studio_root_switchable", github: "bowerbird-app/RecordingStudio_root_switchable", tag: "v0.4.0"
 
 # Devise authentication
 gem "devise"
@@ -34,7 +37,7 @@ gem "jbuilder"
 gem "tailwindcss-rails"
 
 # FlatPack UI component library [https://github.com/bowerbird-app/flatpack]
-gem "flat_pack", github: "bowerbird-app/flatpack", tag: "v0.1.129"
+gem "flat_pack", github: "bowerbird-app/flatpack", tag: "v0.1.132"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
@@ -53,7 +56,7 @@ gem "bootsnap", require: false
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]
 gem "kamal", require: false
 
-# Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
+# Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster]
 gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
@@ -62,6 +65,9 @@ gem "image_processing", "~> 1.2"
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+
+  # Keep Object#stub available under Minitest 6 (pulled in by Rails 8.1.3+)
+  gem "minitest-mock"
 
   # Audits gems for known security defects (use config/bundler-audit.yml to ignore issues)
   gem "bundler-audit", require: false
@@ -74,6 +80,6 @@ group :development, :test do
 end
 
 group :development do
-  # Use console on exceptions pages [https://github.com/rails/web-console]
+  # Use console on exceptions pages [https://rails.github.io/web-console/]
   gem "web-console"
 end
