@@ -29,3 +29,12 @@
 @source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/recordingstudio-*/app/views/**/*.erb";
 @source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
 @source "../../../../../../home/ubuntu/.local/share/mise/installs/ruby/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
+
+/* rbenv-managed git gems: ~/.rbenv/versions/<ver>/lib/ruby/gems/<abi>/bundler/gems/<gem>-<rev>.
+   Tailwind requires the path before the first wildcard to be a real directory, so the user
+   segment stays concrete (Cloud Agent and the devcontainer use `ubuntu`) while the version,
+   ABI, and gem-revision segments are wildcarded. Covers FlatPack components and the whole
+   Recording Studio gem family so their utility classes reach the host app's Tailwind build. */
+@source "../../../../../../home/ubuntu/.rbenv/versions/*/lib/ruby/gems/*/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
+@source "../../../../../../home/ubuntu/.rbenv/versions/*/lib/ruby/gems/*/bundler/gems/RecordingStudio*/app/views/**/*.erb";
+@source "../../../../../../home/ubuntu/.rbenv/versions/*/lib/ruby/gems/*/bundler/gems/RecordingStudio*/app/components/**/*.{rb,erb}";
