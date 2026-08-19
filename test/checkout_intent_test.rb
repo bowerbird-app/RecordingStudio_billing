@@ -714,7 +714,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
         assert_equal(expected_mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon",
                      result.purchase.effects.sole.effect_kind)
       else
-        assert_equal expected_mode, result.subscription.item_versions.sole.mode
+        assert_equal expected_mode, result.subscription.lines.sole.mode
         assert_equal(expected_mode == "trial_subscription" ? "trialing" : "active", result.subscription.state)
       end
     end
@@ -732,8 +732,12 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert first.projected?
     assert repeated.existing?
-    assert_equal 1, RecordingStudioBilling::SubscriptionItemVersion.where(subscription: first.subscription).count
-    assert_raises(ActiveRecord::StatementInvalid) { first.subscription.item_versions.sole.update_column(:amount_minor, 1) }
+    assert_equal 1, RecordingStudioBilling::SubscriptionLine.where(
+      subscription_recording_id: first.subscription.recording.id
+    ).count
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::SubscriptionLine.where(id: first.subscription.lines.sole.id).update_all(amount_minor: 1)
+    end
     assert_raises(ActiveRecord::RecordNotFound) do
       RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: other_root)
     end
@@ -761,17 +765,18 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: replacement_intent,
                                                                             root_recording: graph[:customer_root]).subscription
 
-    plan_versions = subscription.item_versions.where(product_recording_id: graph[:option].product_recording_id).order(:version_number)
-    addon_versions = subscription.item_versions.where(billing_option_recording_id: addon.recording.id).order(:version_number)
-    assert_equal [1, 2], plan_versions.pluck(:version_number)
-    assert_equal [graph[:option].recording.id, annual.recording.id], plan_versions.pluck(:billing_option_recording_id)
-    assert_equal [graph[:option].product_recording_id], plan_versions.pluck(:line_key).uniq
-    assert_predicate plan_versions.first, :effective_ends_at?
-    assert_nil plan_versions.last.effective_ends_at
-    assert_equal [1], addon_versions.pluck(:version_number)
-    assert_nil addon_versions.sole.effective_ends_at
-    assert_equal 2, subscription.item_versions.where(effective_ends_at: nil).count
-    assert_equal 2, subscription.item_versions.where(effective_ends_at: nil).distinct.count(:line_key)
+    snapshots = RecordingStudioBilling::SubscriptionLine.where(subscription_recording_id: subscription.recording.id)
+    plan_snapshots = snapshots.where(product_recording_id: graph[:option].product_recording_id).order(:created_at, :id)
+    addon_snapshots = snapshots.where(billing_option_recording_id: addon.recording.id)
+
+    assert_equal [graph[:option].recording.id, annual.recording.id],
+                 plan_snapshots.pluck(:billing_option_recording_id)
+    assert_equal [graph[:option].product_recording_id], plan_snapshots.pluck(:line_key).uniq
+    assert_nil plan_snapshots.first.recording
+    assert_equal plan_snapshots.last.id, subscription.lines.find_by(line_key: graph[:option].product_recording_id).id
+    assert_equal addon_snapshots.sole.id, addon_snapshots.sole.current.id
+    assert_equal 2, subscription.active_lines.count
+    assert_equal 2, subscription.active_lines.distinct.count(:line_key)
   end
 
   test "subscription lifecycle transitions are explicit and reject terminal or invalid moves" do
@@ -805,15 +810,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.apply_subscription_change_intent(subscription_change_intent: cancel,
                                                             root_recording: graph[:customer_root])
 
-    assert_equal "cancelled", subscription.reload.state
-    assert_equal 0, subscription.item_versions.where(effective_ends_at: nil).count
+    assert_equal "cancelled", subscription.current.state
+    assert_equal 0, subscription.active_lines.count
 
     repurchase = project_subscription!(graph, key: "after-cancel")
 
-    assert_equal subscription.id, repurchase.id
+    assert_equal subscription.current_recording.id, repurchase.current_recording.id
+    assert_equal subscription.identifier, repurchase.identifier
     assert_equal "active", repurchase.state
-    assert_equal "active", repurchase.items.sole.state
-    assert_equal 1, repurchase.item_versions.where(effective_ends_at: nil).count
+    assert_equal "active", repurchase.lines.sole.state
+    assert_equal 1, repurchase.active_lines.count
   end
 
   test "lifecycle snapshots reject unsafe payloads and tampered manifests" do
@@ -1137,7 +1143,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     other_account = RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other account").recording
 
     [{ "value" => false }, { "merge_rule" => "maximum" }, { "root_recording_id" => other_root.id, "account_recording_id" => other_account.id },
-     { "source_type" => "RecordingStudioBilling::SubscriptionItemVersion" }].each do |changes|
+     { "source_type" => "RecordingStudioBilling::SubscriptionLine" }].each do |changes|
       assert_raises(ActiveRecord::StatementInvalid) { insert_grant!(grant, changes) }
     end
     assert_raises(ActiveRecord::StatementInvalid) { grant.update_column(:feature_key, "forged") }
@@ -1203,8 +1209,10 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     subscription = project_subscription!(graph, key: "subscription-change-initial")
     use_subscription_change_adapter!
-    item = subscription.items.sole
-    original_version = item.versions.sole
+    original_line = subscription.lines.sole
+    line_key = original_line.line_key
+    snapshots = RecordingStudioBilling::SubscriptionLine.where(subscription_recording_id: subscription.recording.id,
+                                                               line_key:)
 
     cancellation = create_subscription_change!(subscription, graph, key: "cancel", kind: "cancellation")
     complete_subscription_change!(cancellation)
@@ -1213,41 +1221,39 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     )
 
     assert_equal "applied", cancelled.state
-    assert_equal "cancelled", subscription.reload.state
-    assert_equal "cancelled", item.reload.state
-    assert_predicate original_version.reload, :effective_ends_at?
-    assert_equal 1, item.versions.count
+    assert_equal "cancelled", subscription.current.state
+    assert_equal "cancelled", original_line.current.state
+    assert_nil original_line.reload.recording
+    assert_equal 2, snapshots.count
 
     resumption = create_subscription_change!(subscription, graph, key: "resume", kind: "resumption")
-    assert_equal original_version.manifest_digest,
-                 resumption.frozen_terms.dig("current_items", item.line_key, "manifest_digest")
-    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: original_version.manifest_digest)
-    assert_equal manifest_envelope(manifest), resumption.frozen_terms.dig("current_items", item.line_key)
+    assert_equal original_line.manifest_digest,
+                 resumption.frozen_terms.dig("current_items", line_key, "manifest_digest")
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: original_line.manifest_digest)
+    assert_equal manifest_envelope(manifest), resumption.frozen_terms.dig("current_items", line_key)
     complete_subscription_change!(resumption)
     resumed = RecordingStudioBilling::ApplySubscriptionChangeIntent.call(
       subscription_change_intent: resumption, root_recording: graph[:customer_root]
     )
 
-    active_version = item.reload.versions.order(:version_number).last
+    active_line = original_line.current
     assert_equal "applied", resumed.state
-    assert_equal "active", subscription.reload.state
-    assert_equal "active", item.reload.state
-    assert_equal 2, item.versions.count
-    assert_equal 2, active_version.version_number
-    assert_nil active_version.effective_ends_at
-    assert_equal resumption.frozen_terms.fetch("current"), active_version.commercial_snapshot
-    assert_equal original_version.manifest_digest, active_version.manifest_digest
+    assert_equal "active", subscription.current.state
+    assert_equal "active", active_line.state
+    assert_equal 3, snapshots.count
+    assert_equal resumption.frozen_terms.fetch("current"), active_line.commercial_snapshot
+    assert_equal original_line.manifest_digest, active_line.manifest_digest
     assert_equal resumed.id, RecordingStudioBilling::ApplySubscriptionChangeIntent.call(
       subscription_change_intent: resumed, root_recording: graph[:customer_root]
     ).id
-    assert_equal 2, item.reload.versions.count
+    assert_equal 3, snapshots.count
   end
 
   test "unresolved, failed, and cross-root subscription changes do not mutate current terms" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     subscription = project_subscription!(graph, key: "subscription-change-unapplied")
     use_subscription_change_adapter!
-    original_version = subscription.item_versions.sole
+    original_line = subscription.lines.sole
     change = create_subscription_change!(subscription, graph, key: "failed", kind: "cancellation")
 
     change.financial_command.update!(state: "failed", normalized_result: { "reason" => "provider_rejected" })
@@ -1255,8 +1261,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       RecordingStudioBilling::ApplySubscriptionChangeIntent.call(subscription_change_intent: change,
                                                                  root_recording: graph[:customer_root])
     end
-    assert_equal "active", subscription.reload.state
-    assert_nil original_version.reload.effective_ends_at
+    assert_equal "active", subscription.current.state
+    assert_equal original_line.id, subscription.lines.sole.id
     assert_equal "failed", change.reload.state
 
     review = create_subscription_change!(subscription, graph, key: "review", kind: "cancellation")
@@ -1267,8 +1273,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
                                                                  root_recording: graph[:customer_root])
     end
     assert_equal "requires_review", review.reload.state
-    assert_equal "active", subscription.reload.state
-    assert_nil original_version.reload.effective_ends_at
+    assert_equal "active", subscription.current.state
+    assert_equal original_line.id, subscription.lines.sole.id
 
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
     assert_raises(ActiveRecord::RecordNotFound) do
@@ -1288,7 +1294,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     second_subscription = project_subscription!(graph.merge(customer_root: second_root, account_recording: second_account),
                                                 key: "plan-update-second")
     use_subscription_change_adapter!
-    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.item_versions.sole.manifest_digest)
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.lines.sole.manifest_digest)
     update = record_child(
       RecordingStudioBilling::PlanUpdate.new(
         billing_option_recording: graph[:option].recording, key: "update_#{SecureRandom.hex(4)}", allowance_policy: "preserve",
@@ -1302,7 +1308,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     run = RecordingStudioBilling::ApplyPlanUpdate.call(
       run: preview, root_recording: graph[:provider_root], idempotency_key: "plan-update-run", confirmation: { "approved_by" => "admin-1" }
     )
-    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_id).to_a
+    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_recording_id).to_a
 
     assert_equal 2, applications.size
     assert(applications.all? { |application| application.subscription_change_intent.change_set.empty? })
@@ -1320,8 +1326,10 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert_equal "requires_review", run.reload.state
     [first_subscription, second_subscription].each do |subscription|
-      assert_equal 1, subscription.reload.item_versions.count
-      assert_nil subscription.item_versions.sole.effective_ends_at
+      assert_equal 1, subscription.active_lines.count
+      assert_equal 1, RecordingStudioBilling::SubscriptionLine.where(
+        subscription_recording_id: subscription.recording.id
+      ).count
     end
   end
 
@@ -1336,7 +1344,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     second_subscription = project_subscription!(graph.merge(customer_root: second_root, account_recording: second_account),
                                                 key: "plan-update-success-second")
     use_subscription_change_adapter!
-    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.item_versions.sole.manifest_digest)
+    manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: first_subscription.lines.sole.manifest_digest)
     update = record_child(
       RecordingStudioBilling::PlanUpdate.new(
         billing_option_recording: graph[:option].recording, key: "update_#{SecureRandom.hex(4)}", allowance_policy: "preserve",
@@ -1344,8 +1352,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
         replacement_configuration: { "audience" => { "root_recording_ids" => [graph[:customer_root].id, second_root.id] } }
       ), graph[:provider_root], graph[:admin].recording
     ).recordable
-    prior_versions = [first_subscription, second_subscription].to_h do |subscription|
-      [subscription.id, subscription.item_versions.sole]
+    prior_lines = [first_subscription, second_subscription].to_h do |subscription|
+      [subscription.recording.id, subscription.lines.sole]
     end
 
     preview = RecordingStudioBilling::ApplyPlanUpdate.call(plan_update: update, root_recording: graph[:provider_root],
@@ -1353,7 +1361,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     run = RecordingStudioBilling::ApplyPlanUpdate.call(
       run: preview, root_recording: graph[:provider_root], idempotency_key: "plan-update-success", confirmation: { "approved_by" => "admin-1" }
     )
-    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_id).to_a
+    applications = run.applications.includes(subscription_change_intent: :financial_command).order(:subscription_recording_id).to_a
     applications.each do |application|
       RecordingStudioBilling::FinancialCommandExecutor.execute(
         command: application.subscription_change_intent.financial_command, provider_key: "fake"
@@ -1366,16 +1374,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal "applied", applied.state
     assert(applications.all? { |application| application.reload.state == "applied" })
     [first_subscription, second_subscription].each do |subscription|
-      versions = subscription.reload.item_versions.order(:version_number).to_a
-      prior = prior_versions.fetch(subscription.id).reload
-      current = versions.last
+      snapshots = RecordingStudioBilling::SubscriptionLine
+                  .where(subscription_recording_id: subscription.recording.id).order(:created_at, :id).to_a
+      prior = prior_lines.fetch(subscription.recording.id).reload
+      current = subscription.lines.sole
 
-      assert_equal 2, versions.size
-      assert_predicate prior, :effective_ends_at?
-      assert_predicate prior, :superseded_at?
-      assert_nil current.effective_ends_at
+      assert_equal 2, snapshots.size
+      assert_nil prior.recording
+      assert_equal current.id, snapshots.last.id
       assert_equal "subscription_change", current.source_type
-      application = applications.find { |entry| entry.subscription_id == subscription.id }
+      application = applications.find { |entry| entry.subscription_recording_id == subscription.recording.id }
       assert_equal application.subscription_change_intent_id, current.source_id
       assert_equal "preserve",
                    application.subscription_change_intent.frozen_terms.dig("plan_update", "allowance_policy")
@@ -1386,15 +1394,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
     assert_equal applied.id, replayed.id
     assert_equal 4,
-                 RecordingStudioBilling::SubscriptionItemVersion.where(subscription_id: [first_subscription.id,
-                                                                                         second_subscription.id]).count
+                 RecordingStudioBilling::SubscriptionLine.where(
+                   subscription_recording_id: [first_subscription.recording.id, second_subscription.recording.id]
+                 ).count
   end
 
   test "direct subscription changes reject incompatible proposed manifests before creating commands" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     subscription = project_subscription!(graph, key: "proposal-boundary")
     use_subscription_change_adapter!
-    current_manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: subscription.item_versions.sole.manifest_digest)
+    current_manifest = RecordingStudioBilling::CommercialManifest.find_by!(manifest_digest: subscription.lines.sole.manifest_digest)
     option_id = graph[:option].recording.id
     command_count = RecordingStudioBilling::FinancialCommand.where(root_recording: graph[:customer_root]).count
 

@@ -35,6 +35,16 @@ module RecordingStudioBilling
       subscription_recording&.recordable
     end
 
+    # Same story as Subscription: a revised line leaves this row behind, so
+    # follow (subscription recording, line key) forward to the live snapshot.
+    def current
+      self.class.with_current_recording.find_by(subscription_recording_id:, line_key:)
+    end
+
+    def current_recording
+      current&.recording
+    end
+
     private
 
     def safe_snapshot

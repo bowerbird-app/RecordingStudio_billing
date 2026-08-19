@@ -182,6 +182,7 @@ module RecordingStudioBilling
         subscription.billing_anchor = identity.fetch(:billing_anchor)
         subscription.payment_terms_days = identity.fetch(:payment_terms_days)
         subscription.market_recording_id = identity.fetch(:market_recording_id)
+        subscription.execution_group_fingerprint = identity.fetch(:execution_group_fingerprint)
       end
     end
 

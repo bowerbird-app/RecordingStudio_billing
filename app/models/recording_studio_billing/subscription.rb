@@ -33,9 +33,16 @@ module RecordingStudioBilling
         return value if value.is_a?(RecordingStudio::Recording)
 
         subscription = value.is_a?(Subscription) ? value : nil
-        subscription ||= (root_recording ? for_root(root_recording) : with_current_recording)
-                         .find(value.respond_to?(:id) ? value.id : value)
-        subscription.recording || raise(ActiveRecord::RecordNotFound, "subscription not found")
+        # Superseded snapshots keep their row and their id, so callers holding an
+        # older one still have to land on the live Recording.
+        subscription ||= snapshots_for(root_recording).find(value.respond_to?(:id) ? value.id : value)
+        subscription.current_recording || raise(ActiveRecord::RecordNotFound, "subscription not found")
+      end
+
+      def snapshots_for(root_recording)
+        return all unless root_recording
+
+        where(root_recording_id: RecordingStudio.root_recording_or_self(root_recording).id)
       end
 
       def execution_group_fingerprint(values)
@@ -46,10 +53,22 @@ module RecordingStudioBilling
       end
     end
 
-    def lines
-      return SubscriptionLine.none unless recording
+    # A revision leaves this row behind untouched, so never trust `self` or a
+    # cached association here: re-read whichever snapshot the Recording points
+    # at now, following the identifier that revisions carry forward.
+    def current
+      self.class.with_current_recording.find_by(root_recording_id:, identifier:)
+    end
 
-      SubscriptionLine.with_current_recording.where(subscription_recording_id: recording.id)
+    def current_recording
+      current&.recording
+    end
+
+    def lines
+      subscription_recording = current_recording
+      return SubscriptionLine.none unless subscription_recording
+
+      SubscriptionLine.with_current_recording.where(subscription_recording_id: subscription_recording.id)
     end
 
     def active_lines
