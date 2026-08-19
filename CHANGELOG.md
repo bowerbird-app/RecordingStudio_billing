@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.3.0
+
+Customer subscriptions are Recording Studio recordables. Clean-install only.
+
+### Breaking
+
+- `RecordingStudioBilling::Subscription` is a recordable under the account
+  recording, and the new `RecordingStudioBilling::SubscriptionLine` ("Plan line")
+  is a recordable under the subscription. Both are immutable snapshots written
+  with `record!` and `revise`, so lifecycle changes and term changes append a new
+  row instead of updating one.
+- Removed `RecordingStudioBilling::SubscriptionItem` and
+  `RecordingStudioBilling::SubscriptionItemVersion`, along with their tables.
+  Read current terms from `subscription.lines` / `subscription.active_lines`, and
+  read history from `SubscriptionLine.where(subscription_recording_id: ...)`.
+- `SubscriptionChangeIntent`, `Invoice`, and `PlanUpdateApplication` reference
+  `subscription_recording_id` (the stable Recording id) instead of
+  `subscription_id`. A revision changes the recordable row id; the Recording id
+  does not.
+- `EntitlementGrant#source_type` is `RecordingStudioBilling::SubscriptionLine`
+  instead of `RecordingStudioBilling::SubscriptionItemVersion`.
+- Customer subscription routes carry the Recording id. `Subscription#to_param`
+  returns it, and the controller still accepts a recordable id.
+
+### Added
+
+- `Subscription#current` and `Subscription#current_recording` (and the same pair
+  on `SubscriptionLine`) walk a superseded snapshot forward to the live one.
+- `Subscription.recording_for` accepts a Recording, a snapshot, or either id.
+
 ## 0.2.1
 
 Entitlement grants project automatically when checkout completes.

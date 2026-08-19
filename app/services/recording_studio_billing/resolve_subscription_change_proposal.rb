@@ -75,19 +75,7 @@ module RecordingStudioBilling
               "subscription provider is incompatible"
       end
 
-      case change_kind
-      when "plan"
-        raise ArgumentError, "plan change requires a plan" unless product.kind == "plan"
-      when "interval"
-        raise ArgumentError, "interval change requires a current plan" unless current_plan && product.kind == "plan"
-        raise ArgumentError, "interval change requires the current plan family" unless current_plan.product_recording_id == product.recording.id
-      when "addon"
-        raise ArgumentError, "addon change requires an addon" unless product.kind == "addon"
-      when "quantity"
-        existing = current_lines.find { |line| line.billing_option_recording_id == option.recording.id }
-        raise ArgumentError, "quantity change requires an existing subscription item" unless existing
-        raise ArgumentError, "quantity is fixed for this subscription item" unless option.quantity_mode == "adjustable"
-      end
+      validate_change_kind!(current_lines, current_plan, option, product)
 
       requested_quantity = Integer(quantity.presence || option.default_quantity, exception: false)
       raise ArgumentError, "subscription quantity is invalid" unless requested_quantity&.positive?
@@ -101,6 +89,22 @@ module RecordingStudioBilling
 
       raise ArgumentError,
             "subscription quantity exceeds the allowed maximum"
+    end
+
+    def validate_change_kind!(current_lines, current_plan, option, product)
+      case change_kind
+      when "plan"
+        raise ArgumentError, "plan change requires a plan" unless product.kind == "plan"
+      when "interval"
+        raise ArgumentError, "interval change requires a current plan" unless current_plan && product.kind == "plan"
+        raise ArgumentError, "interval change requires the current plan family" unless current_plan.product_recording_id == product.recording.id
+      when "addon"
+        raise ArgumentError, "addon change requires an addon" unless product.kind == "addon"
+      when "quantity"
+        existing = current_lines.find { |line| line.billing_option_recording_id == option.recording.id }
+        raise ArgumentError, "quantity change requires an existing subscription item" unless existing
+        raise ArgumentError, "quantity is fixed for this subscription item" unless option.quantity_mode == "adjustable"
+      end
     end
 
     def validate_product_rules!(subscription, proposed_product)

@@ -2,6 +2,39 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.3.0 — subscriptions are recordables
+
+`0.3.0` rewrites `db/schema/install_recording_studio_billing.sql`. There is no
+upgrade path from `0.2.x`: a host that already installed billing has to reinstall
+from a fresh database.
+
+What changed in the schema:
+
+- `recording_studio_billing_subscription_items` and
+  `recording_studio_billing_subscription_item_versions` are gone.
+  `recording_studio_billing_subscription_lines` replaces both and hangs off the
+  subscription's Recording.
+- `recording_studio_billing_subscriptions` and the new lines table are immutable
+  snapshot tables. Triggers reject `UPDATE` and `DELETE`; a state or term change
+  inserts a new row through `revise`.
+- `subscription_change_intents`, `invoices`, and `plan_update_applications` now
+  carry `subscription_recording_id` and reference `recording_studio_recordings`.
+- The unique indexes on subscription identifier and execution-group fingerprint
+  are now plain indexes. A revision would violate them, so uniqueness among
+  *current* subscriptions is enforced in application code, which serializes on
+  the account Recording before recording a new subscription.
+
+What changed for callers:
+
+- `subscription.items` and `subscription.item_versions` are gone. Use
+  `subscription.lines`, `subscription.active_lines`, or
+  `subscription.cancelled_lines`.
+- Hold the Recording, not the snapshot, if you plan to read state later. A
+  snapshot you already loaded keeps its old values after a revision; call
+  `subscription.current` to move to the live one.
+- Pass `subscription_recording:` where you used to pass `subscription:` on
+  `SubscriptionChangeIntent`, `Invoice`, and `PlanUpdateApplication`.
+
 ## 0.2.1 — entitlement projection after checkout
 
 From `0.2.1`, `project_completed_checkout_intent` projects entitlement grants

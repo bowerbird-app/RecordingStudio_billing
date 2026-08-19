@@ -35,9 +35,7 @@ module RecordingStudioBilling
         recording = resolve_recording(value)
         raise ActiveRecord::RecordNotFound, "subscription not found" unless recording
 
-        if root_recording && recording.root_recording_id != RecordingStudio.root_recording_or_self(root_recording).id
-          raise ActiveRecord::RecordNotFound, "subscription not found"
-        end
+        raise ActiveRecord::RecordNotFound, "subscription not found" if root_recording && recording.root_recording_id != RecordingStudio.root_recording_or_self(root_recording).id
 
         recording
       end

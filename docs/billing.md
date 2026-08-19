@@ -44,6 +44,38 @@ The dummy seed is the V1 demonstration catalogue: one Workspace, one Admin root,
 
 Checkout is one customer-facing lifecycle for every presentation. The browser may send option IDs, quantities, a country or currency preference, and a presentation preference. The server freezes money, tax treatment, Charge Market, and the commercial manifest. If the final Charge Market would change price or terms, checkout requotes, restarts, rejects, or holds for review. Browser return pages show intent state only; they never fulfil a purchase.
 
+## Subscriptions are recordables
+
+A customer subscription is a Recording Studio recordable under the account
+recording, and each commercial line — the plan, an add-on — is a
+`RecordingStudioBilling::SubscriptionLine` recordable ("Plan line") under the
+subscription. Both tables are immutable snapshots. Lifecycle moves and term
+changes go through `revise`, which writes a new row and repoints the Recording;
+notes go through `log_event!`. Database triggers reject `UPDATE` and `DELETE` on
+both tables, so there is no in-place edit to reach for.
+
+```ruby
+subscription = RecordingStudioBilling::Subscription.for_root(workspace).sole
+subscription.active_lines            # current terms, one row per line
+subscription.lines.find_by(line_key: product_recording_id)
+RecordingStudioBilling::SubscriptionLine
+  .where(subscription_recording_id: subscription.recording.id)  # full history
+```
+
+Two consequences are easy to trip over:
+
+- A snapshot you loaded before a revision keeps its old attributes forever. Call
+  `subscription.current` (or `line.current`) to move to the live snapshot, and
+  `current_recording` when you need the stable Recording.
+- Anything that points at a subscription stores `subscription_recording_id`, not
+  the recordable id, because the recordable id changes on every revision. That
+  covers `SubscriptionChangeIntent`, `Invoice`, and `PlanUpdateApplication`, and
+  it is why customer subscription URLs carry the Recording id.
+
+Uniqueness of the execution group and the subscription identifier is enforced in
+application code over `Subscription.with_current_recording`, serialized on the
+account Recording. A unique index cannot express "unique among current snapshots".
+
 ## Plan gates and entitlements
 
 Completed checkout and applied subscription changes project entitlement grants automatically from the frozen commercial snapshot. Hosts gate product features with:

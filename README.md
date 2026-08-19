@@ -12,6 +12,11 @@ automatically. Hosts gate paid features with `entitled?` / `feature_value` on
 the workspace root (see [docs/billing.md](docs/billing.md)). People access is
 still RecordingStudio Accessible on that root.
 
+Customer subscriptions and their plan lines are Recording Studio recordables:
+immutable snapshots written with `record!` and `revise`. Read current terms with
+`subscription.active_lines` and follow a stale snapshot forward with
+`subscription.current`. See [docs/billing.md](docs/billing.md).
+
 User-facing screens should say **products and pricing**, not developer catalogue
 terms. Canonical V1 values are price scope `market`, checkout presentations
 `embedded` / `redirect` / `payment_link` / `invoice` / `no_charge`, collection
