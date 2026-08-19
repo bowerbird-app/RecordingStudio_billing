@@ -84,10 +84,10 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
   test "hybrid subscription changes and plan-update states are seeded through provider commands" do
     hybrid = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout")
-    subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
+    subscription = RecordingStudioBilling::SubscriptionLine.find_by!(
       checkout_intent_item_id: hybrid.items.first.id
     ).subscription
-    modes = subscription.item_versions.order(:line_key).pluck(:mode)
+    modes = subscription.lines.order(:line_key).pluck(:mode)
 
     assert_includes modes, "monthly_subscription"
     assert_includes modes, "recurring_addon"
@@ -95,8 +95,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_equal "applied", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:applied-change").state
     assert_equal "failed", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:failed-change").state
     assert_equal "requires_review", RecordingStudioBilling::SubscriptionChangeIntent.find_by!(local_idempotency_key: "seed:uncertain-change").state
-    assert_equal "active", subscription.reload.state
-    assert subscription.item_versions.where(effective_ends_at: nil, mode: "monthly_subscription").exists?
+    assert_equal "active", subscription.current.state
+    assert subscription.active_lines.where(mode: "monthly_subscription").exists?
     plan_updates = RecordingStudioBilling::PlanUpdate.where(id: RecordingStudio::Recording.unscoped.where(
       root_recording: @admin_root, recordable_type: "RecordingStudioBilling::PlanUpdate"
     ).select(:recordable_id))
@@ -247,7 +247,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Failed"
     assert_includes response.body, "Waiting for confirmation"
 
-    subscription = RecordingStudioBilling::SubscriptionItemVersion.find_by!(
+    subscription = RecordingStudioBilling::SubscriptionLine.find_by!(
       checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id
     ).subscription
     change_count = RecordingStudioBilling::SubscriptionChangeIntent.count

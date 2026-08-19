@@ -560,13 +560,13 @@ class DummyV1Catalogue
   end
 
   def seed_subscription_changes!
-    scheduled_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription: @hybrid_subscription, local_idempotency_key: "seed:scheduled-change") ||
+    scheduled_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription_recording: @hybrid_subscription.current_recording, local_idempotency_key: "seed:scheduled-change") ||
                        RecordingStudioBilling.create_subscription_change_intent(
                          subscription: @hybrid_subscription, root_recording: @root_recording,
                          local_idempotency_key: "seed:scheduled-change", change_kind: "cancellation",
                          effective_at: 1.month.from_now
                        ).intent
-    applied_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription: @hybrid_subscription, local_idempotency_key: "seed:applied-change") ||
+    applied_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription_recording: @hybrid_subscription.current_recording, local_idempotency_key: "seed:applied-change") ||
                      RecordingStudioBilling.create_subscription_change_intent(
                        subscription: @hybrid_subscription, root_recording: @root_recording,
                        local_idempotency_key: "seed:applied-change", change_kind: "cancellation"
@@ -580,13 +580,13 @@ class DummyV1Catalogue
                                           { billing_option_recording_id: @catalogue.fetch("demo_monthly_plan").fetch(:option).recording.id, quantity: 1 }
                                         ])
     @active_subscription = project_checkout!(active_checkout).subscription
-    failed_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription: @active_subscription, local_idempotency_key: "seed:failed-change") ||
+    failed_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription_recording: @active_subscription.current_recording, local_idempotency_key: "seed:failed-change") ||
                     RecordingStudioBilling.create_subscription_change_intent(
                       subscription: @active_subscription, root_recording: @root_recording,
                       local_idempotency_key: "seed:failed-change", change_kind: "cancellation"
                     ).intent
     execute_with_outcome(failed_change, :provider_rejection)
-    uncertain_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription: @active_subscription, local_idempotency_key: "seed:uncertain-change") ||
+    uncertain_change = RecordingStudioBilling::SubscriptionChangeIntent.find_by(subscription_recording: @active_subscription.current_recording, local_idempotency_key: "seed:uncertain-change") ||
                        RecordingStudioBilling.create_subscription_change_intent(
                          subscription: @active_subscription, root_recording: @root_recording,
                          local_idempotency_key: "seed:uncertain-change", change_kind: "cancellation"
@@ -603,7 +603,7 @@ class DummyV1Catalogue
 
   def seed_plan_updates!
     replacement_manifest = RecordingStudioBilling::CommercialManifest.find_by!(
-      manifest_digest: @active_subscription.item_versions.first.manifest_digest
+      manifest_digest: @active_subscription.lines.first.manifest_digest
     )
     scheduled_update = plan_update_for("demo_plan_update_scheduled", replacement_manifest, effective_at: 1.month.from_now)
     scheduled_preview = RecordingStudioBilling.apply_plan_update(

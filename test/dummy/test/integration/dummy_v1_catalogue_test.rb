@@ -126,6 +126,6 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
   end
 
   def usage_item_mode(intent)
-    RecordingStudioBilling::SubscriptionItemVersion.find_by!(checkout_intent_item_id: intent.items.first.id).mode
+    RecordingStudioBilling::SubscriptionLine.find_by!(checkout_intent_item_id: intent.items.first.id).mode
   end
 end
