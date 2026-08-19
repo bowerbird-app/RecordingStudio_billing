@@ -6,10 +6,16 @@ module RecordingStudioBilling
                 cancelled expired].freeze
     KINDS = %w[plan interval addon quantity cancellation resumption].freeze
 
-    belongs_to :subscription
+    # Revisions replace the subscription recordable row, so the change intent
+    # points at the stable Recording instead of a snapshot id.
+    belongs_to :subscription_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :financial_command, optional: true
+
+    def subscription
+      subscription_recording&.recordable
+    end
 
     validates :local_idempotency_key, :request_fingerprint, presence: true
     validates :state, inclusion: { in: STATES }

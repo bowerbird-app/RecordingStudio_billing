@@ -30,12 +30,14 @@ module RecordingStudioBilling
     def sources_for(root)
       return [resolve_source(root)] if source_input
 
-      SubscriptionItemVersion.where(root_recording: root).order(:id).lock.to_a +
+      current_line_ids = SubscriptionLine.with_current_recording.where(root_recording: root)
+                                         .select("recording_studio_billing_subscription_lines.id")
+      SubscriptionLine.where(id: current_line_ids).order(:id).lock.to_a +
         PurchaseEffect.where(root_recording: root).order(:id).lock.to_a
     end
 
     def resolve_source(root)
-      raise ArgumentError, "entitlement source must be a subscription item version or purchase effect" unless source_input.is_a?(SubscriptionItemVersion) || source_input.is_a?(PurchaseEffect)
+      raise ArgumentError, "entitlement source must be a subscription line or purchase effect" unless source_input.is_a?(SubscriptionLine) || source_input.is_a?(PurchaseEffect)
 
       unless source_input.root_recording_id == root.id
         raise ActiveRecord::RecordNotFound,

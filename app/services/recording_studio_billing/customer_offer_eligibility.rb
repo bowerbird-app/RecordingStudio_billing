@@ -73,8 +73,8 @@ module RecordingStudioBilling
       Subscription.for_root(root_recording).where(account_recording:,
                                                   state: %w[trialing
                                                             active]).flat_map do |subscription|
-        subscription.item_versions.where(effective_ends_at: nil).filter_map do |version|
-          version.product_recording&.recordable
+        subscription.active_lines.filter_map do |line|
+          line.product_recording&.recordable
         end
       end
     end

@@ -12,9 +12,9 @@ module RecordingStudioBilling
     def call
       terminal_outcome = nil
       result = SubscriptionChangeIntent.transaction do
-        intent = SubscriptionChangeIntent.joins(:subscription).where(recording_studio_billing_subscriptions: {
-                                                                       root_recording_id: RecordingStudio.root_recording_or_self(root_recording_input).id
-                                                                     }).lock.find(intent_id)
+        intent = SubscriptionChangeIntent.where(
+          root_recording_id: RecordingStudio.root_recording_or_self(root_recording_input).id
+        ).lock.find(intent_id)
         return intent if intent.state == "applied"
 
         record_provider_outcome!(intent)
@@ -39,7 +39,7 @@ module RecordingStudioBilling
         when "resumption"
           resume!(intent)
         else
-          append_frozen_version!(intent)
+          apply_frozen_terms!(intent)
         end
         intent
       end
@@ -68,70 +68,88 @@ module RecordingStudioBilling
     end
 
     def cancel!(intent)
-      subscription = intent.subscription
-      SubscriptionLifecycle.cancel(subscription:, root_recording: subscription.root_recording)
-      subscription.items.where(state: "active").find_each do |item|
-        effective_at = intent.effective_at || Time.current
-        item.versions.where(effective_ends_at: nil).find_each do |version|
-          version.update!(effective_ends_at: effective_at, superseded_at: effective_at)
-        end
-        item.update!(state: "cancelled")
+      subscription_recording = intent.subscription_recording
+      SubscriptionLifecycle.cancel(subscription: subscription_recording, root_recording: intent.root_recording)
+      subscription_recording.reload.recordable.active_lines.to_a.each do |line|
+        intent.root_recording.revise(line.recording) { |revision| revision.state = "cancelled" }
       end
+      subscription_recording.reload.log_event!(action: "subscription_lines_cancelled",
+                                               metadata: { "subscription_change_intent_id" => intent.id })
     end
 
     def resume!(intent)
-      return if intent.subscription.state == "active"
+      subscription_recording = intent.subscription_recording
+      return if subscription_recording.reload.recordable.state == "active"
 
-      SubscriptionLifecycle.resume_from_change(subscription: intent.subscription,
-                                               root_recording: intent.subscription.root_recording)
+      SubscriptionLifecycle.resume_from_change(subscription: subscription_recording,
+                                               root_recording: intent.root_recording)
       snapshots = intent.frozen_terms.fetch("current_items", {})
-      intent.subscription.items.where(state: "cancelled").lock.find_each do |item|
-        snapshot = snapshots.fetch(item.line_key)
-        append_frozen_version!(intent, manifest_digest: snapshot.fetch("manifest_digest"), frozen_key: "current_items",
-                                       frozen_snapshot: snapshot, stable_item: item)
-        item.update!(state: "active")
+      subscription_recording.reload.recordable.cancelled_lines.to_a.each do |line|
+        snapshot = snapshots.fetch(line.line_key)
+        apply_frozen_terms!(intent, manifest_digest: snapshot.fetch("manifest_digest"), frozen_key: "current_items",
+                                    frozen_snapshot: snapshot, existing_line: line)
       end
     end
 
-    def append_frozen_version!(intent, manifest_digest: intent.proposed_manifest_digest, frozen_key: "proposed",
-                               frozen_snapshot: nil, stable_item: nil)
+    def apply_frozen_terms!(intent, manifest_digest: intent.proposed_manifest_digest, frozen_key: "proposed",
+                            frozen_snapshot: nil, existing_line: nil)
       frozen_snapshot ||= intent.frozen_terms.fetch(frozen_key)
       manifest = authoritative_manifest!(intent, manifest_digest:, frozen_snapshot:)
       terms = manifest.canonical_data
-      option = terms.fetch("billing_option")
-      terms.fetch("product")
       mode = mode_for_terms(terms)
-      raise ArgumentError, "subscription change requires a recurring commercial item" unless SubscriptionItemVersion::MODES.include?(mode)
+      raise ArgumentError, "subscription change requires a recurring commercial item" unless SubscriptionLine::MODES.include?(mode)
 
+      attributes = changed_line_attributes(intent, manifest, mode, frozen_snapshot)
+      subscription_recording = intent.subscription_recording
+      existing_line ||= SubscriptionLine.with_current_recording.find_by(
+        subscription_recording_id: subscription_recording.id, line_key: attributes.fetch(:line_key)
+      )
+      attributes[:provider_adapter_key] = provider_adapter_key!(subscription_recording, existing_line)
+
+      line_recording = if existing_line
+                         intent.root_recording.revise(existing_line.recording) do |line|
+                           line.assign_attributes(attributes)
+                         end
+                       else
+                         intent.root_recording.record(SubscriptionLine, parent_recording: subscription_recording) do |line|
+                           line.assign_attributes(attributes)
+                         end
+                       end
+      line = line_recording.reload.recordable
+      subscription_recording.reload.log_event!(action: "subscription_line_changed",
+                                               metadata: { "line_key" => line.line_key,
+                                                           "subscription_change_intent_id" => intent.id })
+      ProjectEntitlements.call(root_recording: intent.root_recording, source: line)
+      line
+    end
+
+    def changed_line_attributes(intent, manifest, mode, frozen_snapshot)
+      terms = manifest.canonical_data
+      option = terms.fetch("billing_option")
       product_id = manifest_recording_id(manifest, "RecordingStudioBilling::Product")
       option_id = manifest_recording_id(manifest, "RecordingStudioBilling::BillingOption")
       price_id = manifest_recording_id(manifest, "RecordingStudioBilling::Price")
       provider_id = manifest_recording_id(manifest, "RecordingStudioBilling::ProviderAccount")
-      line_key = mode == "recurring_addon" ? "#{product_id}:#{option_id}" : product_id.to_s
-      stable_item ||= intent.subscription.items.lock.find_or_create_by!(line_key:) do |record|
-        record.root_recording = intent.root_recording
-        record.account_recording = intent.account_recording
-        record.state = "active"
-      end
-      provider_adapter_key = stable_item.versions.where(effective_ends_at: nil).order(version_number: :desc).pick(:provider_adapter_key)
-      provider_adapter_key ||= intent.subscription.item_versions.order(version_number: :desc).pick(:provider_adapter_key)
-      raise ArgumentError, "subscription change has no provider adapter authority" if provider_adapter_key.blank?
+      {
+        root_recording: intent.root_recording, account_recording: intent.account_recording,
+        subscription_recording: intent.subscription_recording, checkout_intent_id: nil, checkout_intent_item_id: nil,
+        source_type: "subscription_change", source_id: intent.id, source_snapshot: frozen_snapshot,
+        line_key: mode == "recurring_addon" ? "#{product_id}:#{option_id}" : product_id.to_s, state: "active",
+        product_recording_id: product_id, billing_option_recording_id: option_id, price_recording_id: price_id,
+        provider_account_recording_id: provider_id, mode: mode, currency_code: terms.dig("price", "currency_code"),
+        amount_minor: terms.dig("price", "amount_minor"), quantity: terms.dig("price", "quantity"),
+        interval: option["interval"], interval_count: option["interval_count"],
+        manifest_digest: manifest.manifest_digest, commercial_snapshot: frozen_snapshot
+      }
+    end
 
-      now = Time.current
-      stable_item.versions.where(effective_ends_at: nil).find_each do |version|
-        version.update!(effective_ends_at: now, superseded_at: now)
-      end
-      version = stable_item.versions.create!(subscription: intent.subscription, root_recording: intent.root_recording,
-                                             account_recording: intent.account_recording, source_type: "subscription_change", source_id: intent.id,
-                                             source_snapshot: frozen_snapshot, line_key:, version_number: stable_item.versions.maximum(:version_number).to_i + 1,
-                                             product_recording_id: product_id, billing_option_recording_id: option_id,
-                                             price_recording_id: price_id, provider_account_recording_id: provider_id,
-                                             provider_adapter_key:, mode:, currency_code: terms.dig("price", "currency_code"),
-                                             amount_minor: terms.dig("price", "amount_minor"), quantity: terms.dig("price", "quantity"), interval: option["interval"],
-                                             interval_count: option["interval_count"], manifest_digest: manifest.manifest_digest,
-                                             commercial_snapshot: frozen_snapshot, effective_starts_at: now)
-      ProjectEntitlements.call(root_recording: intent.root_recording, source: version)
-      version
+    def provider_adapter_key!(subscription_recording, existing_line)
+      adapter_key = existing_line&.provider_adapter_key
+      adapter_key ||= SubscriptionLine.where(subscription_recording_id: subscription_recording.id)
+                                      .order(created_at: :desc).pick(:provider_adapter_key)
+      raise ArgumentError, "subscription change has no provider adapter authority" if adapter_key.blank?
+
+      adapter_key
     end
 
     def manifest_recording_id(manifest, recordable_type)

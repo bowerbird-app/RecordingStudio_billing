@@ -116,16 +116,23 @@ module RecordingStudioBilling
       subscription_ids = active_subscription_source_ids
       purchase_effect_ids = PurchaseEffect.where(root_recording:,
                                                  account_recording:).where(effective_at: ..at).select(:id)
-      grants.where(source_type: "RecordingStudioBilling::SubscriptionItemVersion", source_id: subscription_ids)
+      grants.where(source_type: "RecordingStudioBilling::SubscriptionLine", source_id: subscription_ids)
             .or(grants.where(source_type: "RecordingStudioBilling::PurchaseEffect", source_id: purchase_effect_ids))
     end
 
+    # Only the current line snapshot under a live subscription grants anything;
+    # superseded and cancelled snapshots keep their grants for the record only.
     def active_subscription_source_ids
-      SubscriptionItemVersion.joins(:subscription)
-                             .where(root_recording:, account_recording:, effective_starts_at: ..at)
-                             .where("recording_studio_billing_subscription_item_versions.effective_ends_at IS NULL OR recording_studio_billing_subscription_item_versions.effective_ends_at > ?", at)
-                             .where(recording_studio_billing_subscriptions: { state: %w[trialing active] })
-                             .select(:id)
+      SubscriptionLine.with_current_recording
+                      .where(root_recording:, account_recording:, state: "active",
+                             subscription_recording_id: live_subscription_recording_ids)
+                      .select("recording_studio_billing_subscription_lines.id")
+    end
+
+    def live_subscription_recording_ids
+      Subscription.for_root(root_recording)
+                  .where(account_recording:, state: Subscription::LIVE_STATES)
+                  .select("recording_studio_recordings.id")
     end
   end
 end

@@ -123,13 +123,13 @@ module RecordingStudioBilling
        display_amount(invoice.total_minor, invoice.currency_code)].compact.join(" · ")
     end
 
-    def current_item_versions(subscription)
-      versions = subscription.item_versions.where(effective_ends_at: nil).order(:line_key).to_a
-      versions.sort_by { |version| plan_item_version?(version) ? 0 : 1 }
+    def current_subscription_lines(subscription)
+      lines = subscription.active_lines.order(:line_key).to_a
+      lines.sort_by { |line| plan_line?(line) ? 0 : 1 }
     end
 
-    def plan_item_version?(version)
-      snapshot_value(canonical_terms(version.commercial_snapshot), "product", "kind").to_s == "plan"
+    def plan_line?(line)
+      snapshot_value(canonical_terms(line.commercial_snapshot), "product", "kind").to_s == "plan"
     end
 
     def money_state(value)

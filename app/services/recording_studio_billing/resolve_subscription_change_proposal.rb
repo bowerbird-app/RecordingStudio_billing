@@ -30,7 +30,7 @@ module RecordingStudioBilling
     end
 
     def call
-      subscription = Subscription.for_root(root_recording).find(subscription.id)
+      subscription = Subscription.recording_for(subscription, root_recording:).reload.recordable
       raise ArgumentError, "unsupported subscription change" unless KINDS.include?(change_kind)
 
       option = eligible_options(subscription).find do |candidate|
@@ -67,9 +67,9 @@ module RecordingStudioBilling
     end
 
     def validate_change_semantics!(subscription, option, product)
-      current_versions = subscription.item_versions.where(effective_ends_at: nil)
-      current_plan = current_versions.find { |version| version.product_recording.recordable.kind == "plan" }
-      provider_ids = current_versions.pluck(:provider_account_recording_id).uniq
+      current_lines = subscription.active_lines.to_a
+      current_plan = current_lines.find { |line| line.product_recording.recordable.kind == "plan" }
+      provider_ids = current_lines.map(&:provider_account_recording_id).uniq
       unless provider_ids.include?(product.provider_account_recording_id)
         raise ArgumentError,
               "subscription provider is incompatible"
@@ -84,7 +84,7 @@ module RecordingStudioBilling
       when "addon"
         raise ArgumentError, "addon change requires an addon" unless product.kind == "addon"
       when "quantity"
-        existing = current_versions.find { |version| version.billing_option_recording_id == option.recording.id }
+        existing = current_lines.find { |line| line.billing_option_recording_id == option.recording.id }
         raise ArgumentError, "quantity change requires an existing subscription item" unless existing
         raise ArgumentError, "quantity is fixed for this subscription item" unless option.quantity_mode == "adjustable"
       end
@@ -104,8 +104,8 @@ module RecordingStudioBilling
     end
 
     def validate_product_rules!(subscription, proposed_product)
-      current_products = subscription.item_versions.where(effective_ends_at: nil).filter_map do |version|
-        version.product_recording.recordable
+      current_products = subscription.active_lines.filter_map do |line|
+        line.product_recording.recordable
       end
       selected_products = case change_kind
                           when "plan", "interval"

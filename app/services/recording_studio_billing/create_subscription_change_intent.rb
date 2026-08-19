@@ -32,9 +32,11 @@ module RecordingStudioBilling
 
     def call
       SubscriptionChangeIntent.transaction do
-        subscription = Subscription.for_root(root_recording_input).lock.find(subscription_id)
+        subscription_recording = Subscription.recording_for(subscription_input, root_recording: root_recording_input)
+        RecordingStudio::Recording.lock_ids!([subscription_recording.id]).load
+        subscription = subscription_recording.reload.recordable
         validate_request!(subscription)
-        current = current_item_versions(subscription).first
+        current = current_lines(subscription).first
         proposed = authoritative_manifest(proposed_manifest)
         validate_proposed_manifest!(proposed)
         validate_proposed_execution_compatibility!(subscription, proposed)
@@ -51,7 +53,7 @@ module RecordingStudioBilling
         end
 
         provider_decision = provider_decision(subscription)
-        intent = SubscriptionChangeIntent.create!(subscription:, root_recording: subscription.root_recording,
+        intent = SubscriptionChangeIntent.create!(subscription_recording:, root_recording: subscription.root_recording,
                                                   account_recording: subscription.account_recording,
                                                   local_idempotency_key:, request_fingerprint: fingerprint,
                                                   change_kind:, change_set:, effective_at:, current_manifest_digest: current&.manifest_digest,
@@ -74,11 +76,9 @@ module RecordingStudioBilling
     attr_reader :change_kind, :change_set, :effective_at, :local_idempotency_key, :proposed_manifest, :root_recording_input, :source,
                 :subscription_input, :trusted_context
 
-    def subscription_id = subscription_input.respond_to?(:id) ? subscription_input.id : subscription_input
-
     def create_command!(intent, subscription)
-      version = current_item_versions(intent.subscription).first
-      return unless version
+      line = current_lines(intent.subscription).first
+      return unless line
 
       manifest_digests = intent.frozen_terms.fetch("current_items", {}).values.filter_map do |snapshot|
         snapshot["manifest_digest"]
@@ -89,7 +89,7 @@ module RecordingStudioBilling
       CreateFinancialCommand.call(
         root_recording: intent.root_recording, account_recording: intent.account_recording,
         command_type: "subscription_change", local_idempotency_key: "subscription-change:#{intent.id}",
-        provider_account_recording: version.provider_account_recording_id, provider_adapter_key: version.provider_adapter_key,
+        provider_account_recording: line.provider_account_recording_id, provider_adapter_key: line.provider_adapter_key,
         commercial_manifest_digests: manifest_digests,
         request: { subscription_change_intent_id: intent.id, change_kind:, change_set: change_set.merge(
           "provider_subscription_reference" => subscription.provider_reference
@@ -128,7 +128,7 @@ module RecordingStudioBilling
       raise ArgumentError, "subscription quantity is invalid" unless quantity&.positive?
 
       @change_set["quantity"] = quantity
-      return if subscription.item_versions.where(effective_ends_at: nil).exists?
+      return if subscription.active_lines.exists?
 
       raise ArgumentError,
             "subscription has no active terms"
@@ -142,24 +142,24 @@ module RecordingStudioBilling
       raise ArgumentError, "plan update allowance policy is invalid" unless PlanUpdate::ALLOWANCE_POLICIES.include?(trusted_context["allowance_policy"])
       raise ArgumentError, "plan update identifier is invalid" if trusted_context["plan_update_id"].blank?
 
-      return if subscription.item_versions.where(effective_ends_at: nil).exists?
+      return if subscription.active_lines.exists?
 
       raise ArgumentError,
             "subscription has no active terms"
     end
 
     def provider_decision(subscription)
-      version = current_item_versions(subscription).first
-      raise ArgumentError, "subscription has no provider authority" unless version
+      line = current_lines(subscription).first
+      raise ArgumentError, "subscription has no provider authority" unless line
 
-      adapter = RecordingStudioBilling.configuration.provider_registry.fetch(version.provider_adapter_key)
+      adapter = RecordingStudioBilling.configuration.provider_registry.fetch(line.provider_adapter_key)
       capability = adapter.capabilities.evaluate(operations: "subscription_change",
                                                  subscription_change_kinds: change_kind)
       raise ArgumentError, capability.reason unless capability.supported?
 
       {
-        "adapter_key" => version.provider_adapter_key,
-        "provider_account_recording_id" => version.provider_account_recording_id,
+        "adapter_key" => line.provider_adapter_key,
+        "provider_account_recording_id" => line.provider_account_recording_id,
         "operation" => "subscription_change",
         "change_kind" => change_kind,
         "supported" => true
@@ -191,10 +191,10 @@ module RecordingStudioBilling
     def validate_proposed_execution_compatibility!(subscription, proposed)
       return unless proposed
 
-      versions = current_item_versions(subscription)
-      raise ArgumentError, "subscription has no active execution terms" if versions.empty?
+      lines = current_lines(subscription)
+      raise ArgumentError, "subscription has no active execution terms" if lines.empty?
 
-      baseline = versions.first
+      baseline = lines.first
       provider = RecordingStudio::Recording.unscoped.find_by(id: baseline.provider_account_recording_id)
       raise ArgumentError, "subscription provider authority is invalid" unless provider&.recordable_type == "RecordingStudioBilling::ProviderAccount"
 
@@ -226,17 +226,17 @@ module RecordingStudioBilling
       end
       raise ArgumentError, "subscription proposal is not recurring" unless option.fetch("recurrence") == "recurring"
 
-      validate_recurring_composition!(versions, option)
+      validate_recurring_composition!(lines, option)
       validate_proposed_product_rules!(subscription, proposed)
       validate_proposed_provider_capability!(provider, subscription, price)
     rescue KeyError
       raise ArgumentError, "subscription proposal terms are incomplete"
     end
 
-    def validate_recurring_composition!(versions, option)
+    def validate_recurring_composition!(lines, option)
       return if %w[plan interval].include?(change_kind)
 
-      existing = versions.map { |version| [version.interval, version.interval_count] }.uniq
+      existing = lines.map { |line| [line.interval, line.interval_count] }.uniq
       proposed_interval = [option.fetch("interval"), option.fetch("interval_count")]
       raise ArgumentError, "subscription proposal interval is incompatible" unless existing.include?(proposed_interval)
     end
@@ -245,8 +245,8 @@ module RecordingStudioBilling
       product_id = manifest_recording_id(proposed, "RecordingStudioBilling::Product")
 
       product = Product.with_current_recording.find_by!(recording_studio_recordings: { id: product_id })
-      current_products = current_item_versions(subscription).filter_map do |version|
-        recording = RecordingStudio::Recording.unscoped.find_by(id: version.product_recording_id)
+      current_products = current_lines(subscription).filter_map do |line|
+        recording = RecordingStudio::Recording.unscoped.find_by(id: line.product_recording_id)
         recording&.recordable if recording&.recordable_type == "RecordingStudioBilling::Product"
       end
       selected_products = if %w[plan interval].include?(change_kind)
@@ -264,7 +264,7 @@ module RecordingStudioBilling
 
     def validate_proposed_provider_capability!(provider, subscription, price)
       adapter = RecordingStudioBilling.configuration.provider_registry.fetch(provider.recordable.adapter_key)
-      composition = current_item_versions(subscription).size > 1 ? "mixed" : "single"
+      composition = current_lines(subscription).size > 1 ? "mixed" : "single"
       capability = adapter.capabilities.evaluate(operations: "subscription_change", subscription_change_kinds: change_kind,
                                                  currencies: price.fetch("currency_code"), composition:)
       raise ArgumentError, capability.reason unless capability.supported?
@@ -298,7 +298,7 @@ module RecordingStudioBilling
     end
 
     def freeze_terms(subscription, current, proposed)
-      current_items = subscription_item_snapshots(subscription)
+      current_items = current_line_snapshots(subscription)
       {
         "current" => current && current_items.fetch(current.line_key),
         "current_items" => current_items,
@@ -308,35 +308,35 @@ module RecordingStudioBilling
       }
     end
 
-    def subscription_item_snapshots(subscription)
-      versions = current_item_versions(subscription).sort_by(&:line_key)
-      manifests = CommercialManifest.lock.where(manifest_digest: versions.map(&:manifest_digest)).index_by(&:manifest_digest)
-      versions.each_with_object({}) do |version, snapshots|
-        manifest = manifests[version.manifest_digest]
-        validate_current_manifest!(manifest, version, subscription)
-        snapshots[version.line_key] = manifest_envelope(manifest)
+    def current_line_snapshots(subscription)
+      lines = current_lines(subscription).sort_by(&:line_key)
+      manifests = CommercialManifest.lock.where(manifest_digest: lines.map(&:manifest_digest)).index_by(&:manifest_digest)
+      lines.each_with_object({}) do |line, snapshots|
+        manifest = manifests[line.manifest_digest]
+        validate_current_manifest!(manifest, line, subscription)
+        snapshots[line.line_key] = manifest_envelope(manifest)
       end
     end
 
-    def current_item_versions(subscription)
-      active_versions = subscription.item_versions.where(effective_ends_at: nil).order(:created_at).to_a
-      return active_versions unless active_versions.empty? && change_kind == "resumption"
+    # Resumption is the one change that has to read the cancelled lines, because
+    # by then there is nothing active left to price the request against.
+    def current_lines(subscription)
+      active_lines = subscription.active_lines.order(:created_at).to_a
+      return active_lines unless active_lines.empty? && change_kind == "resumption"
 
-      subscription.items.where(state: "cancelled").includes(:versions).flat_map do |item|
-        item.versions.order(version_number: :desc).first
-      end.compact
+      subscription.cancelled_lines.order(:created_at).to_a
     end
 
-    def validate_current_manifest!(manifest, version, subscription)
+    def validate_current_manifest!(manifest, line, subscription)
       raise ArgumentError, "subscription current manifest is unavailable" unless manifest&.used_at?
 
       canonical_envelope = manifest_envelope(manifest).except("manifest_digest")
       unless CommercialManifestCanonicalizer.digest(canonical_envelope) == manifest.manifest_digest &&
-             manifest.manifest_digest == version.manifest_digest
+             manifest.manifest_digest == line.manifest_digest
         raise ArgumentError, "subscription current manifest is invalid"
       end
 
-      provider_recording = RecordingStudio::Recording.unscoped.find_by(id: version.provider_account_recording_id)
+      provider_recording = RecordingStudio::Recording.unscoped.find_by(id: line.provider_account_recording_id)
       raise ArgumentError, "subscription current provider authority is invalid" unless provider_recording&.recordable_type == "RecordingStudioBilling::ProviderAccount"
 
       provider_root_id = provider_recording.root_recording_id

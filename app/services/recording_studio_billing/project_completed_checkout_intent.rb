@@ -25,7 +25,7 @@ module RecordingStudioBilling
           end
 
           mode = commercial_mode(item)
-          if SubscriptionItemVersion::MODES.include?(mode)
+          if SubscriptionLine::MODES.include?(mode)
             project_subscription!(intent, item,
                                   mode)
           else
@@ -101,21 +101,35 @@ module RecordingStudioBilling
       raise ArgumentError, "unsupported commercial lifecycle mode"
     end
 
+    # Revisions replace the line snapshot, so the oldest snapshot carrying the
+    # checkout item id is the durable proof that the item was already projected.
+    def origin_line(item)
+      SubscriptionLine.where(checkout_intent_item_id: item.id).order(:created_at).first
+    end
+
     def existing_projection(item)
-      SubscriptionItemVersion.find_by(checkout_intent_item_id: item.id) || Purchase.find_by(checkout_intent_item_id: item.id)
+      origin_line(item) || Purchase.find_by(checkout_intent_item_id: item.id)
+    end
+
+    def current_line_for(item)
+      origin = origin_line(item)
+      return unless origin
+
+      SubscriptionLine.with_current_recording.find_by(subscription_recording_id: origin.subscription_recording_id,
+                                                      line_key: origin.line_key)
     end
 
     def existing_result(item)
-      version = SubscriptionItemVersion.find_by(checkout_intent_item_id: item.id)
-      return Result.new(status: :existing, subscription: version.subscription, purchase: nil) if version
+      origin = origin_line(item)
+      return Result.new(status: :existing, subscription: origin.subscription_recording.reload.recordable, purchase: nil) if origin
 
       Result.new(status: :existing, subscription: nil, purchase: Purchase.find_by!(checkout_intent_item_id: item.id))
     end
 
     def ensure_entitlements_for_existing!(item)
-      version = SubscriptionItemVersion.find_by(checkout_intent_item_id: item.id)
-      if version
-        project_entitlements_for!(version)
+      line = current_line_for(item)
+      if line
+        project_entitlements_for!(line)
         return
       end
 
@@ -139,67 +153,85 @@ module RecordingStudioBilling
     end
 
     def project_subscription!(intent, item, mode)
-      identity = subscription_identity(item)
-      subscription = Subscription.lock.find_or_create_by!(root_recording: intent.root_recording, account_recording: intent.account_recording,
-                                                          execution_group_fingerprint: identity.fetch(:execution_group_fingerprint)) do |record|
-        record.identifier = SecureRandom.uuid
-        record.state = mode == "trial_subscription" ? "trialing" : "active"
-        record.provider_account_recording_id = identity.fetch(:provider_account_recording_id)
-        record.currency_code = identity.fetch(:currency_code)
-        record.collection_method = identity.fetch(:collection_method)
-        record.billing_anchor = identity.fetch(:billing_anchor)
-        record.payment_terms_days = identity.fetch(:payment_terms_days)
-        record.market_recording_id = identity.fetch(:market_recording_id)
+      subscription_recording = find_or_record_subscription!(intent, subscription_identity(item), mode)
+      reactivate_cancelled_subscription!(subscription_recording, intent)
+      line = record_line!(intent, item, mode, subscription_recording)
+      project_entitlements_for!(line)
+      Result.new(status: :projected, subscription: subscription_recording.reload.recordable, purchase: nil)
+    end
+
+    # Only one subscription per execution group may be current. The unique index
+    # cannot survive revisions, so serialize on the account Recording instead.
+    def find_or_record_subscription!(intent, identity, mode)
+      account_recording = intent.account_recording
+      RecordingStudio::Recording.lock_ids!([account_recording.id]).load
+      existing = Subscription.for_root(intent.root_recording).find_by(
+        account_recording_id: account_recording.id,
+        execution_group_fingerprint: identity.fetch(:execution_group_fingerprint)
+      )
+      return existing.recording if existing
+
+      intent.root_recording.record(Subscription, parent_recording: account_recording) do |subscription|
+        subscription.root_recording = intent.root_recording
+        subscription.account_recording = account_recording
+        subscription.identifier = SecureRandom.uuid
+        subscription.state = mode == "trial_subscription" ? "trialing" : "active"
+        subscription.provider_account_recording_id = identity.fetch(:provider_account_recording_id)
+        subscription.currency_code = identity.fetch(:currency_code)
+        subscription.collection_method = identity.fetch(:collection_method)
+        subscription.billing_anchor = identity.fetch(:billing_anchor)
+        subscription.payment_terms_days = identity.fetch(:payment_terms_days)
+        subscription.market_recording_id = identity.fetch(:market_recording_id)
       end
-      reactivate_cancelled_subscription!(subscription, intent, mode)
+    end
+
+    def record_line!(intent, item, mode, subscription_recording)
       line_key = subscription_line_key(item, mode)
-      subscription_item = subscription.items.lock.find_or_create_by!(line_key:) do |record|
-        record.root_recording = intent.root_recording
-        record.account_recording = intent.account_recording
-        record.state = "active"
-      end
-      subscription_item.update!(state: "active") unless subscription_item.state == "active"
-      previous = subscription_item.versions.where(effective_ends_at: nil).order(version_number: :desc).first
-      now = Time.current
-      previous&.update!(effective_ends_at: now, superseded_at: now)
+      attributes = line_attributes(intent, item, mode, subscription_recording, line_key)
+      existing = SubscriptionLine.with_current_recording.find_by(
+        subscription_recording_id: subscription_recording.id, line_key: line_key
+      )
+      line_recording = if existing
+                         intent.root_recording.revise(existing.recording) do |line|
+                           line.assign_attributes(attributes)
+                         end
+                       else
+                         intent.root_recording.record(SubscriptionLine, parent_recording: subscription_recording) do |line|
+                           line.assign_attributes(attributes)
+                         end
+                       end
+      subscription_recording.reload.log_event!(
+        action: "subscription_line_purchased",
+        metadata: { "line_key" => line_key, "mode" => mode },
+        idempotency_key: "checkout-item:#{item.id}"
+      )
+      line_recording.reload.recordable
+    end
+
+    def line_attributes(intent, item, mode, subscription_recording, line_key)
       terms = item.commercial_manifest.fetch("canonical_data")
       option = terms.fetch("billing_option")
       price = terms.fetch("price")
-      version = subscription_item.versions.create!(
-        subscription: subscription,
-        root_recording: intent.root_recording,
-        account_recording: intent.account_recording,
-        checkout_intent: intent,
-        checkout_intent_item_id: item.id,
-        source_type: "checkout",
-        source_id: item.id,
-        source_snapshot: item.commercial_manifest,
-        line_key:,
-        version_number: subscription_item.versions.maximum(:version_number).to_i + 1,
-        product_recording_id: item.product_recording_id,
-        billing_option_recording_id: item.billing_option_recording_id,
-        price_recording_id: item.price_recording_id,
+      {
+        root_recording: intent.root_recording, account_recording: intent.account_recording,
+        subscription_recording: subscription_recording, checkout_intent: intent, checkout_intent_item_id: item.id,
+        source_type: "checkout", source_id: item.id, source_snapshot: item.commercial_manifest,
+        line_key: line_key, state: "active", product_recording_id: item.product_recording_id,
+        billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id,
         provider_account_recording_id: item.provider_account_recording_id,
-        provider_adapter_key: item.provider_account_recording.recordable.adapter_key,
-        mode:,
-        currency_code: item.currency_code,
-        amount_minor: price.fetch("amount_minor"),
-        quantity: item.quantity,
-        interval: option["interval"],
-        interval_count: option["interval_count"],
-        manifest_digest: item.manifest_digest,
-        commercial_snapshot: item.commercial_manifest,
-        effective_starts_at: now
-      )
-      project_entitlements_for!(version)
-      Result.new(status: :projected, subscription:, purchase: nil)
+        provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode: mode,
+        currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity,
+        interval: option["interval"], interval_count: option["interval_count"],
+        manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest
+      }
     end
 
-    def reactivate_cancelled_subscription!(subscription, intent, _mode)
-      return unless subscription.state == "cancelled"
+    def reactivate_cancelled_subscription!(subscription_recording, intent)
+      return unless subscription_recording.reload.recordable.state == "cancelled"
 
-      SubscriptionLifecycle.resume_from_change(subscription:, root_recording: intent.root_recording)
-      subscription.reload
+      SubscriptionLifecycle.resume_from_change(subscription: subscription_recording,
+                                               root_recording: intent.root_recording)
+      subscription_recording.reload
     end
 
     def subscription_identity(item)

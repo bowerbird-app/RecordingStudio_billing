@@ -15,6 +15,8 @@ require "recording_studio_billing/engine"
 module RecordingStudioBilling
   RECORDABLE_TYPES = %w[
     RecordingStudioBilling::Account
+    RecordingStudioBilling::Subscription
+    RecordingStudioBilling::SubscriptionLine
     RecordingStudioBilling::BillingAdmin
     RecordingStudioBilling::ProviderAccount
     RecordingStudioBilling::Market

@@ -17,8 +17,8 @@ module RecordingStudioBilling
               else
                 (product_kind == "addon" ? ["addon"] : [])
               end
-      if option.quantity_mode == "adjustable" && subscription.item_versions.where(effective_ends_at: nil)
-                                                             .exists?(billing_option_recording_id: option.recording.id)
+      if option.quantity_mode == "adjustable" &&
+         subscription.active_lines.exists?(billing_option_recording_id: option.recording.id)
         kinds << "quantity"
       end
       kinds
@@ -29,19 +29,19 @@ module RecordingStudioBilling
     end
 
     def current_terms
-      subscription.item_versions.where(effective_ends_at: nil).order(:line_key).map do |version|
-        terms = canonical_terms(version.commercial_snapshot)
+      subscription.active_lines.order(:line_key).map do |line|
+        terms = canonical_terms(line.commercial_snapshot)
         {
           label: offer_label(
             kind: snapshot_value(terms, "product", "kind") || "plan",
-            interval: version.interval,
+            interval: line.interval,
             recurrence: snapshot_value(terms, "billing_option", "recurrence"),
             name: snapshot_value(terms, "product", "name"),
-            amount_minor: version.amount_minor
+            amount_minor: line.amount_minor
           ),
-          quantity: version.quantity,
-          amount: display_amount(version.amount_minor, version.currency_code),
-          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
+          quantity: line.quantity,
+          amount: display_amount(line.amount_minor, line.currency_code),
+          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", line.interval)
         }
       end
     end

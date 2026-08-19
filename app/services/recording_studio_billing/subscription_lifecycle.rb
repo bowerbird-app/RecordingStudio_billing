@@ -20,18 +20,21 @@ module RecordingStudioBilling
 
     def self.transition(subscription:, root_recording:, to:, allow_cancelled: false)
       Subscription.transaction do
-        record = Subscription.lock.find(subscription.respond_to?(:id) ? subscription.id : subscription)
-        root = RecordingStudio.root_recording_or_self(root_recording || record.root_recording)
-        raise ActiveRecord::RecordNotFound, "subscription not found" unless record.root_recording_id == root.id
+        recording = Subscription.recording_for(subscription)
+        RecordingStudio::Recording.lock_ids!([recording.id]).load
+        current = recording.reload.recordable
+        root = RecordingStudio.root_recording_or_self(root_recording || current.root_recording)
+        raise ActiveRecord::RecordNotFound, "subscription not found" unless current.root_recording_id == root.id
 
-        allowed = TRANSITIONS.fetch(record.state).include?(to) || (allow_cancelled && record.state == "cancelled" && to == "active")
+        allowed = TRANSITIONS.fetch(current.state).include?(to) || (allow_cancelled && current.state == "cancelled" && to == "active")
         unless allowed
           raise ArgumentError,
                 "subscription lifecycle transition is invalid"
         end
 
-        record.update!(state: to)
-        record
+        root.revise(recording) { |revision| revision.state = to }
+        recording.reload.log_event!(action: "subscription_#{to}", metadata: { "previous_state" => current.state })
+        recording.reload.recordable
       end
     end
   end

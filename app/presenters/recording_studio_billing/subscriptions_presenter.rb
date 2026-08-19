@@ -21,25 +21,25 @@ module RecordingStudioBilling
     def current_subscription_rows(subscription)
       return [] unless subscription
 
-      current_item_versions(subscription).map do |version|
-        terms = canonical_terms(version.commercial_snapshot)
+      current_subscription_lines(subscription).map do |line|
+        terms = canonical_terms(line.commercial_snapshot)
         {
           label: offer_label(
             kind: snapshot_value(terms, "product", "kind") || "plan",
-            interval: version.interval,
+            interval: line.interval,
             recurrence: snapshot_value(terms, "billing_option", "recurrence"),
             name: snapshot_value(terms, "product", "name"),
-            amount_minor: version.amount_minor
+            amount_minor: line.amount_minor
           ),
-          quantity: version.quantity,
-          amount: display_amount(version.amount_minor, version.currency_code),
-          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
+          quantity: line.quantity,
+          amount: display_amount(line.amount_minor, line.currency_code),
+          cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", line.interval)
         }
       end
     end
 
     def change_rows(subscription)
-      Array(change_intents).select { |intent| intent.subscription_id == subscription.id }.map do |intent|
+      Array(change_intents).select { |intent| intent.subscription_recording_id == subscription.recording&.id }.map do |intent|
         {
           label: change_kind_label(intent.change_kind),
           state: money_state(intent.state),
@@ -118,15 +118,15 @@ module RecordingStudioBilling
     def current_plan_option?(option)
       option_id = option.try(:recording).try(:id)
       product_id = option.try(:product_recording).try(:id) || option.try(:product_recording_id)
-      current_plan_versions.any? do |version|
-        (option_id.present? && version.try(:billing_option_recording_id) == option_id) ||
-          (product_id.present? && version.try(:product_recording_id) == product_id)
+      current_plan_lines.any? do |line|
+        (option_id.present? && line.try(:billing_option_recording_id) == option_id) ||
+          (product_id.present? && line.try(:product_recording_id) == product_id)
       end
     end
 
-    def current_plan_versions
-      Array(subscriptions).flat_map { |subscription| current_item_versions(subscription) }.select do |version|
-        plan_item_version?(version)
+    def current_plan_lines
+      Array(subscriptions).flat_map { |subscription| current_subscription_lines(subscription) }.select do |line|
+        plan_line?(line)
       end
     end
 

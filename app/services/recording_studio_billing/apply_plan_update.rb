@@ -53,13 +53,14 @@ module RecordingStudioBilling
     attr_reader :confirmation, :idempotency_key, :plan_update_input, :root_recording_input, :run_input
 
     def build_applications!(run, update, manifest)
-      subscriptions_for(update).find_each do |subscription|
-        application = run.applications.find_or_initialize_by(plan_update: update, subscription:)
+      subscriptions_for(update).each do |subscription_recording|
+        subscription = subscription_recording.recordable
+        application = run.applications.find_or_initialize_by(plan_update: update, subscription_recording:)
         next if application.persisted? && application.state == "applied"
 
         intent = application.subscription_change_intent || CreateSubscriptionChangeIntent.for_plan_update(
-          subscription:, root_recording: subscription.root_recording,
-          local_idempotency_key: "plan-update:#{run.id}:#{subscription.id}", plan_update: update,
+          subscription: subscription_recording, root_recording: subscription.root_recording,
+          local_idempotency_key: "plan-update:#{run.id}:#{subscription_recording.id}", plan_update: update,
           effective_at: run.scheduled_at, proposed_manifest: manifest
         ).intent
         application.assign_attributes(subscription_change_intent: intent, state: "pending")
@@ -87,9 +88,11 @@ module RecordingStudioBilling
       root_ids = Array(audience["root_recording_ids"])
       raise ArgumentError, "plan update audience must name customer roots" if root_ids.empty?
 
-      scope = Subscription.where(root_recording_id: root_ids, state: %w[trialing active past_due paused])
+      scope = Subscription.with_current_recording
+                          .where(root_recording_id: root_ids, state: %w[trialing active past_due paused])
       account_ids = Array(audience["account_recording_ids"])
-      account_ids.any? ? scope.where(account_recording_id: account_ids) : scope
+      scope = scope.where(account_recording_id: account_ids) if account_ids.any?
+      scope.map(&:recording)
     end
 
     def replacement_manifest!(update)
@@ -144,7 +147,7 @@ module RecordingStudioBilling
         applications.each do |application|
           intent = application.subscription_change_intent
           ApplySubscriptionChangeIntent.call(subscription_change_intent: intent,
-                                             root_recording: application.subscription.root_recording)
+                                             root_recording: intent.root_recording)
           application.update!(state: "applied")
         rescue ArgumentError
           raise ApplicationFailure.new(application, "requires_review")

@@ -259,8 +259,8 @@ module RecordingStudioBilling
 
     def active_subscription_products(account)
       Subscription.for_root(canonical_root).where(account_recording: account.recording, state: %w[trialing active]).flat_map do |subscription|
-        subscription.item_versions.where(effective_ends_at: nil).filter_map do |version|
-          RecordingStudio::Recording.unscoped.find_by(id: version.product_recording_id)&.recordable
+        subscription.active_lines.filter_map do |line|
+          RecordingStudio::Recording.unscoped.find_by(id: line.product_recording_id)&.recordable
         end
       end
     end

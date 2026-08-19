@@ -8,8 +8,8 @@ module RecordingStudioBilling
 
     def subscription_rows
       ordered_subscriptions.map do |subscription|
-        versions = current_item_versions(subscription)
-        primary = versions.first
+        lines = current_subscription_lines(subscription)
+        primary = lines.first
         terms = canonical_terms(primary&.commercial_snapshot)
         {
           subscription:,
@@ -21,7 +21,7 @@ module RecordingStudioBilling
           price_suffix: price_interval_suffix(primary&.interval),
           cadence: primary && cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring",
                                             primary.interval),
-          summary: versions.map { |version| version_summary(version) }.join("; ")
+          summary: lines.map { |line| line_summary(line) }.join("; ")
         }
       end
     end
@@ -36,29 +36,29 @@ module RecordingStudioBilling
       subscription.state.to_s.in?(%w[trialing active past_due paused])
     end
 
-    def subscription_label(version, terms)
-      return copy("plan_title", "Plan") unless version
+    def subscription_label(line, terms)
+      return copy("plan_title", "Plan") unless line
 
       offer_label(
         kind: snapshot_value(terms, "product", "kind") || "plan",
-        interval: version.interval,
+        interval: line.interval,
         recurrence: snapshot_value(terms, "billing_option", "recurrence"),
         name: snapshot_value(terms, "product", "name"),
-        amount_minor: version.amount_minor
+        amount_minor: line.amount_minor
       )
     end
 
-    def version_summary(version)
-      terms = canonical_terms(version.commercial_snapshot)
+    def line_summary(line)
+      terms = canonical_terms(line.commercial_snapshot)
       label = offer_label(
         kind: snapshot_value(terms, "product", "kind") || "plan",
-        interval: version.interval,
+        interval: line.interval,
         recurrence: snapshot_value(terms, "billing_option", "recurrence"),
         name: snapshot_value(terms, "product", "name"),
-        amount_minor: version.amount_minor
+        amount_minor: line.amount_minor
       )
-      cadence = cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", version.interval)
-      "#{label}: #{version.quantity} x #{display_amount(version.amount_minor, version.currency_code)} #{cadence}"
+      cadence = cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", line.interval)
+      "#{label}: #{line.quantity} x #{display_amount(line.amount_minor, line.currency_code)} #{cadence}"
     end
   end
 end

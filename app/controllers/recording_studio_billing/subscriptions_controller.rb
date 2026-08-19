@@ -34,7 +34,7 @@ module RecordingStudioBilling
       proposal_key = SecureRandom.hex(16)
       comparison_proposals[proposal_key] = request.merge(
         "root_recording_id" => root_recording.id, "account_recording_id" => account_recording.id,
-        "subscription_id" => @subscription.id, "manifest_digest" => proposal.manifest_digest,
+        "subscription_recording_id" => @subscription_recording.id, "manifest_digest" => proposal.manifest_digest,
         "provider_root_recording_id" => proposal.root_recording_id, "current_manifest_digests" => current_manifest_digests,
         "expires_at" => 15.minutes.from_now.to_i
       )
@@ -50,7 +50,7 @@ module RecordingStudioBilling
       stored = comparison_proposal!
       if stored["intent_id"].present?
         intent = SubscriptionChangeIntent.where(root_recording:, account_recording:,
-                                                subscription: @subscription).find(stored.fetch("intent_id"))
+                                                subscription_recording: @subscription_recording).find(stored.fetch("intent_id"))
         return redirect_to subscription_change_path(intent, root_recording_id: root_recording.id)
       end
 
@@ -87,13 +87,14 @@ module RecordingStudioBilling
 
     def load_subscription
       @subscription = Subscription.for_root(root_recording).find(params[:id])
+      @subscription_recording = @subscription.recording
     end
 
     def create_change!(kind)
       result = RecordingStudioBilling.create_subscription_change_intent(
         subscription: @subscription,
         root_recording: root_recording,
-        local_idempotency_key: "customer-#{kind}:#{@subscription.id}:#{@subscription.updated_at.to_i}",
+        local_idempotency_key: "customer-#{kind}:#{@subscription_recording.id}:#{@subscription.updated_at.to_i}",
         change_kind: kind
       )
       redirect_to subscription_change_path(result.intent, root_recording_id: root_recording.id),
@@ -157,7 +158,7 @@ module RecordingStudioBilling
       end
 
       expected = { "root_recording_id" => root_recording.id, "account_recording_id" => account_recording.id,
-                   "subscription_id" => @subscription.id }
+                   "subscription_recording_id" => @subscription_recording.id }
       unless expected.all? do |attribute, value|
         proposal[attribute] == value
       end
@@ -169,7 +170,7 @@ module RecordingStudioBilling
     end
 
     def current_manifest_digests
-      @subscription.item_versions.where(effective_ends_at: nil).pluck(:manifest_digest).sort
+      @subscription.active_lines.pluck(:manifest_digest).sort
     end
   end
 end
