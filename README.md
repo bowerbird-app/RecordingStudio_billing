@@ -7,6 +7,11 @@ calculations, and a mounted customer billing surface. Stripe is the built-in
 provider key; hosts keep provider credentials in their own credentials or secret
 manager.
 
+Checkout completion and applied subscription changes project entitlement grants
+automatically. Hosts gate paid features with `entitled?` / `feature_value` on
+the workspace root (see [docs/billing.md](docs/billing.md)). People access is
+still RecordingStudio Accessible on that root.
+
 User-facing screens should say **products and pricing**, not developer catalogue
 terms. Canonical V1 values are price scope `market`, checkout presentations
 `embedded` / `redirect` / `payment_link` / `invoice` / `no_charge`, collection

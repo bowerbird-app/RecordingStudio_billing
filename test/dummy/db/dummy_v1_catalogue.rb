@@ -435,8 +435,8 @@ class DummyV1Catalogue
                                          { billing_option_recording_id: @usage_option.recording.id, quantity: 1 }
                                        ])
     usage_subscription = project_checkout!(usage_checkout).subscription
-    usage_version = usage_subscription.item_versions.find_by!(checkout_intent_item_id: usage_checkout.items.first.id)
-    RecordingStudioBilling.project_entitlements(root_recording: @root_recording, source: usage_version)
+    raise "dummy usage subscription missing" unless usage_subscription
+
     ensure_usage_credit_grant!(
       source_key: "seed:usage-allowance", grant_kind: "allowance", quantity: 5,
       effective_at: 1.hour.ago
@@ -497,7 +497,8 @@ class DummyV1Catalogue
                                           { billing_option_recording_id: @catalogue.fetch("demo_credit_pack").fetch(:option).recording.id, quantity: 1 }
                                         ])
     credit_purchase = project_checkout!(credit_checkout).purchase
-    RecordingStudioBilling.project_entitlements(root_recording: @root_recording, source: credit_purchase.effects.first)
+    raise "dummy credit purchase missing" unless credit_purchase
+
     ensure_usage_credit_grant!(
       source_key: "seed:credit-pack-grant", grant_kind: "credit", quantity: 1_000,
       effective_at: Time.current

@@ -19,7 +19,10 @@ module RecordingStudioBilling
         intent = resolve_intent.lock!
         verify_eligibility!(intent)
         results = intent.items.lock.order(:created_at, :id).map do |item|
-          next existing_result(item) if existing_projection(item)
+          if existing_projection(item)
+            ensure_entitlements_for_existing!(item)
+            next existing_result(item)
+          end
 
           mode = commercial_mode(item)
           if SubscriptionItemVersion::MODES.include?(mode)
@@ -109,6 +112,21 @@ module RecordingStudioBilling
       Result.new(status: :existing, subscription: nil, purchase: Purchase.find_by!(checkout_intent_item_id: item.id))
     end
 
+    def ensure_entitlements_for_existing!(item)
+      version = SubscriptionItemVersion.find_by(checkout_intent_item_id: item.id)
+      if version
+        project_entitlements_for!(version)
+        return
+      end
+
+      purchase = Purchase.find_by!(checkout_intent_item_id: item.id)
+      purchase.effects.order(:id).each { |effect| project_entitlements_for!(effect) }
+    end
+
+    def project_entitlements_for!(source)
+      ProjectEntitlements.call(root_recording: source.root_recording, source:)
+    end
+
     def combine_results(results)
       return results.first if results.one?
 
@@ -147,8 +165,9 @@ module RecordingStudioBilling
       terms = item.commercial_manifest.fetch("canonical_data")
       option = terms.fetch("billing_option")
       price = terms.fetch("price")
-      subscription_item.versions.create!(subscription: subscription, root_recording: intent.root_recording,
-                                         account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, source_type: "checkout", source_id: item.id, source_snapshot: item.commercial_manifest, line_key:, version_number: subscription_item.versions.maximum(:version_number).to_i + 1, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity, interval: option["interval"], interval_count: option["interval_count"], manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, effective_starts_at: now)
+      version = subscription_item.versions.create!(subscription: subscription, root_recording: intent.root_recording,
+                                                   account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, source_type: "checkout", source_id: item.id, source_snapshot: item.commercial_manifest, line_key:, version_number: subscription_item.versions.maximum(:version_number).to_i + 1, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity, interval: option["interval"], interval_count: option["interval_count"], manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, effective_starts_at: now)
+      project_entitlements_for!(version)
       Result.new(status: :projected, subscription:, purchase: nil)
     end
 
@@ -183,8 +202,9 @@ module RecordingStudioBilling
       purchase = Purchase.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
                                   checkout_intent: intent, checkout_intent_item_id: item.id, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: terms.dig("price", "amount_minor"), quantity: item.quantity, manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, completed_at: Time.current)
       effect_kind = mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon"
-      purchase.effects.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
-                               effect_kind:, idempotency_key: "checkout-item:#{item.id}:#{effect_kind}", manifest_digest: item.manifest_digest, safe_metadata: { "product_recording_id" => item.product_recording_id, "quantity" => item.quantity }, effective_at: purchase.completed_at)
+      effect = purchase.effects.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
+                                        effect_kind:, idempotency_key: "checkout-item:#{item.id}:#{effect_kind}", manifest_digest: item.manifest_digest, safe_metadata: { "product_recording_id" => item.product_recording_id, "quantity" => item.quantity }, effective_at: purchase.completed_at)
+      project_entitlements_for!(effect)
       Result.new(status: :projected, subscription: nil, purchase:)
     end
   end
