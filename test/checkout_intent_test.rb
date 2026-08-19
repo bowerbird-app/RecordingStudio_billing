@@ -922,6 +922,41 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_match(/replace values conflict/, error.message)
   end
 
+  test "one-off purchases record under the account, stay immutable, and replay without duplicating" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)
+    intent = create_intent(graph, country: "IT", key: "purchase-recordable").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    first = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                     root_recording: graph[:customer_root])
+    repeated = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                        root_recording: graph[:customer_root])
+    purchase = first.purchase
+    recording = purchase.recording
+
+    assert first.projected?
+    assert repeated.existing?
+    assert_equal purchase.id, repeated.purchase.id
+    assert_equal 1, RecordingStudioBilling::Purchase.for_root(graph[:customer_root]).count
+    assert_equal graph[:account_recording].id, recording.parent_recording_id
+    assert_equal recording.id, purchase.to_param
+    assert_equal recording, RecordingStudioBilling::Purchase.recording_for(purchase.id)
+    assert_equal purchase.id, purchase.current.id
+    assert_predicate recording.events.where(action: "created"), :one?
+    assert_predicate graph[:account_recording].events.where(action: "purchase_completed"), :one?
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Purchase.where(id: purchase.id).update_all(quantity: 99)
+    end
+
+    grant = RecordingStudioBilling::EntitlementGrant.find_by!(source_id: purchase.id)
+    entry = RecordingStudioBilling::CreditLedgerEntry.sole
+
+    assert_equal "RecordingStudioBilling::Purchase", grant.source_type
+    assert_equal purchase.id, entry.purchase_id
+    assert_equal purchase.completed_at, entry.effective_at
+  end
+
   test "credit-pack projection is idempotent and the ledger rejects forged facts" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "credit_pack", recurrence: "one_time", interval: nil)

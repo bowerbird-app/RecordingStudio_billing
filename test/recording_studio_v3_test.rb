@@ -113,6 +113,16 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
                  RecordingStudioBilling::EntitlementGrant::SOURCE_TYPES
   end
 
+  test "purchases cannot be recorded straight onto a workspace root" do
+    root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
+
+    error = assert_raises(RecordingStudio::InvalidParent) do
+      record_child(RecordingStudioBilling::Purchase.new, root_recording)
+    end
+
+    assert_equal "RecordingStudioBilling::Purchase cannot be recorded under Workspace", error.message
+  end
+
   test "workspace gets one root-owned billing account" do
     root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
     account = RecordingStudioBilling.ensure_account(root_recording: root_recording, name: unique_name("Account"))
