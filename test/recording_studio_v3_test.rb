@@ -123,6 +123,76 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_equal "RecordingStudioBilling::Purchase cannot be recorded under Workspace", error.message
   end
 
+  test "purchases cannot be recorded under a subscription" do
+    customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
+    account = RecordingStudioBilling.ensure_account(root_recording: customer_root, name: unique_name("Account"))
+    catalogue_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: unique_name("Administration")))
+    billing_admin = RecordingStudioBilling.ensure_billing_admin(root_recording: catalogue_root,
+                                                                key: unique_key("billing"))
+    provider = record_child(
+      RecordingStudioBilling::ProviderAccount.new(
+        billing_admin_recording: billing_admin.recording,
+        key: unique_key("provider"),
+        adapter_key: "fake",
+        name: "Purchase parent provider",
+        environment: "test",
+        configuration: {},
+        capabilities: ["commercial_configuration"],
+        supported_markets: ["US"],
+        supported_currencies: ["USD"]
+      ),
+      catalogue_root,
+      billing_admin.recording
+    )
+    market = record_child(
+      RecordingStudioBilling::Market.new(
+        provider_account_recording: provider,
+        key: unique_key("market"),
+        country_codes: ["US"],
+        country_groups: {},
+        regional_country_codes: [],
+        global_fallback: false,
+        allowed_currency_codes: ["USD"],
+        default_currency_code: "USD",
+        priority: 1,
+        specificity: 1,
+        ppa_policy: "standard",
+        rounding_policy: "half_up",
+        tax_presentation_policy: "exclusive",
+        verification_policy: "none"
+      ),
+      catalogue_root,
+      billing_admin.recording
+    )
+    fingerprint = RecordingStudioBilling::Subscription.execution_group_fingerprint(
+      provider_account_recording_id: provider.id,
+      currency_code: "USD",
+      collection_method: "automatic",
+      market_recording_id: market.id,
+      billing_anchor: "anniversary",
+      payment_terms_days: 0
+    )
+    subscription_recording = customer_root.record(RecordingStudioBilling::Subscription, parent_recording: account.recording) do |subscription|
+      subscription.root_recording = customer_root
+      subscription.account_recording = account.recording
+      subscription.identifier = SecureRandom.uuid
+      subscription.state = "active"
+      subscription.provider_account_recording_id = provider.id
+      subscription.currency_code = "USD"
+      subscription.collection_method = "automatic"
+      subscription.billing_anchor = "anniversary"
+      subscription.payment_terms_days = 0
+      subscription.market_recording_id = market.id
+      subscription.execution_group_fingerprint = fingerprint
+    end
+
+    error = assert_raises(RecordingStudio::InvalidParent) do
+      record_child(RecordingStudioBilling::Purchase.new, customer_root, subscription_recording)
+    end
+
+    assert_match(/Purchase cannot be recorded under/, error.message)
+  end
+
   test "workspace gets one root-owned billing account" do
     root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
     account = RecordingStudioBilling.ensure_account(root_recording: root_recording, name: unique_name("Account"))

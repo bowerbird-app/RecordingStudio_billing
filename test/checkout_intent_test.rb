@@ -955,6 +955,18 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal "RecordingStudioBilling::Purchase", grant.source_type
     assert_equal purchase.id, entry.purchase_id
     assert_equal purchase.completed_at, entry.effective_at
+
+    assert_equal recording, RecordingStudioBilling::Purchase.recording_for(recording)
+    assert_equal recording, RecordingStudioBilling::Purchase.recording_for(purchase)
+    other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other purchase root #{SecureRandom.hex(4)}"))
+    assert_raises(ActiveRecord::RecordNotFound) do
+      RecordingStudioBilling::Purchase.recording_for(purchase, root_recording: other_root)
+    end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Purchase.connection.execute(
+        "DELETE FROM recording_studio_billing_purchases WHERE id = #{RecordingStudioBilling::Purchase.connection.quote(purchase.id)}"
+      )
+    end
   end
 
   test "credit-pack projection is idempotent and the ledger rejects forged facts" do

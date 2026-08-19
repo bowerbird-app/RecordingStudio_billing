@@ -108,11 +108,21 @@ module RecordingStudioBilling
     end
 
     def existing_projection(item)
-      origin_line(item) || existing_purchase(item)
+      origin_line(item) || origin_purchase(item)
+    end
+
+    # Same durability rule as subscription lines: the oldest snapshot for the
+    # checkout item proves the item was already projected, even if its Recording
+    # later stops pointing at that row.
+    def origin_purchase(item)
+      Purchase.where(checkout_intent_item_id: item.id).order(:created_at).first
     end
 
     def existing_purchase(item)
-      Purchase.with_current_recording.find_by(checkout_intent_item_id: item.id)
+      origin = origin_purchase(item)
+      return unless origin
+
+      origin.current || origin
     end
 
     def current_line_for(item)

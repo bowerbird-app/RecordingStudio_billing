@@ -52,9 +52,10 @@ module RecordingStudioBilling
       end
     end
 
-    # Purchases are completed once and never revised, but the checkout item that
-    # caused them stays the durable identity, so follow it forward like the
-    # other recordables rather than trusting `self`.
+    # Purchases are bought once and never revised. The unique index on
+    # checkout_intent_item_id enforces that. `current` still walks through the
+    # Recording join so admin and customer reads stay consistent with
+    # Subscription (only rows the Recording currently points at).
     def current
       self.class.with_current_recording.find_by(root_recording_id:, checkout_intent_item_id:)
     end
@@ -63,7 +64,7 @@ module RecordingStudioBilling
       current&.recording
     end
 
-    # Customer URLs carry the Recording id so they survive any future revision.
+    # Customer URLs carry the Recording id, matching Subscription#to_param.
     def to_param
       recording&.id || current_recording&.id || id
     end

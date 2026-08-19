@@ -92,8 +92,13 @@ purchases.first.completed_at  # when its entitlements and credits took effect
 A purchase is bought once and never revised, so there is no separate effect row
 to chase: `mode` says what was bought, `completed_at` says when it counted, and
 `quantity` multiplies a credit pack's allowance. Entitlement grants and
-credit-ledger entries both point at the purchase id. Invoices point at
-`purchase_recording_id`, the same way they point at `subscription_recording_id`.
+credit-ledger entries both point at the purchase id.
+
+Invoices may store `purchase_recording_id` (and `subscription_recording_id`) as
+stable Recording foreign keys. Checkout invoice projection keys invoices by
+`financial_command` and does not fill those columns today: money rows are
+written before the purchase or subscription recordable exists, and a single
+checkout command can cover more than one commercial item.
 
 ## Plan gates and entitlements
 

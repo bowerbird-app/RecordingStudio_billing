@@ -16,6 +16,8 @@ What changed in the schema:
   credit index is `(purchase_id, credit_key)`.
 - `invoices.purchase_id` is `purchase_recording_id` and references
   `recording_studio_recordings`, parallel to `subscription_recording_id`.
+  Checkout invoice projection does not populate it yet (invoices are keyed by
+  `financial_command` and written before the purchase recordable exists).
 - The entitlement grant source-type check and the credit-ledger and
   entitlement-projection triggers read the purchase row directly.
 

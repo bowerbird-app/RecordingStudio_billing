@@ -20,7 +20,9 @@ One-time purchases are Recording Studio recordables. Clean-install only.
 - `CreditLedgerEntry` credits reference `purchase_id` instead of
   `purchase_effect_id`.
 - `Invoice` references `purchase_recording_id` (the stable Recording id) instead
-  of `purchase_id`, matching `subscription_recording_id`.
+  of `purchase_id`, matching `subscription_recording_id`. Checkout invoice
+  projection still keys invoices by `financial_command` and leaves those
+  columns null when money is projected before the purchase exists.
 
 ### Added
 
