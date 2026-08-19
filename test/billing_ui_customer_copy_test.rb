@@ -10,9 +10,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
   Option = Struct.new(:key, :recurrence, :interval, :lifecycle_policy, :checkout_policy, :quantity_mode,
                       :default_quantity, :minimum_quantity, :maximum_quantity, :recording, :product_recording,
                       keyword_init: true)
-  Version = Struct.new(:line_key, :mode, :quantity, :amount_minor, :currency_code, :interval, :commercial_snapshot,
-                       keyword_init: true)
-  Subscription = Struct.new(:id, :identifier, :state, :currency_code, :item_versions, keyword_init: true)
+  Line = Struct.new(:line_key, :mode, :quantity, :amount_minor, :currency_code, :interval, :commercial_snapshot,
+                    keyword_init: true)
+  Subscription = Struct.new(:id, :identifier, :state, :currency_code, :active_lines, keyword_init: true)
   Period = Struct.new(:usage_key, :starts_at, :ends_at, :state, :usage_allowance_policies, keyword_init: true)
   Policy = Struct.new(:consumed_quantity, :limit_quantity, keyword_init: true)
   Invoice = Struct.new(:id, :total_minor, :currency_code, :state, :issued_at, keyword_init: true)
@@ -163,22 +163,23 @@ class BillingUiCustomerCopyTest < Minitest::Test
   end
 
   def subscription
-    addon = Version.new(
+    addon = Line.new(
       line_key: "addon-1", mode: "recurring_addon", quantity: 2, amount_minor: 1_000,
       currency_code: "USD", interval: "month",
       commercial_snapshot: { "canonical_data" => { "product" => { "kind" => "addon" },
                                                    "billing_option" => { "recurrence" => "recurring" } } }
     )
-    version = Version.new(
+    plan = Line.new(
       line_key: "item-1", mode: "monthly_subscription", quantity: 1, amount_minor: 4_900,
       currency_code: "USD", interval: "month",
       commercial_snapshot: { "canonical_data" => { "product" => { "kind" => "plan" },
                                                    "billing_option" => { "recurrence" => "recurring" } } }
     )
-    versions = [addon, version]
-    versions.define_singleton_method(:where) { |**| versions }
-    versions.define_singleton_method(:order) { |*| versions }
-    Subscription.new(id: "sub-1", identifier: "sub-identifier-secret", state: "active", currency_code: "USD", item_versions: versions)
+    lines = [addon, plan]
+    lines.define_singleton_method(:where) { |**| lines }
+    lines.define_singleton_method(:order) { |*| lines }
+    Subscription.new(id: "sub-1", identifier: "sub-identifier-secret", state: "active", currency_code: "USD",
+                     active_lines: lines)
   end
 
   def offer_option(kind:, interval:, recurrence:, key: "demo_secret_option_key")

@@ -166,16 +166,7 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     root, account = account_authority
     _provider_root, _admin, provider = provider_catalogue_authority
     market = provider_market(provider)
-    subscription = RecordingStudioBilling::Subscription.create!(
-      root_recording: root, account_recording: account.recording, identifier: SecureRandom.uuid,
-      state: "active", provider_reference: "subscription-#{SecureRandom.uuid}",
-      provider_account_recording_id: provider.id, market_recording_id: market.id, currency_code: "USD",
-      collection_method: "automatic", billing_anchor: "checkout", payment_terms_days: 0,
-      execution_group_fingerprint: RecordingStudioBilling::Subscription.execution_group_fingerprint(
-        provider_account_recording_id: provider.id, market_recording_id: market.id, currency_code: "USD",
-        collection_method: "automatic", billing_anchor: "checkout", payment_terms_days: 0
-      )
-    )
+    subscription = subscription_for(root:, account:, provider:, market:).recordable
 
     assert_raises(ArgumentError) do
       RecordingStudioBilling::CreateSubscriptionChangeIntent.call(
@@ -272,19 +263,20 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     review_command.update!(state: "requires_reconciliation")
     review_intent = subscription_change_intent_for(second_subscription, financial_command: review_command)
     RecordingStudioBilling::PlanUpdateApplication.create!(plan_update: update, plan_update_run: run,
-                                                          subscription: first_subscription, subscription_change_intent: ready_intent, state: "pending")
+                                                          subscription_recording: first_subscription, subscription_change_intent: ready_intent, state: "pending")
     RecordingStudioBilling::PlanUpdateApplication.create!(plan_update: update, plan_update_run: run,
-                                                          subscription: second_subscription, subscription_change_intent: review_intent, state: "pending")
+                                                          subscription_recording: second_subscription, subscription_change_intent: review_intent, state: "pending")
 
     RecordingStudioBilling::ApplyPlanUpdate.call(run:, root_recording: provider_root,
                                                  idempotency_key: run.idempotency_key)
 
     assert_equal "requires_review", run.reload.state
     assert_equal "pending_provider", ready_intent.reload.state
-    assert_equal "requires_review", run.applications.find_by(subscription: second_subscription).state
+    assert_equal "requires_review", run.applications.find_by(subscription_recording: second_subscription).state
     assert_equal 0,
-                 RecordingStudioBilling::SubscriptionItemVersion.where(subscription_id: [first_subscription.id,
-                                                                                         second_subscription.id]).count
+                 RecordingStudioBilling::SubscriptionLine.where(
+                   subscription_recording_id: [first_subscription.id, second_subscription.id]
+                 ).count
   end
 
   test "provider references and webhook effects enforce versioned provider identity" do
@@ -424,20 +416,26 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
   end
 
   def subscription_for(root:, account:, provider:, market:)
-    RecordingStudioBilling::Subscription.create!(
+    root.record(RecordingStudioBilling::Subscription, parent_recording: account.recording) do |subscription|
+      subscription.assign_attributes(subscription_attributes(root:, account:, provider:, market:))
+    end
+  end
+
+  def subscription_attributes(root:, account:, provider:, market:)
+    identity = { provider_account_recording_id: provider.id, market_recording_id: market.id, currency_code: "USD",
+                 collection_method: "automatic", billing_anchor: "checkout", payment_terms_days: 0 }
+    identity.merge(
       root_recording: root, account_recording: account.recording, identifier: SecureRandom.uuid, state: "active",
-      provider_reference: "subscription-#{SecureRandom.uuid}", provider_account_recording_id: provider.id, market_recording_id: market.id,
-      currency_code: "USD", collection_method: "automatic", billing_anchor: "checkout", payment_terms_days: 0,
-      execution_group_fingerprint: RecordingStudioBilling::Subscription.execution_group_fingerprint(
-        provider_account_recording_id: provider.id, market_recording_id: market.id, currency_code: "USD", collection_method: "automatic",
-        billing_anchor: "checkout", payment_terms_days: 0
-      )
+      provider_reference: "subscription-#{SecureRandom.uuid}",
+      execution_group_fingerprint: RecordingStudioBilling::Subscription.execution_group_fingerprint(identity)
     )
   end
 
-  def subscription_change_intent_for(subscription, financial_command: nil)
+  def subscription_change_intent_for(subscription_recording, financial_command: nil)
+    subscription = subscription_recording.recordable
     RecordingStudioBilling::SubscriptionChangeIntent.create!(
-      subscription:, root_recording: subscription.root_recording, account_recording: subscription.account_recording,
+      subscription_recording:, root_recording: subscription.root_recording,
+      account_recording: subscription.account_recording,
       financial_command:, local_idempotency_key: SecureRandom.uuid, request_fingerprint: "a" * 64, change_kind: "plan",
       change_set: {}, frozen_terms: {}, timing: "immediate", proration_policy: "none", state: "pending_provider"
     )

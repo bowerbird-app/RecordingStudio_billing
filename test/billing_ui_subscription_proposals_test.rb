@@ -49,18 +49,18 @@ class BillingUiSubscriptionProposalsTest < Minitest::Test
     controller = RecordingStudioBilling::SubscriptionsController.new
     root = Struct.new(:id).new("root")
     account = Struct.new(:id).new("account")
-    subscription = Struct.new(:id).new("subscription")
+    subscription_recording = Struct.new(:id).new("subscription")
     controller.define_singleton_method(:params) { ActionController::Parameters.new(params) }
     controller.define_singleton_method(:root_recording) { root }
     controller.define_singleton_method(:account_recording) { account }
-    controller.instance_variable_set(:@subscription, subscription)
+    controller.instance_variable_set(:@subscription_recording, subscription_recording)
     controller.define_singleton_method(:comparison_proposals) { @comparison_proposals ||= {} }
     controller
   end
 
   def valid_proposal
     {
-      "root_recording_id" => "root", "account_recording_id" => "account", "subscription_id" => "subscription",
+      "root_recording_id" => "root", "account_recording_id" => "account", "subscription_recording_id" => "subscription",
       "expires_at" => 15.minutes.from_now.to_i
     }
   end

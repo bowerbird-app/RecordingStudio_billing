@@ -129,7 +129,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     assert_equal "succeeded", first.command.reload.state
     assert_equal "succeeded", second.command.reload.state
     assert_equal "completed", first.intent.reload.state
-    assert_equal 1, RecordingStudioBilling::SubscriptionItemVersion.where(checkout_intent: first.intent).count
+    assert_equal 1, RecordingStudioBilling::SubscriptionLine.where(checkout_intent: first.intent).count
     assert_equal 4, RecordingStudioBilling::WebhookEffect.count
     assert_equal 2, RecordingStudioBilling::ReconciliationRecord.count
   end
@@ -226,7 +226,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     assert_equal 0, RecordingStudioBilling::TaxCalculation.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Invoice.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Payment.where(financial_command: checkout.command).count
-    assert_equal 0, RecordingStudioBilling::SubscriptionItemVersion.where(checkout_intent: checkout.intent).count
+    assert_equal 0, RecordingStudioBilling::SubscriptionLine.where(checkout_intent: checkout.intent).count
 
     paid = dispatch_webhook(checkout, event_id: "evt_unknown_then_paid", inbound_event: receipt)
 
@@ -253,7 +253,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     assert_equal 0, RecordingStudioBilling::TaxCalculation.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Invoice.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Payment.where(financial_command: checkout.command).count
-    assert_equal 0, RecordingStudioBilling::SubscriptionItemVersion.where(checkout_intent: checkout.intent).count
+    assert_equal 0, RecordingStudioBilling::SubscriptionLine.where(checkout_intent: checkout.intent).count
 
     paid = dispatch_webhook(checkout, event_id: "evt_unpaid_then_paid", inbound_event: receipt)
 
@@ -279,7 +279,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     assert_equal 0, RecordingStudioBilling::TaxCalculation.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Invoice.where(financial_command: checkout.command).count
     assert_equal 0, RecordingStudioBilling::Payment.where(financial_command: checkout.command).count
-    assert_equal 0, RecordingStudioBilling::SubscriptionItemVersion.where(checkout_intent: checkout.intent).count
+    assert_equal 0, RecordingStudioBilling::SubscriptionLine.where(checkout_intent: checkout.intent).count
     assert_equal "requires_review", checkout.intent.reload.state
     issues = RecordingStudioBilling::ReconciliationIssue.where(financial_command: checkout.command,
                                                                authority: "checkout_financial_projection")
@@ -325,7 +325,7 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
       assert_equal 0, RecordingStudioBilling::TaxCalculation.where(financial_command: command).count
       assert_equal 0, RecordingStudioBilling::Invoice.where(financial_command: command).count
       assert_equal 0, RecordingStudioBilling::Payment.where(financial_command: command).count
-      assert_equal 0, RecordingStudioBilling::SubscriptionItemVersion.where(checkout_intent: checkout.intent).count
+      assert_equal 0, RecordingStudioBilling::SubscriptionLine.where(checkout_intent: checkout.intent).count
       issue = RecordingStudioBilling::ReconciliationIssue.find_by!(financial_command: command,
                                                                    authority: "checkout_financial_projection")
       assert_equal "provider_terms_mismatch", issue.kind

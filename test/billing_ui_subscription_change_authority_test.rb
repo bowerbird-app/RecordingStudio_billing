@@ -10,7 +10,7 @@ class BillingUiSubscriptionChangeAuthorityTest < Minitest::Test
 
     assert_equal proposal, controller.send(:comparison_proposal!)
 
-    %w[root_recording_id account_recording_id subscription_id].each do |attribute|
+    %w[root_recording_id account_recording_id subscription_recording_id].each do |attribute|
       controller.instance_variable_set(:@comparison_proposals, { "proposal" => proposal.merge(attribute => "forged") })
       assert_raises(ArgumentError) { controller.send(:comparison_proposal!) }
     end
@@ -55,18 +55,18 @@ class BillingUiSubscriptionChangeAuthorityTest < Minitest::Test
     controller = RecordingStudioBilling::SubscriptionsController.new
     root = Struct.new(:id).new("root")
     account = Struct.new(:id).new("account")
-    subscription = Struct.new(:id).new("subscription")
+    subscription_recording = Struct.new(:id).new("subscription")
     controller.define_singleton_method(:params) { ActionController::Parameters.new(params) }
     controller.define_singleton_method(:root_recording) { root }
     controller.define_singleton_method(:account_recording) { account }
-    controller.instance_variable_set(:@subscription, subscription)
+    controller.instance_variable_set(:@subscription_recording, subscription_recording)
     controller.define_singleton_method(:comparison_proposals) { @comparison_proposals ||= {} }
     controller
   end
 
   def proposal
     {
-      "root_recording_id" => "root", "account_recording_id" => "account", "subscription_id" => "subscription",
+      "root_recording_id" => "root", "account_recording_id" => "account", "subscription_recording_id" => "subscription",
       "current_manifest_digests" => ["current"], "billing_option_recording_id" => "option", "quantity" => 1,
       "change_kind" => "plan", "provider_root_recording_id" => "provider-root", "manifest_digest" => "digest",
       "expires_at" => 15.minutes.from_now.to_i
