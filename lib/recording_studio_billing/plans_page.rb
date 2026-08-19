@@ -10,9 +10,7 @@ module RecordingStudioBilling
 
     def path_for(root_recording, url_helpers: host_url_helpers)
       helper = RecordingStudioBilling.configuration.plans_page_route_helper
-      if configured?
-        return url_helpers.public_send(helper, root_recording_id: root_recording.id)
-      end
+      return url_helpers.public_send(helper, root_recording_id: root_recording.id) if configured?
 
       billing_route_helpers(url_helpers).plan_billing_path(root_recording_id: root_recording.id)
     end

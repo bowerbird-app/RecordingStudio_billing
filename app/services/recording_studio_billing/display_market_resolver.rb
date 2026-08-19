@@ -42,7 +42,7 @@ module RecordingStudioBilling
         host.symbolize_keys.merge(declaration_country: account.billing_country_code,
                                   account_currency: account.billing_currency_code)
       else
-        (RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:)&.to_h || {}).symbolize_keys
+        RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:).to_h.symbolize_keys
       end
     end
 

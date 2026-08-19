@@ -188,7 +188,7 @@ module RecordingStudioBilling
     end
 
     def public_location_context
-      RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:)&.to_h || {}
+      RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:).to_h
     end
   end
 end
