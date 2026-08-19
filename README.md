@@ -15,7 +15,9 @@ still RecordingStudio Accessible on that root.
 Customer subscriptions and their plan lines are Recording Studio recordables:
 immutable snapshots written with `record!` and `revise`. Read current terms with
 `subscription.active_lines` and follow a stale snapshot forward with
-`subscription.current`. See [docs/billing.md](docs/billing.md).
+`subscription.current`. One-time purchases are recordables on the same account
+recording; read them with `Purchase.for_root`. See
+[docs/billing.md](docs/billing.md).
 
 User-facing screens should say **products and pricing**, not developer catalogue
 terms. Canonical V1 values are price scope `market`, checkout presentations

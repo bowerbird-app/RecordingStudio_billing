@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.4.0
+
+One-time purchases are Recording Studio recordables. Clean-install only.
+
+### Breaking
+
+- `RecordingStudioBilling::Purchase` is a recordable under the account recording,
+  written with `record!`. It is an immutable snapshot: triggers reject `UPDATE`
+  and `DELETE`.
+- Removed `RecordingStudioBilling::PurchaseEffect` and its table. A purchase was
+  always paired with exactly one effect, so the purchase now carries the whole
+  story. Read the kind from `purchase.mode` (`one_off_addon` or
+  `one_off_credit_pack`) and the timing from `purchase.completed_at`.
+- `EntitlementGrant#source_type` is `RecordingStudioBilling::Purchase` instead of
+  `RecordingStudioBilling::PurchaseEffect`.
+- `CreditLedgerEntry` credits reference `purchase_id` instead of
+  `purchase_effect_id`.
+- `Invoice` references `purchase_recording_id` (the stable Recording id) instead
+  of `purchase_id`, matching `subscription_recording_id`.
+
+### Added
+
+- `Purchase.for_root`, `Purchase.recording_for`, `Purchase#current`,
+  `Purchase#current_recording`, and `Purchase#to_param` (returns the Recording
+  id), matching `Subscription`.
+- Completing a one-time checkout item logs a `purchase_completed` event on the
+  account recording.
+
 ## 0.3.0
 
 Customer subscriptions are Recording Studio recordables. Clean-install only.

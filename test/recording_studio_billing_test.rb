@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.3.0", RecordingStudioBilling::VERSION
+    assert_equal "0.4.0", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_keeps_only_the_billing_title_and_subtitle

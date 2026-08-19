@@ -76,6 +76,25 @@ Uniqueness of the execution group and the subscription identifier is enforced in
 application code over `Subscription.with_current_recording`, serialized on the
 account Recording. A unique index cannot express "unique among current snapshots".
 
+## One-time purchases are recordables too
+
+Buying a one-off add-on or a prepaid credit pack records a
+`RecordingStudioBilling::Purchase` under the same account recording. It sits
+beside the subscription rather than under it, because nothing about it recurs.
+Customer screens still call these add-ons; "Purchase" is the admin label.
+
+```ruby
+purchases = RecordingStudioBilling::Purchase.for_root(workspace).order(created_at: :desc)
+purchases.first.mode          # "one_off_addon" or "one_off_credit_pack"
+purchases.first.completed_at  # when its entitlements and credits took effect
+```
+
+A purchase is bought once and never revised, so there is no separate effect row
+to chase: `mode` says what was bought, `completed_at` says when it counted, and
+`quantity` multiplies a credit pack's allowance. Entitlement grants and
+credit-ledger entries both point at the purchase id. Invoices point at
+`purchase_recording_id`, the same way they point at `subscription_recording_id`.
+
 ## Plan gates and entitlements
 
 Completed checkout and applied subscription changes project entitlement grants automatically from the frozen commercial snapshot. Hosts gate product features with:

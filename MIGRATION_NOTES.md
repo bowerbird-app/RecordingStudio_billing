@@ -2,6 +2,33 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.4.0 — one-time purchases are recordables
+
+`0.4.0` rewrites `db/schema/install_recording_studio_billing.sql` again. There is
+no upgrade path from `0.3.x`: reinstall from a fresh database.
+
+What changed in the schema:
+
+- `recording_studio_billing_purchase_effects` is gone. Every purchase had exactly
+  one effect, so `recording_studio_billing_purchases` absorbed it and now hangs
+  off the account Recording as a recordable.
+- `credit_ledger_entries.purchase_effect_id` is `purchase_id`, and the unique
+  credit index is `(purchase_id, credit_key)`.
+- `invoices.purchase_id` is `purchase_recording_id` and references
+  `recording_studio_recordings`, parallel to `subscription_recording_id`.
+- The entitlement grant source-type check and the credit-ledger and
+  entitlement-projection triggers read the purchase row directly.
+
+What changed for callers:
+
+- `purchase.effects` is gone. `purchase.mode` says whether it was a one-off
+  add-on or a credit pack, and `purchase.completed_at` is the effective time the
+  effect used to carry.
+- Read customer purchases through `Purchase.with_current_recording` (or
+  `Purchase.for_root`) so a superseded snapshot never shows up as current.
+- Entitlement grants written against `RecordingStudioBilling::PurchaseEffect` do
+  not survive; they are reprojected from the purchase on a fresh install.
+
 ## 0.3.0 — subscriptions are recordables
 
 `0.3.0` rewrites `db/schema/install_recording_studio_billing.sql`. There is no

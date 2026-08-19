@@ -98,7 +98,7 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     refute_equal italy.items.first.price_recording_id, germany.items.first.price_recording_id
     assert_equal "monthly_subscription", usage_item_mode(usage)
     assert_equal "one_off_credit_pack", credit.items.first.then { |item|
-      RecordingStudioBilling::Purchase.find_by!(checkout_intent_item_id: item.id).mode
+      RecordingStudioBilling::Purchase.with_current_recording.find_by!(checkout_intent_item_id: item.id).mode
     }
     assert RecordingStudioBilling::UsageCreditGrant.exists?(root_recording: @workspace_root, source_key: "seed:usage-allowance", grant_kind: "allowance", quantity: 5)
     assert RecordingStudioBilling::UsageCreditGrant.exists?(root_recording: @workspace_root, source_key: "seed:credit-pack-grant", grant_kind: "credit", quantity: 1_000)
