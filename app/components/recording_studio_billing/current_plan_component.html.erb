@@ -20,7 +20,7 @@
       <%= render FlatPack::Button::Component.new(
         text: @presenter.copy("view_plans", "View plans"),
         style: :primary,
-        url: helpers.plan_billing_path(root_recording_id: @presenter.root_recording.id)
+        url: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
       ) %>
       <% if row && row[:subscription].state == "paused" %>
         <%= render FlatPack::Button::Component.new(

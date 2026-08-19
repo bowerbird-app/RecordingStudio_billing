@@ -69,15 +69,17 @@ plans, prices, and tax at checkout. If a later Charge Market would change the
 price, checkout requotes, restarts, rejects, or holds for review instead of
 keeping the cheaper quote. Browser return does not complete a purchase.
 
-Customer **Plan** is `/billing/billing/plan`. After seed, Studio Workspace shows a title,
-subtitle, and three FlatPack pricing cards for the US free ($0), monthly ($49), and
-annual ($490) plans. The live monthly plan is marked current. Choose this plan is the
-only card action. Cancel is on Overview. Change-request examples live on **Plan requests**
-(`/billing/billing/plan_requests`). Recurring dummy checkouts share one execution group, so
-the cancelled hybrid journey is history on that same plan. The dummy sidebar renders
+Customer **Plan** is `/plans` (host route; gem-owned controller and cards). After seed,
+Studio Workspace shows a title, subtitle, and three Flatpack pricing cards for the US
+free ($0), monthly ($49), and annual ($490) plans. The live monthly plan is marked
+current. Choose this plan is the only card action. Cancel is on Overview.
+Change-request examples live on **Plan requests** (`/billing/billing/plan_requests`).
+`/billing/billing/plan` redirects to `/plans` when the host route is configured.
 `RecordingStudioBilling::CustomerSidebarComponent` so those screens sit in Recording Studio's
-layout. Add-ons, Usage, Invoices, Payments, Billing settings, checkout, invoice detail, and
-the demonstration payment portal use the same FlatPack cards, lists, badges, and buttons.
+layout. Recurring dummy checkouts share one execution group, so the cancelled hybrid
+journey is history on that same plan. Add-ons, Usage, Invoices, Payments, Billing settings,
+checkout, invoice detail, and the demonstration payment portal use the same Flatpack cards,
+lists, badges, and buttons.
 
 ## Why this app exists
 

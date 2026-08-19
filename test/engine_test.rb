@@ -64,6 +64,15 @@ class EngineTest < Minitest::Test
     assert_equal "recording_studio/default_layout", controller.send(:billing_host_layout)
   end
 
+  def test_plans_page_uses_recording_studio_default_layout_only
+    controller = RecordingStudioBilling::PlansApplicationController.new
+    request = ActionDispatch::TestRequest.create
+    request.format = :html
+    controller.set_request!(request)
+
+    assert_equal "recording_studio/default_layout", controller.send(:plans_host_layout)
+  end
+
   def test_engine_packages_the_stripe_checkout_module_for_host_asset_pipelines
     assert_includes Rails.application.config.assets.precompile, "recording_studio_billing/stripe_checkout.js"
     assert_includes RecordingStudioBilling::Engine.paths["app/assets"].paths.map(&:to_s),

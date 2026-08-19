@@ -156,6 +156,8 @@ RecordingStudioBilling.configure do |config|
   config.billing_portal_context_resolver = lambda do |account_recording:, **|
     { adapter_key: :fake, customer_reference: account_recording.id.to_s }
   end
+  config.plans_page_route_helper = :plans_path
+  config.plans_page_requires_sign_in = true
 end
 
 RecordingStudioBilling.register_provider(:fake, RecordingStudioBilling::DummyFinancialAdapter.new)

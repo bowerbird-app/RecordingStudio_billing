@@ -13,7 +13,10 @@ class InstallGeneratorTest < Minitest::Test
 
     generator.stub(:route, ->(value) { routes << value }) { generator.mount_engine }
 
-    assert_equal ['mount RecordingStudioBilling::Engine, at: "/recording_studio_billing"'], routes
+    assert_equal [
+      'draw_recording_studio_billing_plans path: "/plans"',
+      'mount RecordingStudioBilling::Engine, at: "/recording_studio_billing"'
+    ], routes
   end
 
   def test_tailwind_sources_reference_the_renamed_engine

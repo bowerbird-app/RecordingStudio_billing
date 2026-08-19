@@ -17,7 +17,7 @@ module RecordingStudioBilling
 
       redirect_to checkout_path(result.intent, root_recording_id: root_recording.id)
     rescue ActiveRecord::RecordNotFound, ArgumentError, ActionController::ParameterMissing
-      redirect_back fallback_location: plan_billing_path(root_recording_id: root_recording.id),
+      redirect_back fallback_location: RecordingStudioBilling::PlansPage.path_for(root_recording),
                     alert: "That billing selection is not currently available."
     end
 

@@ -14,11 +14,13 @@ module RecordingStudioBilling
     end
 
     def plan
-      @subscriptions = Subscription.for_root(root_recording).order(created_at: :desc)
-      @presenter = billing_presenter(
-        :subscriptions, subscriptions: @subscriptions, account_recording:,
-                        eligible_options: customer_offers_for("plan")
-      )
+      if RecordingStudioBilling::PlansPage.configured?
+        redirect_to RecordingStudioBilling::PlansPage.path_for(root_recording)
+        return
+      end
+
+      load_plans_presenter!
+      render "recording_studio_billing/plans/show"
     end
 
     def plan_requests
@@ -98,17 +100,6 @@ module RecordingStudioBilling
                else :view_billing
                end
       authorize_billing_action!(action)
-    end
-
-    def billing_presenter(page, **attributes)
-      presenter_class = RecordingStudioBilling.configuration.billing_presenter_for(
-        page, "RecordingStudioBilling::#{page.to_s.camelize}Presenter".constantize
-      )
-      presenter_class.new(root_recording:, **attributes)
-    end
-
-    def customer_offers_for(*kinds)
-      CustomerOfferEligibility.call(root_recording:, account_recording:, kinds:)
     end
 
     def settings_params

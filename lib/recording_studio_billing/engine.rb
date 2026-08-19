@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "recording_studio_billing/routing"
+
 module RecordingStudioBilling
   class Engine < ::Rails::Engine
     isolate_namespace RecordingStudioBilling
@@ -134,6 +136,10 @@ module RecordingStudioBilling
     config.to_prepare do
       RecordingStudioBilling.register_builtin_providers!
       RecordingStudioBilling.register_webhook_actions!
+    end
+
+    initializer "recording_studio_billing.view_helpers" do
+      ActiveSupport.on_load(:action_view) { include RecordingStudioBilling::EngineRoutesHelper }
     end
 
     initializer "recording_studio_billing.register_recordable_types", after: "recording_studio.load_config" do

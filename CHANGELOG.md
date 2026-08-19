@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.5.0
+
+Hosts can mount a first-class customer plans page at any URL while the gem owns
+the controller, presenter, and ViewComponents.
+
+### Added
+
+- `draw_recording_studio_billing_plans path: "/plans"` routing helper for host
+  `config/routes.rb`. Default install adds `/plans`.
+- `RecordingStudioBilling::PlansController#show` renders `PlansPageComponent`
+  and `PlanCardsComponent` inside the host's `recording_studio/default_layout`
+  only.
+- `RecordingStudioBilling::PlansPresenter`, `config.plans_page_route_helper`,
+  and `config.plans_page_requires_sign_in` (default `true`).
+- Billing **Plan** sidebar links and **View plans** buttons resolve through the
+  host plans route when configured. `GET /billing/plan` redirects there.
+
+### Upgrade notes
+
+- Re-run `rails generate recording_studio_billing:install` is not required for
+  existing hosts. Add `draw_recording_studio_billing_plans path: "/plans"` (or
+  your chosen path) to `config/routes.rb` and set
+  `config.plans_page_route_helper` to match the route `as:` name.
+- Ensure the host provides `app/views/layouts/recording_studio/default_layout.html.erb`
+  from Recording Studio getting-started setup.
+
 ## 0.4.0
 
 One-time purchases are Recording Studio recordables. Clean-install only.

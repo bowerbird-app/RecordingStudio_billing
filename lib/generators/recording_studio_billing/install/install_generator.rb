@@ -18,7 +18,15 @@ module RecordingStudioBilling
         desc: "Route prefix used when mounting the engine"
       )
 
+      class_option(
+        :plans_path,
+        type: :string,
+        default: "/plans",
+        desc: "Host route for the customer plans page provided by the gem"
+      )
+
       def mount_engine
+        route %(draw_recording_studio_billing_plans path: "#{options[:plans_path]}")
         route %(mount RecordingStudioBilling::Engine, at: "#{options[:mount_path]}")
       end
 

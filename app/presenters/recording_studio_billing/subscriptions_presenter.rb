@@ -69,8 +69,6 @@ module RecordingStudioBilling
     end
 
     def published_plan_billing_options
-      return [] unless account_recording.is_a?(RecordingStudio::Recording)
-
       BillingOption.with_current_recording.where(state: "published").select do |option|
         product = option.product_recording&.recordable
         product.is_a?(Product) && product.state == "published" && product.kind == "plan" &&
@@ -107,7 +105,7 @@ module RecordingStudioBilling
         current:,
         highlighted: current || popular_plan?(option, amount),
         badge: plan_card_badge(option, amount, current),
-        checkoutable: !current && option.try(:recording).try(:id).present?,
+        checkoutable: !current && option.try(:recording).try(:id).present? && checkout_allowed?,
         quantity_mode: option.quantity_mode,
         default_quantity: option.default_quantity,
         minimum_quantity: option.minimum_quantity,
@@ -161,15 +159,36 @@ module RecordingStudioBilling
       []
     end
 
+    def checkout_allowed?
+      true
+    end
+
     def live_price_for(option)
       product = option.try(:product_recording).try(:recordable)
-      return unless product.is_a?(Product) && account_recording.present?
+      return unless product.is_a?(Product)
 
-      resolution = DisplayMarketResolver.call(product:, root_recording:, account_recording:)
+      resolution = display_market_resolution(product)
+      return unless resolution
+
       CommercialPriceSelector.new(billing_option: option, market: resolution.market,
                                   currency_code: resolution.currency_code).price!
     rescue ArgumentError, NoMethodError, ActiveRecord::RecordNotFound
       nil
+    end
+
+    def display_market_resolution(product)
+      return unless account_recording.present? || public_location_context.present?
+
+      DisplayMarketResolver.call(
+        product:,
+        root_recording: root_recording || product.root_recording,
+        account_recording:,
+        location_context: account_recording.present? ? nil : public_location_context
+      )
+    end
+
+    def public_location_context
+      RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:)&.to_h || {}
     end
   end
 end
