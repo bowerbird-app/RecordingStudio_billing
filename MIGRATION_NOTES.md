@@ -2,6 +2,21 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.2.1 — entitlement projection after checkout
+
+From `0.2.1`, `project_completed_checkout_intent` projects entitlement grants
+(and credit-pack ledger entries) for each new subscription item version or
+purchase effect. Applied subscription changes already did this.
+
+Hosts that called `project_entitlements` after checkout may keep those calls;
+they are idempotent. New hosts should rely on automatic projection and gate
+features with `entitled?` / `feature_value` on the workspace root.
+
+No database migration is required for this behaviour change. Roots that
+completed checkout on an older build without grants should run
+`RecordingStudioBilling.project_entitlements(root_recording: root)` once as a
+repair, or replay checkout projection for those intents.
+
 ## What the install generator copies
 
 `rails generate recording_studio_billing:install` copies:

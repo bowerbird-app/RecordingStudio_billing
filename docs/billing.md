@@ -44,6 +44,19 @@ The dummy seed is the V1 demonstration catalogue: one Workspace, one Admin root,
 
 Checkout is one customer-facing lifecycle for every presentation. The browser may send option IDs, quantities, a country or currency preference, and a presentation preference. The server freezes money, tax treatment, Charge Market, and the commercial manifest. If the final Charge Market would change price or terms, checkout requotes, restarts, rejects, or holds for review. Browser return pages show intent state only; they never fulfil a purchase.
 
+## Plan gates and entitlements
+
+Completed checkout and applied subscription changes project entitlement grants automatically from the frozen commercial snapshot. Hosts gate product features with:
+
+```ruby
+RecordingStudioBilling.entitled?(root_recording: workspace, feature_key: "projects")
+RecordingStudioBilling.feature_value(root_recording: workspace, feature_key: "seats")
+```
+
+Do not call `project_entitlements` after normal checkout or subscription-change projection unless you are repairing historical data. Replays of those projectors remain idempotent and re-ensure grants.
+
+People may act on a workspace through RecordingStudio Accessible. Whether the workspace has paid for a feature is a separate entitlement check on the root.
+
 ## Customer billing access
 
 Customer `/billing` pages authorize through RecordingStudio Accessible. `RecordingStudioBilling::Billable` enables `:accessible` on the workspace-like root. Hosts grant a person `view` to read billing and `edit` to checkout or change a plan:

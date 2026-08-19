@@ -835,10 +835,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     subscription = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                                             root_recording: graph[:customer_root]).subscription
 
-    first = RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
-
-    assert_equal 4, first.grants.count
     assert_equal 4, RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).count
     assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
     assert_equal 3, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
@@ -847,11 +843,35 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal({ "edition" => "pro", "enabled" => true, "projects" => 3, "seats" => 5 },
                  RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root]))
 
+    replay = RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
+    assert_equal 4, replay.grants.count
+    assert_equal 4, RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).count
+
     RecordingStudioBilling::SubscriptionLifecycle.pause(subscription:, root_recording: graph[:customer_root])
     assert_equal({}, RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root]))
-    assert_raises(ActiveRecord::StatementInvalid) { first.grants.first.update_column(:value, false) }
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).first.update_column(:value, false)
+    end
     source = File.read(Rails.root.join("../../app/services/recording_studio_billing/project_entitlements.rb"))
     refute_match(/Stripe::|stripe_credential|:stripe/, source)
+  end
+
+  test "checkout projection entitles the root without a separate project_entitlements call" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    intent = create_intent(graph, country: "IT", key: "auto-entitle-checkout").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root])
+
+    assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
+    assert_equal 3, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
+
+    replay = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                                      root_recording: graph[:customer_root])
+    assert replay.existing?
+    assert_equal 4, RecordingStudioBilling::EntitlementGrant.where(root_recording: graph[:customer_root]).count
   end
 
   test "numeric entitlement grants honor frozen maximum and minimum rules" do
@@ -869,7 +889,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
     addon_graph[:customer_root] = graph[:customer_root]
     project_subscription!(addon_graph, key: "numeric-addon")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     assert_equal 10,
                  RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
@@ -887,7 +906,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
     addon_graph[:customer_root] = graph[:customer_root]
     project_subscription!(addon_graph, key: "replace-addon")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     error = assert_raises(ArgumentError) do
       RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
@@ -903,8 +921,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                                         root_recording: graph[:customer_root]).purchase
 
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     entry = RecordingStudioBilling::CreditLedgerEntry.sole
 
     assert_equal 5,
@@ -923,7 +939,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     project_subscription!(graph, key: "usage-entitlement")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     created = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
                                                   idempotency_key: "usage-event", metadata: { "source" => "studio" })
@@ -958,7 +973,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     project_subscription!(graph, key: "concurrent-usage-entitlement")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
                                         idempotency_key: "usage-before-race")
     ready = Queue.new
@@ -990,7 +1004,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     project_subscription!(graph, key: "reversed-usage-entitlement")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 2,
                                         idempotency_key: "usage-before-reversed-race")
 
@@ -1029,7 +1042,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                                         root_recording: graph[:customer_root]).purchase
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     created = RecordingStudioBilling.consume_credits(root_recording: graph[:customer_root], product_recording: purchase.product_recording_id,
                                                      amount: 3, usage_key: "seats", idempotency_key: "consume-once")
@@ -1065,7 +1077,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                                         root_recording: graph[:customer_root]).purchase
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     ready = Queue.new
     release = Queue.new
     results = Queue.new
@@ -1098,7 +1109,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                              root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     account_child = RecordingStudioBilling::Account.with_current_recording.find_by!(root_recording: graph[:customer_root]).recording
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other account")
@@ -1121,7 +1131,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                              root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     grant = RecordingStudioBilling::EntitlementGrant.first
     entry = RecordingStudioBilling::CreditLedgerEntry.sole
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
@@ -1156,7 +1165,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
                                                              root_recording: graph[:customer_root])
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
     assert RecordingStudioBilling.entitled?(root_recording: graph[:customer_root], feature_key: "enabled")
 
     { paused: :pause, cancelled: :cancel, expired: :expire }.each do |state, transition|
@@ -1169,7 +1177,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
                                                                               root_recording: subscription_graph[:customer_root]).subscription
       RecordingStudioBilling::SubscriptionLifecycle.public_send(transition, subscription:,
                                                                             root_recording: subscription_graph[:customer_root])
-      RecordingStudioBilling.project_entitlements(root_recording: subscription_graph[:customer_root])
       assert_equal({},
                    RecordingStudioBilling.effective_entitlements(root_recording: subscription_graph[:customer_root]))
     end
@@ -1186,7 +1193,6 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     addon_graph = published_catalogue(kind: "addon", recurrence: "recurring", interval: "month")
     addon_graph[:customer_root] = graph[:customer_root]
     project_subscription!(addon_graph, key: "variant-addon")
-    RecordingStudioBilling.project_entitlements(root_recording: graph[:customer_root])
 
     assert_raises(RecordingStudioBilling::EntitlementAccess::AmbiguousVariant) do
       RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "edition")

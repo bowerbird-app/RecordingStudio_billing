@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.2.1
+
+Entitlement grants project automatically when checkout completes.
+
+### Fixed
+
+- Completing checkout now projects entitlement grants (and credit-pack ledger
+  entries) from each new subscription item version or purchase effect. Replaying
+  checkout projection re-ensures those grants. Hosts can call `entitled?` /
+  `feature_value` after checkout without a separate `project_entitlements` step.
+  Applied subscription changes already projected entitlements; that path is
+  unchanged.
+
+## 0.2.0
+
 Version `0.2.0`. Clean-install V1 contract reset. There is no upgrade path from
 earlier experimental schemas.
 
