@@ -738,6 +738,9 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) do
       RecordingStudioBilling::SubscriptionLine.where(id: first.subscription.lines.sole.id).update_all(amount_minor: 1)
     end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      RecordingStudioBilling::Subscription.where(id: first.subscription.id).update_all(state: "paused")
+    end
     assert_raises(ActiveRecord::RecordNotFound) do
       RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent, root_recording: other_root)
     end

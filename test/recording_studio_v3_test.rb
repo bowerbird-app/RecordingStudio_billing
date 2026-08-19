@@ -90,6 +90,17 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
                  RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::FeatureOverride)
   end
 
+  test "customer subscriptions and their plan lines hang off the account recording" do
+    assert_equal ["RecordingStudioBilling::Account"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Subscription)
+    assert_equal ["RecordingStudioBilling::Subscription"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::SubscriptionLine)
+    assert_equal "Subscription", RecordingStudio.recordable_type_label(RecordingStudioBilling::Subscription)
+    assert_equal "Plan line", RecordingStudio.recordable_type_label(RecordingStudioBilling::SubscriptionLine)
+    assert_includes RecordingStudioBilling::RECORDABLE_TYPES, "RecordingStudioBilling::Subscription"
+    assert_includes RecordingStudioBilling::RECORDABLE_TYPES, "RecordingStudioBilling::SubscriptionLine"
+  end
+
   test "workspace gets one root-owned billing account" do
     root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
     account = RecordingStudioBilling.ensure_account(root_recording: root_recording, name: unique_name("Account"))
