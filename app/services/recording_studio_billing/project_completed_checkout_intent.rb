@@ -165,8 +165,32 @@ module RecordingStudioBilling
       terms = item.commercial_manifest.fetch("canonical_data")
       option = terms.fetch("billing_option")
       price = terms.fetch("price")
-      version = subscription_item.versions.create!(subscription: subscription, root_recording: intent.root_recording,
-                                                   account_recording: intent.account_recording, checkout_intent: intent, checkout_intent_item_id: item.id, source_type: "checkout", source_id: item.id, source_snapshot: item.commercial_manifest, line_key:, version_number: subscription_item.versions.maximum(:version_number).to_i + 1, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: price.fetch("amount_minor"), quantity: item.quantity, interval: option["interval"], interval_count: option["interval_count"], manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, effective_starts_at: now)
+      version = subscription_item.versions.create!(
+        subscription: subscription,
+        root_recording: intent.root_recording,
+        account_recording: intent.account_recording,
+        checkout_intent: intent,
+        checkout_intent_item_id: item.id,
+        source_type: "checkout",
+        source_id: item.id,
+        source_snapshot: item.commercial_manifest,
+        line_key:,
+        version_number: subscription_item.versions.maximum(:version_number).to_i + 1,
+        product_recording_id: item.product_recording_id,
+        billing_option_recording_id: item.billing_option_recording_id,
+        price_recording_id: item.price_recording_id,
+        provider_account_recording_id: item.provider_account_recording_id,
+        provider_adapter_key: item.provider_account_recording.recordable.adapter_key,
+        mode:,
+        currency_code: item.currency_code,
+        amount_minor: price.fetch("amount_minor"),
+        quantity: item.quantity,
+        interval: option["interval"],
+        interval_count: option["interval_count"],
+        manifest_digest: item.manifest_digest,
+        commercial_snapshot: item.commercial_manifest,
+        effective_starts_at: now
+      )
       project_entitlements_for!(version)
       Result.new(status: :projected, subscription:, purchase: nil)
     end
