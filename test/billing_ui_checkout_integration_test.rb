@@ -185,8 +185,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     subscription = project_recurring_subscription(root, option)
     use_subscription_change_adapter!
     switch_root(root)
-    item = subscription.items.sole
-    version_count = item.versions.count
+    subscription_recording = subscription.recording
+    line_key = subscription.lines.sole.line_key
+    line_snapshots = RecordingStudioBilling::SubscriptionLine.where(subscription_recording_id: subscription_recording.id,
+                                                                    line_key:)
+    snapshot_count = line_snapshots.count
 
     get "/billing", params: { root_recording_id: root.id }
     assert_response :success
@@ -200,17 +203,17 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_response :success
     get "/billing/subscriptions/#{subscription.id}/resume_confirmation", params: { root_recording_id: root.id }
     assert_response :success
-    assert_equal 0, RecordingStudioBilling::SubscriptionChangeIntent.where(subscription:).count
-    assert_equal "active", subscription.reload.state
-    assert_equal version_count, item.reload.versions.count
+    assert_equal 0, RecordingStudioBilling::SubscriptionChangeIntent.where(subscription_recording:).count
+    assert_equal "active", subscription.current.state
+    assert_equal snapshot_count, line_snapshots.count
 
     post "/billing/subscriptions/#{subscription.id}/cancel", params: { root_recording_id: root.id }
     assert_redirected_to %r{/billing/subscription_changes/}
     post "/billing/subscriptions/#{subscription.id}/cancel", params: { root_recording_id: root.id }
-    assert_equal 1, RecordingStudioBilling::SubscriptionChangeIntent.where(subscription:).count
-    assert_equal "active", subscription.reload.state
-    assert_equal version_count, item.reload.versions.count
-    cancellation = RecordingStudioBilling::SubscriptionChangeIntent.where(subscription:).sole
+    assert_equal 1, RecordingStudioBilling::SubscriptionChangeIntent.where(subscription_recording:).count
+    assert_equal "active", subscription.current.state
+    assert_equal snapshot_count, line_snapshots.count
+    cancellation = RecordingStudioBilling::SubscriptionChangeIntent.where(subscription_recording:).sole
     cancellation.financial_command.update!(state: "failed", normalized_result: { "reason" => "provider_rejected" })
     assert_raises(ArgumentError) do
       RecordingStudioBilling::ApplySubscriptionChangeIntent.call(subscription_change_intent: cancellation,
@@ -219,11 +222,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing/subscription_changes/#{cancellation.id}", params: { root_recording_id: root.id }
     assert_response :success
     assert_match(/Failed/, response.body)
-    assert_equal "active", subscription.reload.state
-    assert_equal version_count, item.reload.versions.count
+    assert_equal "active", subscription.current.state
+    assert_equal snapshot_count, line_snapshots.count
 
     post "/billing/subscriptions/#{subscription.id}/resume", params: { root_recording_id: root.id }
-    review = RecordingStudioBilling::SubscriptionChangeIntent.where(subscription:).order(:created_at).last
+    review = RecordingStudioBilling::SubscriptionChangeIntent.where(subscription_recording:).order(:created_at).last
     review.financial_command.update!(state: "requires_reconciliation",
                                      normalized_result: { "reason" => "provider_unknown" })
     assert_raises(ArgumentError) do
@@ -233,8 +236,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing/subscription_changes/#{review.id}", params: { root_recording_id: root.id }
     assert_response :success
     assert_match(/Waiting for confirmation/, response.body)
-    assert_equal "active", subscription.reload.state
-    assert_equal version_count, item.reload.versions.count
+    assert_equal "active", subscription.current.state
+    assert_equal snapshot_count, line_snapshots.count
 
     other_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Other #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other")

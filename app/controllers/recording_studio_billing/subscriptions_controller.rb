@@ -86,8 +86,8 @@ module RecordingStudioBilling
     private
 
     def load_subscription
-      @subscription = Subscription.for_root(root_recording).find(params[:id])
-      @subscription_recording = @subscription.recording
+      @subscription_recording = Subscription.recording_for(params[:id], root_recording:)
+      @subscription = @subscription_recording.recordable
     end
 
     def create_change!(kind)

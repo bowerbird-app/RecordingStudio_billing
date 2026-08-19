@@ -27,22 +27,19 @@ module RecordingStudioBilling
         with_current_recording.where(root_recording_id: RecordingStudio.root_recording_or_self(root_recording).id)
       end
 
-      # Accepts the stable Recording, a current Subscription snapshot, or the id
-      # of one, and always answers with the stable Recording.
+      # Accepts the stable Recording, a Subscription snapshot (current or
+      # superseded), or the id of either, and always answers with the stable
+      # Recording. Superseded snapshots keep their row and their id, so callers
+      # holding an older one still have to land on the live Recording.
       def recording_for(value, root_recording: nil)
-        return value if value.is_a?(RecordingStudio::Recording)
+        recording = resolve_recording(value)
+        raise ActiveRecord::RecordNotFound, "subscription not found" unless recording
 
-        subscription = value.is_a?(Subscription) ? value : nil
-        # Superseded snapshots keep their row and their id, so callers holding an
-        # older one still have to land on the live Recording.
-        subscription ||= snapshots_for(root_recording).find(value.respond_to?(:id) ? value.id : value)
-        subscription.current_recording || raise(ActiveRecord::RecordNotFound, "subscription not found")
-      end
+        if root_recording && recording.root_recording_id != RecordingStudio.root_recording_or_self(root_recording).id
+          raise ActiveRecord::RecordNotFound, "subscription not found"
+        end
 
-      def snapshots_for(root_recording)
-        return all unless root_recording
-
-        where(root_recording_id: RecordingStudio.root_recording_or_self(root_recording).id)
+        recording
       end
 
       def execution_group_fingerprint(values)
@@ -50,6 +47,17 @@ module RecordingStudioBilling
           values.fetch(:provider_account_recording_id), values.fetch(:currency_code), values.fetch(:collection_method),
           values.fetch(:market_recording_id), values.fetch(:billing_anchor), values.fetch(:payment_terms_days)
         ].join(":"))
+      end
+
+      private
+
+      def resolve_recording(value)
+        return value if value.is_a?(RecordingStudio::Recording)
+        return value.current_recording if value.is_a?(Subscription)
+
+        identifier = value.respond_to?(:id) ? value.id : value
+        RecordingStudio::Recording.find_by(id: identifier, recordable_type: name) ||
+          find_by(id: identifier)&.current_recording
       end
     end
 
@@ -62,6 +70,11 @@ module RecordingStudioBilling
 
     def current_recording
       current&.recording
+    end
+
+    # Customer URLs have to survive revisions, so they carry the Recording id.
+    def to_param
+      recording&.id || current_recording&.id || id
     end
 
     def lines
