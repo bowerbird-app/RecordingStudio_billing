@@ -114,10 +114,17 @@ module RecordingStudioBilling
     def effective_grants
       grants = EntitlementGrant.where(root_recording:, account_recording:)
       subscription_ids = active_subscription_source_ids
-      purchase_effect_ids = PurchaseEffect.where(root_recording:,
-                                                 account_recording:).where(effective_at: ..at).select(:id)
       grants.where(source_type: "RecordingStudioBilling::SubscriptionLine", source_id: subscription_ids)
-            .or(grants.where(source_type: "RecordingStudioBilling::PurchaseEffect", source_id: purchase_effect_ids))
+            .or(grants.where(source_type: "RecordingStudioBilling::Purchase", source_id: completed_purchase_ids))
+    end
+
+    # Only the purchase snapshot the Recording points at can grant anything, and
+    # only once it has actually completed.
+    def completed_purchase_ids
+      Purchase.with_current_recording
+              .where(root_recording:, account_recording:)
+              .where(completed_at: ..at)
+              .select("recording_studio_billing_purchases.id")
     end
 
     # Only the current line snapshot under a live subscription grants anything;

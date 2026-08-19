@@ -21,7 +21,7 @@ module RecordingStudioBilling
           amount: display_amount(purchase.amount_minor, purchase.currency_code),
           cadence: cadence_label(snapshot_value(terms, "billing_option", "recurrence"),
                                  snapshot_value(terms, "billing_option", "interval")),
-          expiry: purchase.effects.map(&:effective_at).compact.max&.to_fs(:long)
+          expiry: purchase.completed_at&.to_fs(:long)
         }
       end
     end

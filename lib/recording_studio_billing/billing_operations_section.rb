@@ -119,7 +119,7 @@ module RecordingStudioBilling
                                 filters: %i[state currency_code], columns: %i[state currency_code created_at] },
     billing_subscriptions: { section: "billing_operations", title: "Subscriptions", model: "Subscription",
                              scope: :current, filters: %i[state currency_code], columns: %i[identifier state currency_code] },
-    billing_purchases: { section: "billing_operations", title: "Purchases", model: "Purchase",
+    billing_purchases: { section: "billing_operations", title: "Purchases", model: "Purchase", scope: :current,
                          filters: %i[mode currency_code], columns: %i[mode amount_minor currency_code] },
     billing_subscription_lines: { section: "billing_operations", title: "Plan lines", model: "SubscriptionLine",
                                   scope: :current, filters: %i[mode currency_code], columns: %i[line_key mode amount_minor currency_code] },

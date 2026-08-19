@@ -270,7 +270,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     main = response.body[%r{<main class="p-6">.*?</main>}m]
     assert main.present?
     refute_includes main, other_root.id
-    assert_equal "credit_pack", purchase.effects.sole.effect_kind
+    assert_equal "one_off_credit_pack", purchase.mode
   end
 
   private

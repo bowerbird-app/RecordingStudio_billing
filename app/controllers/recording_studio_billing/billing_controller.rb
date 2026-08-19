@@ -30,7 +30,7 @@ module RecordingStudioBilling
     end
 
     def addons
-      @purchases = Purchase.where(root_recording:, account_recording:).includes(:effects).order(created_at: :desc)
+      @purchases = Purchase.with_current_recording.where(root_recording:, account_recording:).order(created_at: :desc)
       @presenter = billing_presenter(:addons, purchases: @purchases,
                                               eligible_options: customer_offers_for("addon", "credit_pack"))
     end

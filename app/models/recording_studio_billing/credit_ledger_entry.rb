@@ -4,7 +4,7 @@ module RecordingStudioBilling
   class CreditLedgerEntry < RecordingStudioBilling::ApplicationRecord
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
-    belongs_to :purchase_effect, class_name: "RecordingStudioBilling::PurchaseEffect", optional: true
+    belongs_to :purchase, class_name: "RecordingStudioBilling::Purchase", optional: true
     belongs_to :usage_event, class_name: "RecordingStudioBilling::UsageEvent", optional: true
 
     validates :credit_key, :product_recording_id, presence: true

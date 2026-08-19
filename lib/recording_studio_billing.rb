@@ -17,6 +17,7 @@ module RecordingStudioBilling
     RecordingStudioBilling::Account
     RecordingStudioBilling::Subscription
     RecordingStudioBilling::SubscriptionLine
+    RecordingStudioBilling::Purchase
     RecordingStudioBilling::BillingAdmin
     RecordingStudioBilling::ProviderAccount
     RecordingStudioBilling::Market

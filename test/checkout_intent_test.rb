@@ -711,8 +711,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       assert_equal "completed", intent.reload.state
       if expected_mode.start_with?("one_off")
         assert_equal expected_mode, result.purchase.mode
-        assert_equal(expected_mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon",
-                     result.purchase.effects.sole.effect_kind)
+        assert_equal result.purchase.recording.id, result.purchase.to_param
+        assert_equal "RecordingStudioBilling::Account", result.purchase.recording.parent_recording.recordable_type
       else
         assert_equal expected_mode, result.subscription.lines.sole.mode
         assert_equal(expected_mode == "trial_subscription" ? "trialing" : "active", result.subscription.state)
@@ -1068,7 +1068,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     usage = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "seats", quantity: 1,
                                                 idempotency_key: "forged-oversized-debit").event
     oversized_debit = created.entry.attributes.except("id", "created_at", "updated_at").merge(
-      "id" => SecureRandom.uuid, "purchase_effect_id" => nil, "usage_event_id" => usage.id,
+      "id" => SecureRandom.uuid, "purchase_id" => nil, "usage_event_id" => usage.id,
       "idempotency_key" => usage.idempotency_key, "amount" => -3, "effective_at" => Time.current,
       "created_at" => Time.current, "updated_at" => Time.current
     )
@@ -1155,15 +1155,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) { insert_ledger!(entry, "root_recording_id" => other_root.id, "account_recording_id" => other_account.id) }
     RecordingStudioBilling.configuration.reset_registries!
     addon_graph = published_catalogue(kind: "addon", recurrence: "one_time", interval: nil)
-    addon_intent = create_intent(addon_graph, country: "IT", key: "non-credit-effect").intent
+    addon_intent = create_intent(addon_graph, country: "IT", key: "non-credit-purchase").intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: addon_intent,
                                                    root_recording: addon_graph[:customer_root])
     purchase = RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: addon_intent,
                                                                         root_recording: addon_graph[:customer_root]).purchase
-    effect = purchase.effects.sole
     forged = entry.attributes.except("id", "created_at", "updated_at").merge("id" => SecureRandom.uuid,
-                                                                             "purchase_effect_id" => effect.id, "root_recording_id" => effect.root_recording_id, "account_recording_id" => effect.account_recording_id,
-                                                                             "product_recording_id" => purchase.product_recording_id, "manifest_digest" => effect.manifest_digest, "created_at" => Time.current, "updated_at" => Time.current)
+                                                                             "purchase_id" => purchase.id, "root_recording_id" => purchase.root_recording_id, "account_recording_id" => purchase.account_recording_id,
+                                                                             "product_recording_id" => purchase.product_recording_id, "manifest_digest" => purchase.manifest_digest, "created_at" => Time.current, "updated_at" => Time.current)
     assert_raises(ActiveRecord::StatementInvalid) { RecordingStudioBilling::CreditLedgerEntry.insert_all!([forged]) }
   end
 

@@ -6,7 +6,7 @@ module RecordingStudioBilling
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :financial_command, optional: true
     belongs_to :subscription_recording, class_name: "RecordingStudio::Recording", inverse_of: false, optional: true
-    belongs_to :purchase, optional: true
+    belongs_to :purchase_recording, class_name: "RecordingStudio::Recording", inverse_of: false, optional: true
     has_many :payments, class_name: "RecordingStudioBilling::Payment", dependent: :restrict_with_error
     has_many :lines, class_name: "RecordingStudioBilling::InvoiceLine", dependent: :restrict_with_error
     has_many :adjustment_intents, class_name: "RecordingStudioBilling::AdjustmentIntent",

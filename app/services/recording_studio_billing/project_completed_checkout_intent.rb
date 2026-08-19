@@ -108,7 +108,11 @@ module RecordingStudioBilling
     end
 
     def existing_projection(item)
-      origin_line(item) || Purchase.find_by(checkout_intent_item_id: item.id)
+      origin_line(item) || existing_purchase(item)
+    end
+
+    def existing_purchase(item)
+      Purchase.with_current_recording.find_by(checkout_intent_item_id: item.id)
     end
 
     def current_line_for(item)
@@ -123,18 +127,14 @@ module RecordingStudioBilling
       origin = origin_line(item)
       return Result.new(status: :existing, subscription: origin.subscription_recording.reload.recordable, purchase: nil) if origin
 
-      Result.new(status: :existing, subscription: nil, purchase: Purchase.find_by!(checkout_intent_item_id: item.id))
+      Result.new(status: :existing, subscription: nil, purchase: existing_purchase(item))
     end
 
     def ensure_entitlements_for_existing!(item)
       line = current_line_for(item)
-      if line
-        project_entitlements_for!(line)
-        return
-      end
+      return project_entitlements_for!(line) if line
 
-      purchase = Purchase.find_by!(checkout_intent_item_id: item.id)
-      purchase.effects.order(:id).each { |effect| project_entitlements_for!(effect) }
+      project_entitlements_for!(existing_purchase(item))
     end
 
     def project_entitlements_for!(source)
@@ -255,14 +255,34 @@ module RecordingStudioBilling
     end
 
     def project_purchase!(intent, item, mode)
-      terms = item.commercial_manifest.fetch("canonical_data")
-      purchase = Purchase.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
-                                  checkout_intent: intent, checkout_intent_item_id: item.id, product_recording_id: item.product_recording_id, billing_option_recording_id: item.billing_option_recording_id, price_recording_id: item.price_recording_id, provider_account_recording_id: item.provider_account_recording_id, provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode:, currency_code: item.currency_code, amount_minor: terms.dig("price", "amount_minor"), quantity: item.quantity, manifest_digest: item.manifest_digest, commercial_snapshot: item.commercial_manifest, completed_at: Time.current)
-      effect_kind = mode == "one_off_credit_pack" ? "credit_pack" : "one_off_addon"
-      effect = purchase.effects.create!(root_recording: intent.root_recording, account_recording: intent.account_recording,
-                                        effect_kind:, idempotency_key: "checkout-item:#{item.id}:#{effect_kind}", manifest_digest: item.manifest_digest, safe_metadata: { "product_recording_id" => item.product_recording_id, "quantity" => item.quantity }, effective_at: purchase.completed_at)
-      project_entitlements_for!(effect)
+      attributes = purchase_attributes(intent, item, mode)
+      purchase_recording = intent.root_recording.record(Purchase, parent_recording: intent.account_recording) do |purchase|
+        purchase.assign_attributes(attributes)
+      end
+      intent.account_recording.reload.log_event!(
+        action: "purchase_completed",
+        metadata: { "mode" => mode, "product_recording_id" => item.product_recording_id },
+        idempotency_key: "checkout-item:#{item.id}:purchase"
+      )
+      purchase = purchase_recording.reload.recordable
+      project_entitlements_for!(purchase)
       Result.new(status: :projected, subscription: nil, purchase:)
+    end
+
+    def purchase_attributes(intent, item, mode)
+      terms = item.commercial_manifest.fetch("canonical_data")
+      {
+        root_recording: intent.root_recording, account_recording: intent.account_recording,
+        checkout_intent: intent, checkout_intent_item_id: item.id,
+        product_recording_id: item.product_recording_id,
+        billing_option_recording_id: item.billing_option_recording_id,
+        price_recording_id: item.price_recording_id,
+        provider_account_recording_id: item.provider_account_recording_id,
+        provider_adapter_key: item.provider_account_recording.recordable.adapter_key, mode: mode,
+        currency_code: item.currency_code, amount_minor: terms.dig("price", "amount_minor"),
+        quantity: item.quantity, manifest_digest: item.manifest_digest,
+        commercial_snapshot: item.commercial_manifest, completed_at: Time.current
+      }
     end
   end
 end

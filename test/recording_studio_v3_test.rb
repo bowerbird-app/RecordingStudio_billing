@@ -101,6 +101,18 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_includes RecordingStudioBilling::RECORDABLE_TYPES, "RecordingStudioBilling::SubscriptionLine"
   end
 
+  test "one-off purchases hang off the account recording without a separate effect" do
+    assert_equal ["RecordingStudioBilling::Account"],
+                 RecordingStudio.allowed_parent_types_for(RecordingStudioBilling::Purchase)
+    assert_equal "Purchase", RecordingStudio.recordable_type_label(RecordingStudioBilling::Purchase)
+    assert_includes RecordingStudioBilling::RECORDABLE_TYPES, "RecordingStudioBilling::Purchase"
+    assert_not RecordingStudio.root_allowed?(RecordingStudioBilling::Purchase)
+    assert_not defined?(RecordingStudioBilling::PurchaseEffect)
+    assert_not_includes ActiveRecord::Base.connection.tables, "recording_studio_billing_purchase_effects"
+    assert_equal %w[RecordingStudioBilling::SubscriptionLine RecordingStudioBilling::Purchase],
+                 RecordingStudioBilling::EntitlementGrant::SOURCE_TYPES
+  end
+
   test "workspace gets one root-owned billing account" do
     root_recording = RecordingStudio.root_recording_for(Workspace.create!(name: unique_name("Workspace")))
     account = RecordingStudioBilling.ensure_account(root_recording: root_recording, name: unique_name("Account"))

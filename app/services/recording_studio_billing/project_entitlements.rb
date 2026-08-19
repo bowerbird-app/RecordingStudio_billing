@@ -32,12 +32,14 @@ module RecordingStudioBilling
 
       current_line_ids = SubscriptionLine.with_current_recording.where(root_recording: root)
                                          .select("recording_studio_billing_subscription_lines.id")
+      current_purchase_ids = Purchase.with_current_recording.where(root_recording: root)
+                                     .select("recording_studio_billing_purchases.id")
       SubscriptionLine.where(id: current_line_ids).order(:id).lock.to_a +
-        PurchaseEffect.where(root_recording: root).order(:id).lock.to_a
+        Purchase.where(id: current_purchase_ids).order(:id).lock.to_a
     end
 
     def resolve_source(root)
-      raise ArgumentError, "entitlement source must be a subscription line or purchase effect" unless source_input.is_a?(SubscriptionLine) || source_input.is_a?(PurchaseEffect)
+      raise ArgumentError, "entitlement source must be a subscription line or purchase" unless source_input.is_a?(SubscriptionLine) || source_input.is_a?(Purchase)
 
       unless source_input.root_recording_id == root.id
         raise ActiveRecord::RecordNotFound,
@@ -63,17 +65,14 @@ module RecordingStudioBilling
         "root_recording_id" => manifest.root_recording_id, "canonical_data" => manifest.canonical_data,
         "recording_snapshots" => manifest.recording_snapshots, "snapshot_references" => manifest.snapshot_references
       }
-      unless manifest.used_at? && CommercialManifestCanonicalizer.digest(envelope) == source.manifest_digest &&
-             snapshot(source).fetch("canonical_data") == manifest.canonical_data
-        raise ArgumentError, "entitlement frozen manifest is invalid"
-      end
-      return unless source.is_a?(PurchaseEffect) && source.purchase.manifest_digest != source.manifest_digest
+      return if manifest.used_at? && CommercialManifestCanonicalizer.digest(envelope) == source.manifest_digest &&
+                snapshot(source).fetch("canonical_data") == manifest.canonical_data
 
-      raise ArgumentError, "entitlement purchase effect manifest is invalid"
+      raise ArgumentError, "entitlement frozen manifest is invalid"
     end
 
     def snapshot(source)
-      source.is_a?(PurchaseEffect) ? source.purchase.commercial_snapshot : source.commercial_snapshot
+      source.commercial_snapshot
     end
 
     def features(source)
@@ -88,19 +87,19 @@ module RecordingStudioBilling
     end
 
     def project_credits(source, root)
-      return [] unless source.is_a?(PurchaseEffect) && source.effect_kind == "credit_pack"
+      return [] unless source.is_a?(Purchase) && source.mode == "one_off_credit_pack"
 
       features(source).filter_map do |credit_key, feature|
         next unless feature.dig("definition", "type") == "allowance"
 
-        amount = Integer(feature.fetch("value")) * source.purchase.quantity
-        CreditLedgerEntry.find_or_create_by!(purchase_effect: source, credit_key:) do |entry|
+        amount = Integer(feature.fetch("value")) * source.quantity
+        CreditLedgerEntry.find_or_create_by!(purchase: source, credit_key:) do |entry|
           entry.root_recording = root
           entry.account_recording = source.account_recording
-          entry.product_recording_id = source.purchase.product_recording_id
+          entry.product_recording_id = source.product_recording_id
           entry.manifest_digest = source.manifest_digest
           entry.amount = amount
-          entry.effective_at = source.effective_at
+          entry.effective_at = source.completed_at
         end
       end
     rescue ArgumentError, TypeError
