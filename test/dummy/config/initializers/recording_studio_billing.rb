@@ -169,7 +169,7 @@ unless Rails.env.test?
   if stripe_test_credentials
     RecordingStudioBilling.configure do |config|
       config.stripe_credential_resolver = -> { DummyStripeTestCredentials.to_h }
-      config.stripe_trusted_origins = [DummyStripeTestCredentials::RETURN_ORIGIN]
+      config.stripe_trusted_origins = [ DummyStripeTestCredentials::RETURN_ORIGIN ]
     end
   end
 end

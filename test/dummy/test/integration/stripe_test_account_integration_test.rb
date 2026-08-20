@@ -12,7 +12,7 @@ class StripeTestAccountIntegrationTest < ActiveSupport::TestCase
   test "the Stripe adapter can open and expire a Checkout session on the test account" do
     adapter = RecordingStudioBilling::StripeAdapter.new(
       credential_resolver: -> { DummyStripeTestCredentials.to_h },
-      trusted_origins_resolver: -> { [DummyStripeTestCredentials::RETURN_ORIGIN] }
+      trusted_origins_resolver: -> { [ DummyStripeTestCredentials::RETURN_ORIGIN ] }
     )
     command = Struct.new(:command_type, :operation_id).new("checkout", "live-probe-#{SecureRandom.uuid}")
 

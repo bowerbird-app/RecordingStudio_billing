@@ -17,6 +17,8 @@ changing the fail-closed test suite.
   when those test keys are present. The Rails test environment never does.
 - `bin/rails stripe:ping` and an opt-in dummy integration test open then expire
   a $1 Stripe Checkout session against the test account.
+- Stripe Checkout `redirect` sends `ui_mode=hosted_page` and `embedded` sends
+  `ui_mode=embedded_page`, matching Stripe's March 2026 Checkout Session enum.
 
 ### Upgrade notes
 
@@ -25,6 +27,8 @@ changing the fail-closed test suite.
 - To exercise Stripe from the dummy app, set Stripe *test* keys in the process
   environment. Cursor Cloud secret names work as-is. The Plan page still uses
   the local fake provider; `stripe:ping` is the live adapter check.
+- Hosts using Stripe Checkout `redirect` or `embedded` now send Stripe's
+  `hosted_page` / `embedded_page` ui modes. No host code change is required.
 
 ## 0.6.0
 

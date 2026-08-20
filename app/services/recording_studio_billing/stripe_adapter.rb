@@ -67,7 +67,7 @@ module RecordingStudioBilling
 
       session = stripe_hash(stripe_client(credential).v1.checkout.sessions.retrieve(provider_reference))
 
-      if session["ui_mode"] == "embedded" && session["client_secret"].present?
+      if session["ui_mode"].to_s.in?(%w[embedded embedded_page]) && session["client_secret"].present?
         { mode: "embedded", client_secret: session["client_secret"],
           publishable_key: credential.fetch(:publishable_key, "") }
       elsif stripe_browser_url?(session["url"])
@@ -173,7 +173,7 @@ module RecordingStudioBilling
       }
       apply_native_tax!(params, checkout.fetch("tax", {}), command)
       apply_collection_method!(params, collection_method, checkout, recurring?(items))
-      params["ui_mode"] = presentation unless %w[payment_link invoice].include?(presentation)
+      apply_checkout_ui_mode!(params, presentation)
       if presentation == "embedded" && credential[:return_url].present?
         assign_trusted_url!(params, "return_url",
                             credential[:return_url])
@@ -297,6 +297,13 @@ module RecordingStudioBilling
 
       AdapterResponse.new(status: "success", result: { "no_charge" => true, "presentation" => "no_charge" },
                           metadata: { "adapter" => "stripe" })
+    end
+
+    def apply_checkout_ui_mode!(params, presentation)
+      case presentation
+      when "embedded" then params["ui_mode"] = "embedded_page"
+      when "redirect" then params["ui_mode"] = "hosted_page"
+      end
     end
 
     def stripe_checkout_mode(session)

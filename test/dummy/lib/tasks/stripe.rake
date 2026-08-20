@@ -7,7 +7,7 @@ namespace :stripe do
 
     adapter = RecordingStudioBilling::StripeAdapter.new(
       credential_resolver: -> { DummyStripeTestCredentials.to_h },
-      trusted_origins_resolver: -> { [DummyStripeTestCredentials::RETURN_ORIGIN] }
+      trusted_origins_resolver: -> { [ DummyStripeTestCredentials::RETURN_ORIGIN ] }
     )
     command = Struct.new(:command_type, :operation_id).new("checkout", "dummy-stripe-ping-#{SecureRandom.uuid}")
     response = adapter.call(

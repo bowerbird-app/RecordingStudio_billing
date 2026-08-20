@@ -109,7 +109,7 @@ class StripeAdapterTest < Minitest::Test
       Struct.new(:id).new("cs_embedded_123")
     end
     sessions.define_singleton_method(:retrieve) do |_reference|
-      { "ui_mode" => "embedded", "client_secret" => "cs_test_secret", "id" => "cs_embedded_123" }
+      { "ui_mode" => "embedded_page", "client_secret" => "cs_test_secret", "id" => "cs_embedded_123" }
     end
     client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
     adapter = RecordingStudioBilling::StripeAdapter.new(
@@ -124,13 +124,41 @@ class StripeAdapterTest < Minitest::Test
     response = adapter.call(command:, request:, idempotency_key: "durable-key")
 
     assert_equal "pending", response.status
-    assert_equal "embedded", captured.fetch(:params).fetch("ui_mode")
+    assert_equal "embedded_page", captured.fetch(:params).fetch("ui_mode")
     assert_equal "payment", captured.fetch(:params).fetch("mode")
     assert_equal 1_200, captured.fetch(:params).dig("line_items", 0, "price_data", "unit_amount")
     refute_includes captured.fetch(:params).to_s, "card_number"
     refute_match(/client_secret|sk_test|pk_test/, [response.result, response.metadata].inspect)
     assert_equal({ mode: "embedded", client_secret: "cs_test_secret", publishable_key: "pk_test" },
                  adapter.checkout_presentation(provider_reference: response.provider_reference))
+  end
+
+  def test_redirect_checkout_maps_to_stripe_hosted_page_ui_mode
+    captured = nil
+    sessions = Object.new
+    sessions.define_singleton_method(:create) do |params, options|
+      captured = { params:, options: }
+      Struct.new(:id).new("cs_redirect_123")
+    end
+    client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: lambda {
+        { secret_key: "sk_test", success_url: "https://app.example.test/billing",
+          cancel_url: "https://app.example.test/billing" }
+      },
+      trusted_origins_resolver: -> { ["https://app.example.test"] },
+      client_factory: ->(_secret) { client }
+    )
+    command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
+    request = { "request" => { "presentation" => "redirect", "currency" => "USD", "collection_method" => "automatic",
+                               "checkout_items" => { "item-1" => { "amount_minor" => 100, "quantity" => 1,
+                                                                   "recurrence" => "one_time" } } } }
+
+    response = adapter.call(command:, request:, idempotency_key: "durable-key")
+
+    assert_equal "pending", response.status
+    assert_equal "hosted_page", captured.fetch(:params).fetch("ui_mode")
+    assert_equal "https://app.example.test/billing", captured.fetch(:params).fetch("success_url")
   end
 
   def test_checkout_enables_native_stripe_tax_only_from_the_frozen_command_policy
