@@ -83,6 +83,7 @@ class DummyV1Catalogue
     publish_unpublished_prices!
     refresh_published_records!
     seed_features!
+    apply_default_free_entitlements!
     seed_stripe_probe!
     seed_customer_journeys!
   end
@@ -104,9 +105,6 @@ class DummyV1Catalogue
     )
     @account = account_recording.recordable
     @billing_admin = billing_admin_recording.recordable
-    RecordingStudioBilling.apply_default_free_entitlements!(
-      root_recording: @root_recording, account_recording: account_recording
-    )
     seed_customer_access!
   end
 
@@ -403,6 +401,16 @@ class DummyV1Catalogue
     @priority_feature = refresh(@priority_feature)
     @usage_feature = refresh(@usage_feature)
     @projects_feature = refresh(@projects_feature)
+  end
+
+  def apply_default_free_entitlements!
+    account_recording = RecordingStudio::Recording.unscoped.find_by!(
+      root_recording: @root_recording, parent_recording: @root_recording,
+      recordable_type: "RecordingStudioBilling::Account", trashed_at: nil
+    )
+    RecordingStudioBilling.apply_default_free_entitlements!(
+      root_recording: @root_recording, account_recording: account_recording
+    )
   end
 
   def seed_stripe_probe!

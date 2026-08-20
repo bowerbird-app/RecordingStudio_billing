@@ -26,7 +26,8 @@ module RecordingStudioBilling
                                           currency_code: resolution.currency_code).price!
       manifest = CommercialManifestResolver.new(
         product:, billing_option:, price:, market: resolution.market, currency_code: resolution.currency_code,
-        account_recording:, trusted_context: {
+        account_recording: nil,
+        trusted_context: {
           country_code: resolution.country_code, market_recording_id: resolution.market.recording.id,
           currency_code: resolution.currency_code, quantity: billing_option.default_quantity || 1
         }
