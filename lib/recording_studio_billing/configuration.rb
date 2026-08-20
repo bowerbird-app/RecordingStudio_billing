@@ -20,7 +20,7 @@ module RecordingStudioBilling
                 :provider_registry, :tax_calculator_registry, :stripe_credential_resolver, :billing_copy, :support_url,
                 :billing_presenter_overrides, :billing_provider_components, :stripe_trusted_origins, :stripe_tax_code_resolver,
                 :stripe_portal_customer_resolver, :stripe_portal_configuration_id, :billing_portal_context_resolver,
-                :billing_location_context_resolver
+                :billing_location_context_resolver, :plans_page_requires_sign_in, :plans_page_route_helper
 
     def initialize
       @provider = :stripe
@@ -49,6 +49,8 @@ module RecordingStudioBilling
       @stripe_portal_configuration_id = nil
       @billing_portal_context_resolver = nil
       @billing_location_context_resolver = nil
+      @plans_page_requires_sign_in = true
+      @plans_page_route_helper = :plans_path
     end
 
     def to_h
@@ -62,6 +64,8 @@ module RecordingStudioBilling
         support_url: support_url,
         billing_presenter_overrides: billing_presenter_overrides.keys,
         billing_provider_components: billing_provider_components.keys,
+        plans_page_requires_sign_in: plans_page_requires_sign_in,
+        plans_page_route_helper: plans_page_route_helper,
         hooks_registered: hooks.instance_variable_get(:@registry).transform_values(&:size)
       }
     end
@@ -228,6 +232,17 @@ module RecordingStudioBilling
       end
 
       @billing_location_context_resolver = value
+    end
+
+    def plans_page_requires_sign_in=(value)
+      @plans_page_requires_sign_in = value == true
+    end
+
+    def plans_page_route_helper=(value)
+      helper = value.to_sym
+      raise ArgumentError, "plans_page_route_helper must be present" if helper.to_s.empty?
+
+      @plans_page_route_helper = helper
     end
 
     def reset_registries!

@@ -2,6 +2,18 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.5.0 — host plans route
+
+The install generator now adds a host-level plans route through
+`draw_recording_studio_billing_plans` (default `/plans`). The gem owns
+`RecordingStudioBilling::PlansController`, the presenter, and the Flatpack plan
+cards. The page renders in `recording_studio/default_layout` only.
+
+Existing hosts should add the route helper line to `config/routes.rb` and set
+`config.plans_page_route_helper = :plans_path` (or whatever `as:` name you
+choose). Customer billing `/billing/plan` redirects to that route when it is
+configured.
+
 ## 0.4.0 — one-time purchases are recordables
 
 `0.4.0` rewrites `db/schema/install_recording_studio_billing.sql` again. There is

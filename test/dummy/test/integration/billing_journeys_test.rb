@@ -223,6 +223,11 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     select_root(@workspace_root)
 
     get "/billing/billing/plan", params: { root_recording_id: @workspace_root.id }
+    assert_response :redirect
+    assert_includes response.redirect_url, "/plans"
+    assert_includes response.redirect_url, @workspace_root.id.to_s
+
+    get "/plans", params: { root_recording_id: @workspace_root.id }
     assert_response :success, response.body
     assert_includes response.body, "Monthly plan"
     assert_includes response.body, "Current"
@@ -234,6 +239,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Choose a plan"
     assert_includes response.body, "Pick the plan that fits this workspace"
     assert_includes response.body, "Choose this plan"
+    assert_includes response.body, 'data-billing-layout="recording-studio-default"'
     refute_includes response.body, "$51"
     refute_includes response.body, "Usage ·"
     refute_includes response.body, "Cancel plan"

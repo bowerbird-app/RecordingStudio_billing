@@ -67,7 +67,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
 
     post "/billing/billing/checkout", params: selection_params(quantity: 2)
 
-    assert_redirected_to %r{/billing/billing/plan\?root_recording_id=}
+    assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 1, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
     assert_equal 1, RecordingStudioBilling::FinancialCommand.where(root_recording: @root).count
   end
@@ -154,7 +154,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     ].each do |parameters|
       post "/billing/billing/checkout", params: parameters
 
-      assert_redirected_to %r{/billing/billing/plan\?root_recording_id=}
+      assert_redirected_to %r{/plans\?root_recording_id=}
     end
 
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
@@ -167,7 +167,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
                                                                  "0" => { billing_option_recording_id: disabled_option.recording.id, quantity: 1 }
                                                                })
 
-    assert_redirected_to %r{/billing/billing/plan\?root_recording_id=}
+    assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(disabled_root).count
 
     switch_root(@root)
@@ -176,7 +176,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
                                                                  "1" => { billing_option_recording_id: @option.recording.id, quantity: 1 }
                                                                })
 
-    assert_redirected_to %r{/billing/billing/plan\?root_recording_id=}
+    assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
   end
 

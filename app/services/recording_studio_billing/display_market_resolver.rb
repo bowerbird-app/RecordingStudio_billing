@@ -35,11 +35,15 @@ module RecordingStudioBilling
     def context = location_context.to_h.symbolize_keys
 
     def default_location_context
-      account = account_recording.recordable
-      host = RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:,
-                                                                                          account_recording:).to_h || {}
-      host.symbolize_keys.merge(declaration_country: account.billing_country_code,
-                                account_currency: account.billing_currency_code)
+      if account_recording.present?
+        account = account_recording.recordable
+        host = RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:,
+                                                                                            account_recording:).to_h || {}
+        host.symbolize_keys.merge(declaration_country: account.billing_country_code,
+                                  account_currency: account.billing_currency_code)
+      else
+        RecordingStudioBilling.configuration.billing_location_context_resolver&.call(root_recording:).to_h.symbolize_keys
+      end
     end
 
     def global_fallback

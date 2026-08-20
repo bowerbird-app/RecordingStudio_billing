@@ -3,31 +3,38 @@
 require "recording_studio_accessible"
 
 module RecordingStudioBilling
-  class ApplicationController < ActionController::Base
+  class PlansApplicationController < ActionController::Base
     include RecordingStudio::RootSwitchable::ControllerSupport if defined?(RecordingStudio::RootSwitchable::ControllerSupport)
     include Devise::Controllers::Helpers if defined?(Devise::Controllers::Helpers)
     include BillingWorkspaceContext
     include HostLayoutSupport
 
     protect_from_forgery with: :exception
-    layout :billing_host_layout
+    layout :plans_host_layout
     helper RecordingStudioBilling::EngineRoutesHelper
 
-    before_action :authenticate_billing_user!
-    before_action :load_root_recording!
+    before_action :authenticate_billing_user!, if: :plans_page_requires_sign_in?
+    before_action :load_plans_root_recording!
 
     private
 
-    def billing_host_layout
-      return "application" if non_html_format?
+    def plans_page_requires_sign_in?
+      RecordingStudioBilling.configuration.plans_page_requires_sign_in
+    end
 
-      if host_layout?("recording_studio/default_layout")
-        "recording_studio/default_layout"
-      elsif host_layout?("flat_pack_sidebar")
-        "flat_pack_sidebar"
+    def load_plans_root_recording!
+      if plans_page_requires_sign_in?
+        load_root_recording!
       else
-        "application"
+        load_optional_root_recording!
       end
+    end
+
+    def plans_host_layout
+      return "application" if non_html_format?
+      raise ActiveRecord::RecordNotFound unless host_layout?("recording_studio/default_layout")
+
+      "recording_studio/default_layout"
     end
 
     def authenticate_billing_user!

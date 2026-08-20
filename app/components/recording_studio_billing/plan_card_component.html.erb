@@ -21,7 +21,7 @@
   <% end %>
   <% if @plan[:checkoutable] %>
     <% card.footer do %>
-      <%= form_with url: helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
+      <%= form_with url: billing_route_helpers.checkout_billing_path(root_recording_id: @presenter.root_recording.id), method: :post do %>
         <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
         <%= hidden_field_tag "items[0][billing_option_recording_id]", @plan[:option].recording.id %>
         <% if @plan[:quantity_mode] == "adjustable" %>
@@ -35,6 +35,15 @@
           type: :submit
         ) %>
       <% end %>
+    <% end %>
+  <% elsif @presenter.respond_to?(:checkout_available?) && !@presenter.checkout_available? %>
+    <% card.footer do %>
+      <%= render FlatPack::Button::Component.new(
+        text: @presenter.copy("plans_sign_in_to_choose", "Sign in to choose this plan"),
+        style: @plan[:highlighted] ? :primary : :secondary,
+        class: "w-full",
+        url: helpers.main_app.user_session_path
+      ) %>
     <% end %>
   <% end %>
 <% end %>

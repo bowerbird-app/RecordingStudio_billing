@@ -2,6 +2,8 @@
 
 module RecordingStudioBilling
   class BaseComponent < ViewComponent::Base
+    include RecordingStudioBilling::EngineRoutesHelper
+
     renders_many :header_extensions
     renders_many :body_extensions
     renders_many :footer_extensions

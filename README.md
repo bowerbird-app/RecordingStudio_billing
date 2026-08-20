@@ -40,9 +40,12 @@ gem-template left sidebar (`flat_pack_sidebar`), then `application`.
 
 The customer area is a set of gem-owned screens the host mounts. Each screen
 is one job: Overview, Plan, Plan requests, Add-ons, Usage, Invoices, Payments,
-and Billing settings. Pages render inside Recording Studio's
-`recording_studio/default_layout`. The Plan page is a title, subtitle, and up
-to three pricing cards. Hosts render `RecordingStudioBilling::CustomerSidebarComponent`
+and Billing settings. The **Plan** picker also mounts at a host-nominated route
+(default `/plans`) via `draw_recording_studio_billing_plans`; the gem owns the
+controller and ViewComponents. Billing pages render inside Recording Studio's
+`recording_studio/default_layout` when that template exists; the plans page uses
+that layout exclusively. The Plan page is a title, subtitle, and up to three
+pricing cards. Hosts render `RecordingStudioBilling::CustomerSidebarComponent`
 in that layout's sidebar so billing links update with the gem. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
 Customer billing authorizes through RecordingStudio Accessible role grants on

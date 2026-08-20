@@ -25,7 +25,7 @@ module RecordingStudioBilling
     def default_items
       [
         { page: :overview, label: "Overview", href: overview_href, icon: :home },
-        { page: :subscriptions, label: "Plan", href: billing_path(:plan_billing_path), icon: :credit_card },
+        { page: :subscriptions, label: "Plan", href: plans_href, icon: :credit_card },
         { page: :plan_requests, label: "Plan requests", href: billing_path(:plan_requests_billing_path),
           icon: :document },
         { page: :addons, label: "Add-ons", href: billing_path(:addons_billing_path), icon: :plus },
@@ -48,7 +48,7 @@ module RecordingStudioBilling
     def inferred_page
       path = helpers.request&.path.to_s
       return :plan_requests if path.include?("plan_requests")
-      return :subscriptions if path.include?("/plan")
+      return :subscriptions if path.match?(%r{/plans?\z}) || path.include?("/billing/plan")
       return :addons if path.include?("/addons")
       return :usage if path.include?("/usage")
       return :invoices if path.include?("/invoices")
@@ -65,6 +65,15 @@ module RecordingStudioBilling
 
       separator = path.include?("?") ? "&" : "?"
       "#{path}#{separator}root_recording_id=#{ERB::Util.url_encode(@root_recording_id.to_s)}"
+    end
+
+    def plans_href
+      return billing_path(:plan_billing_path) if @root_recording_id.blank?
+
+      root = RecordingStudio::Recording.find(@root_recording_id)
+      RecordingStudioBilling::PlansPage.path_for(root)
+    rescue ActiveRecord::RecordNotFound
+      billing_path(:plan_billing_path)
     end
 
     def billing_path(helper_name)
