@@ -16,6 +16,8 @@ module RecordingStudioBilling
 
         normalized = { "kind" => kind }
         normalized["label"] = gate[:label].to_s if gate[:label].present?
+        feature_key = gate[:feature_key].presence || gate[:key].presence
+        normalized["feature_key"] = feature_key.to_s if feature_key.present?
 
         case kind
         when "limit"
@@ -26,10 +28,7 @@ module RecordingStudioBilling
           normalized["accepts_subject"] = accepts_keyword?(count, :subject)
           normalized["requires_subject"] = requires_keyword?(count, :subject)
         when "boolean"
-          feature_key = gate[:feature_key].presence || gate[:key].presence
-          raise ArgumentError, "boolean gate requires feature_key" if feature_key.blank?
-
-          normalized["feature_key"] = feature_key.to_s
+          raise ArgumentError, "boolean gate requires feature_key" if normalized["feature_key"].blank?
         end
 
         normalized.freeze

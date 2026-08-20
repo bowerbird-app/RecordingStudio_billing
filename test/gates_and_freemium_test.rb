@@ -37,6 +37,7 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
     GatesTestCounts.reset!
     @actor = User.create!(email: "gates-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
                           password_confirmation: "Password1!")
+    RecordingStudioBilling.configuration.gates = {}
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     RecordingStudioBilling.configuration.default_free_plan_product_key = "free_plan"
     RecordingStudioBilling.configuration.commercial_authorizer = ->(**) { true }
@@ -98,15 +99,85 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
 
     allowed = RecordingStudioBilling.enforce_gate!(root_recording: graph[:customer_root], gate_key: "projects")
     assert allowed.allowed
+    assert_equal 1, allowed.remaining
+    assert_nil allowed.code
 
     GatesTestCounts.set(graph[:customer_root], 2)
     denied = RecordingStudioBilling.enforce_gate!(root_recording: graph[:customer_root], gate_key: "projects")
     refute denied.allowed
+    assert_equal "limit_reached", denied.code
+    assert_equal 0, denied.remaining
     assert_match(/limit reached/, denied.reason)
 
-    assert_raises(RecordingStudioBilling::EnforceGate::Denied) do
+    error = assert_raises(RecordingStudioBilling::EnforceGate::Denied) do
       RecordingStudioBilling.require_gate!(root_recording: graph[:customer_root], gate_key: "projects")
     end
+    assert_equal "limit_reached", error.code
+  end
+
+  test "enforce gate quantity reserves multiple units against the limit" do
+    graph = published_free_plan_catalogue
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+    GatesTestCounts.set(graph[:customer_root], 0)
+
+    allowed = RecordingStudioBilling.enforce_gate!(
+      root_recording: graph[:customer_root], gate_key: "projects", quantity: 2
+    )
+    assert allowed.allowed
+    assert_equal 2, allowed.remaining
+
+    denied = RecordingStudioBilling.enforce_gate!(
+      root_recording: graph[:customer_root], gate_key: "projects", quantity: 3
+    )
+    refute denied.allowed
+    assert_equal "limit_reached", denied.code
+    assert_equal 2, denied.remaining
+  end
+
+  test "enforce gate treats minus one as unlimited" do
+    graph = published_free_plan_catalogue(option_feature_values: { "projects" => RecordingStudioBilling::EnforceGate::UNLIMITED })
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+    GatesTestCounts.set(graph[:customer_root], 100)
+
+    result = RecordingStudioBilling.enforce_gate!(
+      root_recording: graph[:customer_root], gate_key: "projects", quantity: 50
+    )
+    assert result.allowed
+    assert_nil result.remaining
+    assert_equal RecordingStudioBilling::EnforceGate::UNLIMITED, result.limit
+  end
+
+  test "register gate merges and feature key can differ from gate key" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    RecordingStudioBilling.configuration.gates = {}
+    RecordingStudioBilling.register_gate(
+      "create_project",
+      kind: :limit,
+      feature_key: "projects",
+      label: "Projects",
+      count: ->(root:) { GatesTestCounts.for(root) }
+    )
+    assert_equal "projects", RecordingStudioBilling.configuration.gates.fetch("create_project").fetch("feature_key")
+
+    graph = published_free_plan_catalogue
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+    GatesTestCounts.set(graph[:customer_root], 1)
+
+    allowed = RecordingStudioBilling.enforce_gate!(root_recording: graph[:customer_root], gate_key: "create_project")
+    assert allowed.allowed
+  end
+
+  test "gate configuration rejects mismatched feature definitions" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.register_gate(
+        "priority",
+        kind: :boolean,
+        feature_key: "projects",
+        label: "Priority"
+      )
+    end
+    assert_match(/does not match feature/, error.message)
   end
 
   test "enforce gate accepts optional subject for child-scoped counts" do
@@ -117,12 +188,11 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
         validation: { "minimum" => 0 }
       }
     )
-    RecordingStudioBilling.configuration.gates = RecordingStudioBilling.configuration.gates.merge(
-      "comments_per_page" => {
-        kind: :limit,
-        label: "Comments",
-        count: ->(root:, subject:) { root && subject.fetch(:comments) }
-      }
+    RecordingStudioBilling.register_gate(
+      "comments_per_page",
+      kind: :limit,
+      label: "Comments",
+      count: ->(root:, subject:) { root && subject.fetch(:comments) }
     )
     graph = published_free_plan_catalogue(
       option_feature_values: { "projects" => 2, "comments_per_page" => 4 }

@@ -17,7 +17,11 @@ upgrade if you need bootstrap rows in non-production environments.
 
 Limit gates may pass optional `subject:` into the host `count` proc for
 child-scoped quantities (for example comments on a page). Commercial limits
-still resolve on the root; there are no per-child entitlement grants.
+still resolve on the root; there are no per-child entitlement grants. Use
+`quantity:` when creating more than one item, `feature_key:` when the gate name
+differs from the plan feature, and `-1` on the plan feature for unlimited.
+Prefer `register_gate` so addons can contribute without replacing the whole
+registry. Inventory limits use gates; metered allowances use usage APIs.
 
 ## 0.5.0 — host plans route
 

@@ -17,10 +17,19 @@ RecordingStudioBilling.configure do |config|
   # config.default_free_plan_product_key = "free_plan"
   #
   # Optional app-owned gates (Billing resolves allowances; the host counts usage):
-  # config.gates = {
-  #   "pages" => { kind: :limit, label: "Pages", count: ->(root:) { Page.for_root(root).count } },
-  #   "comments_per_page" => {
-  #     kind: :limit, label: "Comments", count: ->(root:, subject:) { subject.comments.count }
-  #   }
-  # }
+  # config.register_gate(
+  #   "pages",
+  #   kind: :limit,
+  #   label: "Pages",
+  #   count: ->(root:) { Page.for_root(root).count }
+  # )
+  # config.register_gate(
+  #   "comments_per_page",
+  #   kind: :limit,
+  #   label: "Comments",
+  #   count: ->(root:, subject:) { subject.comments.count }
+  # )
+  # Prefer register_gate over replacing config.gates so engines can contribute.
+  # Inventory limits use gates; metered API/usage allowances use usage APIs.
+  # Plan feature value -1 means unlimited for limit gates.
 end

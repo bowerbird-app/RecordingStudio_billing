@@ -111,50 +111,58 @@ RecordingStudioBilling.feature_value(root_recording: workspace, feature_key: "se
 
 ### App-owned gates
 
-Hosts declare what each plan limit *means* in application code. Billing resolves the allowance; the host counts usage and enforces at create/action sites:
+Hosts declare what each plan limit *means* in application code. Billing resolves the allowance; the host counts usage and enforces at create/action sites.
+
+Use gates for **inventory-style** checks (booleans and live quantity counts). Use usage, allowances, credits, and overage APIs for **consumed meters** (API calls this period). Do not wire metered consumption through `config.gates`.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
-  config.gates = {
-    "projects" => {
-      kind: :limit,
-      label: "Projects",
-      count: ->(root:) { Project.for_root(root).count }
-    },
-    "priority_support" => {
-      kind: :boolean,
-      feature_key: "priority_support",
-      label: "Priority support"
-    }
+  config.feature_definitions = {
+    "pages" => { source: "catalogue", merge_rule: "replace", default: 0, type: "limit", ... },
+    "priority_support" => { source: "catalogue", merge_rule: "replace", default: false, type: "boolean", ... }
   }
+
+  config.register_gate("pages", kind: :limit, label: "Pages", count: ->(root:) { Page.for_root(root).count })
+  config.register_gate(
+    "create_page",
+    kind: :limit,
+    feature_key: "pages", # gate key may differ from the plan feature key
+    count: ->(root:) { Page.for_root(root).count }
+  )
+  config.register_gate(
+    "priority_support",
+    kind: :boolean,
+    feature_key: "priority_support",
+    label: "Priority support"
+  )
 end
 
-RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "projects") # => Result
-RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "projects") # raises when denied
-RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "projects")
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages") # => Result
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages") # raises when denied
+RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "pages")
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages", quantity: 3)
 ```
 
-Limit gates compare the configured `count` proc against `feature_value` for the same key. Boolean gates delegate to `entitled?`.
+Limit gates compare `current + quantity` to `feature_value` (default `quantity: 1`). Boolean gates delegate to `entitled?`.
+
+Result / `Denied` include `current`, `limit`, `remaining` (capacity left before this request), `quantity`, and a stable `code` (`limit_reached`, `not_configured`, `not_entitled`).
+
+A plan feature value of `-1` (`RecordingStudioBilling::EnforceGate::UNLIMITED`) means unlimited for limit gates.
+
+When both `feature_definitions` and `gates` are present, Billing checks that each gate’s `feature_key` exists and that gate `kind` matches the feature `type`. Call `validate_gate_configuration!` after late registration if needed.
 
 Commercial limits always resolve on the workspace root. For child-scoped quantities (for example comments on a page), pass an optional `subject:` so the host `count` proc can scope its query. Billing does not walk the recording tree or store per-child grants.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
-  config.gates = {
-    "pages" => {
-      kind: :limit,
-      label: "Pages",
-      count: ->(root:) { Page.for_root(root).count }
-    },
-    "comments_per_page" => {
-      kind: :limit,
-      label: "Comments",
-      count: ->(root:, subject:) { subject.comments.count }
-    }
-  }
+  config.register_gate(
+    "comments_per_page",
+    kind: :limit,
+    label: "Comments",
+    count: ->(root:, subject:) { subject.comments.count }
+  )
 end
 
-RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages")
 RecordingStudioBilling.require_gate!(
   root_recording: workspace,
   gate_key: "comments_per_page",

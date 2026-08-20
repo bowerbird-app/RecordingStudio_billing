@@ -120,6 +120,7 @@ module RecordingStudioBilling
 
         result[normalized_key] = FeatureDefinitionRegistry.normalize(definition).freeze
       end.freeze
+      validate_gate_configuration!
     end
 
     def gates=(definitions)
@@ -129,9 +130,34 @@ module RecordingStudioBilling
         raise ArgumentError, "gate key is invalid" unless normalized_key.match?(/\A[a-z][a-z0-9_]*\z/)
 
         normalized = GateRegistry.normalize(definition.merge(key: normalized_key))
-        normalized["feature_key"] ||= normalized_key if normalized.fetch("kind") == "boolean"
+        normalized = normalized.merge("feature_key" => normalized_key).freeze unless normalized.key?("feature_key")
         result[normalized_key] = normalized
       end.freeze
+      validate_gate_configuration!
+    end
+
+    # Merges one gate into the registry without replacing siblings.
+    def register_gate(key, definition)
+      self.gates = gates.merge(key.to_s => definition)
+    end
+
+    # Ensures every gate references a known feature definition with a matching type.
+    # No-op when feature_definitions are empty (definitions often load later in to_prepare).
+    def validate_gate_configuration!
+      return self if feature_definitions.empty? || gates.empty?
+
+      gates.each do |gate_key, gate|
+        feature_key = gate.fetch("feature_key", gate_key)
+        definition = feature_definitions[feature_key]
+        raise ArgumentError, "gate #{gate_key} references unknown feature definition: #{feature_key}" unless definition
+
+        expected = gate.fetch("kind")
+        actual = definition.fetch("type")
+        next if expected == actual
+
+        raise ArgumentError, "gate #{gate_key} kind #{expected} does not match feature #{feature_key} type #{actual}"
+      end
+      self
     end
 
     def default_free_plan_product_key=(value)

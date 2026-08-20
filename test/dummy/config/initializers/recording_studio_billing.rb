@@ -164,14 +164,6 @@ end
 RecordingStudioBilling.register_provider(:fake, RecordingStudioBilling::DummyFinancialAdapter.new)
 
 Rails.application.config.to_prepare do
-  RecordingStudioBilling.configuration.gates = {
-    "demo_projects" => {
-      kind: :limit,
-      label: "Projects",
-      count: ->(root:) { DemoUsageCounter.project_count(root) }
-    }
-  }
-
   RecordingStudioBilling.configuration.feature_definitions = {
     "demo_priority_support" => {
       source: "catalogue", merge_rule: "replace", default: false, type: "boolean", meter_key: nil,
@@ -189,6 +181,13 @@ Rails.application.config.to_prepare do
       validation: { "minimum" => 0 }
     }
   }
+
+  RecordingStudioBilling.register_gate(
+    "demo_projects",
+    kind: :limit,
+    label: "Projects",
+    count: ->(root:) { DemoUsageCounter.project_count(root) }
+  )
 
   registry = RecordingStudioBilling.configuration.tax_calculator_registry
   unless registry.keys.include?("dummy_exclusive")
