@@ -3,9 +3,9 @@
 module RecordingStudioBilling
   class GateMessage
     DEFAULTS = {
-      "limit_reached" => "%{label} limit reached (%{current}/%{limit}). Pick a bigger plan to add more.",
-      "not_configured" => "%{label} is not on this plan yet. Choose a plan that includes it.",
-      "not_entitled" => "%{label} is not included in your plan. Upgrade to unlock it."
+      "limit_reached" => "%<label>s limit reached (%<current>s/%<limit>s). Pick a bigger plan to add more.",
+      "not_configured" => "%<label>s is not on this plan yet. Choose a plan that includes it.",
+      "not_entitled" => "%<label>s is not included in your plan. Upgrade to unlock it."
     }.freeze
 
     def self.call(...) = new(...).call
