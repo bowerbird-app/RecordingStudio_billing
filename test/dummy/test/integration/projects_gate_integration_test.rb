@@ -20,13 +20,13 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
       password_confirmation: "Password1!"
     )
     Current.actor = @user
-    @workspace = Workspace.create!(name: "Projects Workspace #{SecureRandom.hex(4)}")
+    # Dummy all_workspaces default_root is roots.first by name — keep this first.
+    @workspace = Workspace.create!(name: " AAA Projects #{SecureRandom.hex(4)}")
     @root = RecordingStudio.root_recording_for(@workspace)
     @free_plan_key = "projects_free_plan_#{SecureRandom.hex(4)}"
     seed_free_plan_and_bootstrap!
     grant_workspace_access!
     sign_in @user
-    switch_to_root!(@root)
   end
 
   teardown do
@@ -71,17 +71,6 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def switch_to_root!(root_recording)
-    patch recording_studio_root_switchable.v1_root_switch_path(scope: "all_workspaces"),
-          params: {
-            root_switch: {
-              root_recording_id: root_recording.id,
-              return_to: projects_path
-            }
-          }
-    assert_response :redirect
-  end
 
   def seed_free_plan_and_bootstrap!
     admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}"))

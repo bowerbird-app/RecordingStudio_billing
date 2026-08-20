@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class ProjectsController < ApplicationController
+  before_action :require_current_root_recording!
+
   def index
     @projects = Project.for_root(current_root_recording).order(:created_at)
     @gate_status = RecordingStudioBilling.gate_status(
@@ -25,6 +27,12 @@ class ProjectsController < ApplicationController
   end
 
   private
+
+  def require_current_root_recording!
+    return if current_root_recording.present?
+
+    redirect_to root_path, alert: "Pick a workspace first."
+  end
 
   def project_params
     params.require(:project).permit(:name)
