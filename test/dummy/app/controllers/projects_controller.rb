@@ -1,35 +1,47 @@
 # frozen_string_literal: true
 
 class ProjectsController < ApplicationController
-  before_action :require_current_root_recording!
+  before_action :require_workspace_root!
 
   def index
-    @projects = Project.for_root(current_root_recording).order(:created_at)
+    @projects = Project.for_root(workspace_root).order(:created_at)
     @gate_status = RecordingStudioBilling.gate_status(
-      root_recording: current_root_recording,
+      root_recording: workspace_root,
       gate_key: "demo_projects"
     )
   end
 
   def create
     RecordingStudioBilling.require_gate!(
-      root_recording: current_root_recording,
+      root_recording: workspace_root,
       gate_key: "demo_projects"
     )
-    current_root_recording.record(Project) do |project|
+    workspace_root.record(Project) do |project|
       project.name = project_params.fetch(:name)
     end
-    redirect_to projects_path, notice: "Project ready."
+    redirect_to projects_path(root_recording_id: workspace_root.id), notice: "Project ready."
   rescue RecordingStudioBilling::EnforceGate::Denied => e
-    redirect_to projects_path, alert: RecordingStudioBilling.gate_message(e)
+    redirect_to projects_path(root_recording_id: workspace_root.id),
+                alert: RecordingStudioBilling.gate_message(e)
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to projects_path, alert: e.record.errors.full_messages.to_sentence
+    redirect_to projects_path(root_recording_id: workspace_root.id),
+                alert: e.record.errors.full_messages.to_sentence
   end
 
   private
 
-  def require_current_root_recording!
-    return if current_root_recording.present?
+  def workspace_root
+    @workspace_root ||= begin
+      if params[:root_recording_id].present?
+        RecordingStudio::Recording.find(params[:root_recording_id])
+      else
+        current_root_recording
+      end
+    end
+  end
+
+  def require_workspace_root!
+    return if workspace_root.present?
 
     redirect_to root_path, alert: "Pick a workspace first."
   end

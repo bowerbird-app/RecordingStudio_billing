@@ -20,8 +20,7 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
       password_confirmation: "Password1!"
     )
     Current.actor = @user
-    # Dummy all_workspaces default_root is roots.first by name — keep this first.
-    @workspace = Workspace.create!(name: " AAA Projects #{SecureRandom.hex(4)}")
+    @workspace = Workspace.create!(name: "Projects Workspace #{SecureRandom.hex(4)}")
     @root = RecordingStudio.root_recording_for(@workspace)
     @free_plan_key = "projects_free_plan_#{SecureRandom.hex(4)}"
     seed_free_plan_and_bootstrap!
@@ -34,6 +33,7 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
     RecordingStudio::RootSwitchable::Current.device_key = nil
     RecordingStudioBilling.configuration.default_free_plan_product_key = "demo_free_plan"
     ActionController::Base.allow_forgery_protection = @previous_forgery unless @previous_forgery.nil?
+    cleanup_projects_fixtures!
   ensure
     release_database_lock!
   end
@@ -42,28 +42,28 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
     assert_equal 0, Project.for_root(@root).count
     assert RecordingStudioBilling.gate_allowed?(root_recording: @root, gate_key: "demo_projects")
 
-    get projects_path
+    get projects_path(root_recording_id: @root.id)
     assert_response :success
     assert_match(/Projects/, response.body)
     assert_match(/still add 2 of 2/, response.body)
 
-    post projects_path, params: { project: { name: "First project" } }
-    assert_redirected_to projects_path
+    post projects_path(root_recording_id: @root.id), params: { project: { name: "First project" } }
+    assert_redirected_to projects_path(root_recording_id: @root.id)
     follow_redirect!
     assert_match(/First project/, response.body)
     assert_equal 1, Project.for_root(@root).count
 
-    post projects_path, params: { project: { name: "Second project" } }
-    assert_redirected_to projects_path
+    post projects_path(root_recording_id: @root.id), params: { project: { name: "Second project" } }
+    assert_redirected_to projects_path(root_recording_id: @root.id)
     follow_redirect!
     assert_equal 2, Project.for_root(@root).count
 
-    get projects_path
+    get projects_path(root_recording_id: @root.id)
     assert_match(/limit reached/i, response.body)
     assert_match(/See plans/, response.body)
 
-    post projects_path, params: { project: { name: "Blocked project" } }
-    assert_redirected_to projects_path
+    post projects_path(root_recording_id: @root.id), params: { project: { name: "Blocked project" } }
+    assert_redirected_to projects_path(root_recording_id: @root.id)
     follow_redirect!
     assert_match(/limit reached/i, response.body)
     assert_equal 2, Project.for_root(@root).count
@@ -165,6 +165,23 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
     raise "could not grant workspace access: #{result.error}" unless result.success?
   ensure
     RecordingStudioAccessible.configuration.access_management_authorizer = previous if defined?(previous)
+  end
+
+  def cleanup_projects_fixtures!
+    return unless @root
+
+    Project.for_root(@root).find_each do |project|
+      project.recording&.destroy
+      project.delete
+    end
+    if @workspace
+      recording = RecordingStudio::Recording.find_by(recordable: @workspace)
+      recording&.destroy
+      @workspace.delete
+    end
+    @user&.delete
+  rescue StandardError
+    # Best-effort cleanup so other dummy integration tests keep the seeded default root.
   end
 
   def acquire_database_lock!
