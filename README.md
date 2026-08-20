@@ -499,7 +499,11 @@ Workspace/Billing Account and one named AdminRoot/BillingAdmin for
 root-switch demonstrations, as well as product-rule, plan-update, checkout
 presentation, hybrid subscription, usage, refund, adjustment, and
 reconciliation fixtures. Fake tax calculators are registered with tax left
-off. It does not contact Stripe or any other network provider.
+off. Seeded journeys stay on the local fake provider and do not contact Stripe.
+When Stripe *test* keys are present outside the Rails test environment, the dummy
+installs a credential resolver from `stripe_test_secret_key` /
+`stripe_test_publishable_key` (or `STRIPE_TEST_*` aliases) so `bin/rails
+stripe:ping` can call the Stripe test account.
 
 The dummy suite exercises seeded hierarchy and product assertions, root
 switching, permitted customer billing, restricted customer/admin access, and

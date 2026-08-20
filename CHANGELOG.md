@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.6.1
+
+Dummy host can talk to a Stripe test account from Cloud Agent secrets without
+changing the fail-closed test suite.
+
+### Added
+
+- Dummy reads Stripe test keys from `stripe_test_secret_key` /
+  `stripe_test_publishable_key` (Cursor Cloud secret names) or the uppercase
+  `STRIPE_TEST_*` / `STRIPE_*` aliases. Only `sk_test` / `pk_test` values are
+  accepted.
+- Development and production dummy boots install `stripe_credential_resolver`
+  when those test keys are present. The Rails test environment never does.
+- `bin/rails stripe:ping` and an opt-in dummy integration test open then expire
+  a $1 Stripe Checkout session against the test account.
+
+### Upgrade notes
+
+- Host apps are unchanged. Keep resolving Stripe credentials in the host
+  initializer as before.
+- To exercise Stripe from the dummy app, set Stripe *test* keys in the process
+  environment. Cursor Cloud secret names work as-is. The Plan page still uses
+  the local fake provider; `stripe:ping` is the live adapter check.
+
 ## 0.6.0
 
 App-owned feature gates and silent freemium bootstrap from a published $0 catalogue plan.

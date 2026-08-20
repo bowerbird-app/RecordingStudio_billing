@@ -35,7 +35,7 @@ Webhook tables come from `recording_studio_webhooks`. Billing inbound-event tabl
 ## Adapters
 
 - **Stripe** (`RecordingStudioBilling::StripeAdapter`) is the production adapter. Invoice presentation uses hosted Stripe Checkout with invoice creation. `send_invoice` maps to Stripe subscription/invoice collection with `days_until_due`.
-- **Dummy** (`DummyFinancialAdapter` in the test app) supports the same checkout presentations and collection methods. It does not call Stripe.
+- **Dummy** (`DummyFinancialAdapter` in the test app) supports the same checkout presentations and collection methods. Seeded Plan-page journeys stay on this local adapter. When Stripe *test* keys are present outside the Rails test environment, the dummy also installs `stripe_credential_resolver` from `stripe_test_secret_key` / `stripe_test_publishable_key` (or `STRIPE_TEST_*` / `STRIPE_*` aliases) so `bin/rails stripe:ping` can call the Stripe test account. Live keys are ignored.
 - **Fake** (`RecordingStudioBilling::FakeFinancialAdapter`) is for engine tests. Its default checkout and collection contract matches Stripe. Extra usage operations exist only so isolated usage tests can run without a live provider.
 
 Do not introduce a second production checkout vocabulary in the dummy app.

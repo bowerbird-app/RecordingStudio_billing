@@ -1,8 +1,9 @@
 # Dummy App
 
 This Rails app is the host that Recording Studio Billing mounts into. Use it to
-exercise products, pricing, checkout, and admin inventory against PostgreSQL
-without calling Stripe.
+exercise products, pricing, checkout, and admin inventory against PostgreSQL.
+The Plan page and seeded journeys stay on the local fake provider. When Stripe
+test keys are present, the dummy can also call the Stripe test account.
 
 ## What it covers
 
@@ -60,8 +61,25 @@ fake and Stripe-test provider accounts, US/USD, UK/GBP, Italy/EUR, Germany/EUR,
 and global/USD markets with distinct Italy vs Germany euro plan prices, and
 example products (free, $49 monthly, $490 annual with a trial, quantity add-on,
 prepaid credit pack, metered API-call service with allowance and overage). The
-fake provider has no credentials. The Stripe-test account fails closed with
-`configuration_missing` until a host supplies real Stripe test credentials.
+fake provider has no credentials. In the test environment the Stripe-test
+account still fails closed with `configuration_missing`. In development, set
+Stripe *test* keys and the dummy installs a credential resolver:
+
+```bash
+# Cursor Cloud secrets already use these names:
+# stripe_test_secret_key
+# stripe_test_publishable_key
+#
+# Local shells can use the same names or:
+export STRIPE_TEST_SECRET_KEY=sk_test_...
+export STRIPE_TEST_PUBLISHABLE_KEY=pk_test_...
+cd test/dummy
+bin/rails stripe:ping
+```
+
+`stripe:ping` opens a $1 Checkout session on the Stripe test account and expires
+it. Live `sk_live` keys are ignored. The dummy test suite skips the live Stripe
+probe unless those test keys are in the environment.
 
 Dummy checkout presentations and collection methods match the production Stripe
 contract: `embedded`, `redirect`, `payment_link`, `invoice`, `no_charge` and
