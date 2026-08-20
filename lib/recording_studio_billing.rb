@@ -128,16 +128,28 @@ module RecordingStudioBilling
       ApplyDefaultFreeEntitlements.call(...)
     end
 
-    def enforce_gate!(root_recording:, gate_key:, subject: nil, quantity: 1)
-      EnforceGate.call(root_recording:, gate_key:, subject:, quantity:)
+    # Soft by default: returns EnforceGate::Result. Pass mode: :hard to raise Denied.
+    def enforce_gate!(root_recording:, gate_key:, subject: nil, quantity: 1, mode: :soft)
+      mode = mode.to_sym
+      raise ArgumentError, "gate mode must be :soft or :hard" unless %i[soft hard].include?(mode)
+
+      EnforceGate.call(root_recording:, gate_key:, subject:, quantity:, raise_on_failure: mode == :hard)
     end
 
     def require_gate!(root_recording:, gate_key:, subject: nil, quantity: 1)
-      EnforceGate.call(root_recording:, gate_key:, subject:, quantity:, raise_on_failure: true)
+      enforce_gate!(root_recording:, gate_key:, subject:, quantity:, mode: :hard)
     end
 
     def gate_allowed?(root_recording:, gate_key:, subject: nil, quantity: 1)
-      EnforceGate.call(root_recording:, gate_key:, subject:, quantity:).allowed
+      enforce_gate!(root_recording:, gate_key:, subject:, quantity:).allowed
+    end
+
+    def gate_status(...)
+      GateStatus.call(...)
+    end
+
+    def gate_message(...)
+      GateMessage.call(...)
     end
 
     def register_gate(...)

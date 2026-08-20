@@ -23,6 +23,11 @@ differs from the plan feature, and `-1` on the plan feature for unlimited.
 Prefer `register_gate` so addons can contribute without replacing the whole
 registry. Inventory limits use gates; metered allowances use usage APIs.
 
+Soft vs hard: `enforce_gate!` / `gate_allowed?` / `gate_status` are soft (no
+raise). `require_gate!` or `enforce_gate!(mode: :hard)` raise
+`EnforceGate::Denied`. Use `gate_message` (or `gate_status.message`) for
+product copy, and `gate_status.upgrade_path` for the plans page link.
+
 ## 0.5.0 — host plans route
 
 The install generator now adds a host-level plans route through

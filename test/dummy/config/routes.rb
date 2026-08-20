@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   draw_recording_studio_billing_plans path: "/plans"
   mount RecordingStudioBilling::Engine, at: "/billing"
   get "/dummy_portal", to: "dummy_portals#show"
+  resources :projects, only: %i[index create]
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

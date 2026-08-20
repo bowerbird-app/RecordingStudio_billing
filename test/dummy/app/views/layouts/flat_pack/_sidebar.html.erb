@@ -14,6 +14,11 @@
         href: main_app.root_path,
         icon: :home
       ) %>
+      <%= render FlatPack::Sidebar::Item::Component.new(
+        label: "Projects",
+        href: main_app.projects_path,
+        icon: :rectangle_stack
+      ) %>
       <%= render RecordingStudioBilling::CustomerSidebarComponent.new(
         root_recording_id: (current_root_recording.id if respond_to?(:current_root_recording) && current_root_recording)
       ) %>

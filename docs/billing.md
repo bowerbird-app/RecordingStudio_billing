@@ -137,15 +137,22 @@ RecordingStudioBilling.configure do |config|
   )
 end
 
-RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages") # => Result
-RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages") # raises when denied
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages") # soft Result
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages", mode: :hard) # raises
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages") # hard convenience
 RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "pages")
 RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages", quantity: 3)
+
+status = RecordingStudioBilling.gate_status(root_recording: workspace, gate_key: "pages")
+# => allowed, current, limit, remaining, unlimited, code, reason, message, upgrade_path, …
+RecordingStudioBilling.gate_message(status) # product copy from deny code (also accepts EnforceGate::Denied)
 ```
 
 Limit gates compare `current + quantity` to `feature_value` (default `quantity: 1`). Boolean gates delegate to `entitled?`.
 
-Result / `Denied` include `current`, `limit`, `remaining` (capacity left before this request), `quantity`, and a stable `code` (`limit_reached`, `not_configured`, `not_entitled`).
+Soft checks (`enforce_gate!`, `gate_allowed?`, `gate_status`) never raise. Hard checks (`require_gate!` or `mode: :hard`) raise `EnforceGate::Denied`. Use soft checks for UI banners and hard checks at write sites.
+
+Result / `Denied` include `current`, `limit`, `remaining` (capacity left before this request), `quantity`, and a stable `code` (`limit_reached`, `not_configured`, `not_entitled`). Override deny copy through `config.billing_copy` keys such as `gate_limit_reached`.
 
 A plan feature value of `-1` (`RecordingStudioBilling::EnforceGate::UNLIMITED`) means unlimited for limit gates.
 

@@ -32,4 +32,7 @@ RecordingStudioBilling.configure do |config|
   # Prefer register_gate over replacing config.gates so engines can contribute.
   # Inventory limits use gates; metered API/usage allowances use usage APIs.
   # Plan feature value -1 means unlimited for limit gates.
+  # Soft checks: enforce_gate! / gate_allowed? / gate_status
+  # Hard checks: require_gate! or enforce_gate!(mode: :hard)
+  # Denied copy: gate_message(result) — override via config.billing_copy["gate_limit_reached"] etc.
 end

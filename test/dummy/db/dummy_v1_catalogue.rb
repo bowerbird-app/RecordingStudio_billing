@@ -84,6 +84,7 @@ class DummyV1Catalogue
     refresh_published_records!
     seed_features!
     apply_default_free_entitlements!
+    seed_sample_projects!
     seed_stripe_probe!
     seed_customer_journeys!
   end
@@ -286,11 +287,11 @@ class DummyV1Catalogue
       },
       "demo_monthly_plan" => {
         amount: 4_900, recurrence: "recurring", interval: "month", kind: "plan",
-        trial_days: 0, quantity_mode: "fixed", feature_values: {}
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 10 }
       },
       "demo_annual_plan" => {
         amount: 49_000, recurrence: "recurring", interval: "year", kind: "plan",
-        trial_days: 14, quantity_mode: "fixed", feature_values: {}
+        trial_days: 14, quantity_mode: "fixed", feature_values: { "demo_projects" => 25 }
       },
       "demo_quantity_addon" => {
         amount: 1_000, recurrence: "recurring", interval: "month", kind: "addon",
@@ -373,6 +374,17 @@ class DummyV1Catalogue
       kind: "limit", definition: {}, unique_by: :product
     )
     find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
+    )
+    annual = @catalogue.fetch("demo_annual_plan")
+    find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: annual.fetch(:product), product_recording: annual.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
+    )
+    find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
       parent: addon.fetch(:product), product_recording: addon.fetch(:product).recording,
       kind: "boolean", definition: {}, unique_by: :product
@@ -411,6 +423,12 @@ class DummyV1Catalogue
     RecordingStudioBilling.apply_default_free_entitlements!(
       root_recording: @root_recording, account_recording: account_recording
     )
+  end
+
+  def seed_sample_projects!
+    return if Project.for_root(@root_recording).exists?
+
+    @root_recording.record(Project) { |project| project.name = "Starter project" }
   end
 
   def seed_stripe_probe!

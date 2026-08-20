@@ -113,6 +113,43 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
       RecordingStudioBilling.require_gate!(root_recording: graph[:customer_root], gate_key: "projects")
     end
     assert_equal "limit_reached", error.code
+
+    hard = assert_raises(RecordingStudioBilling::EnforceGate::Denied) do
+      RecordingStudioBilling.enforce_gate!(root_recording: graph[:customer_root], gate_key: "projects", mode: :hard)
+    end
+    assert_equal "limit_reached", hard.code
+  end
+
+  test "gate status and message expose soft UI fields" do
+    graph = published_free_plan_catalogue
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+    GatesTestCounts.set(graph[:customer_root], 2)
+
+    status = RecordingStudioBilling.gate_status(root_recording: graph[:customer_root], gate_key: "projects")
+    refute status.allowed
+    assert_equal false, status.unlimited
+    assert_equal 0, status.remaining
+    assert_equal "limit_reached", status.code
+    assert_match(/Projects limit reached/, status.message)
+    assert_match(%r{/plans}, status.upgrade_path)
+    assert_equal status.message, RecordingStudioBilling.gate_message(status)
+
+    error = assert_raises(RecordingStudioBilling::EnforceGate::Denied) do
+      RecordingStudioBilling.require_gate!(root_recording: graph[:customer_root], gate_key: "projects")
+    end
+    assert_match(/Projects limit reached/, RecordingStudioBilling.gate_message(error))
+  end
+
+  test "gate status marks unlimited limits" do
+    graph = published_free_plan_catalogue(option_feature_values: { "projects" => RecordingStudioBilling::EnforceGate::UNLIMITED })
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+    GatesTestCounts.set(graph[:customer_root], 100)
+
+    status = RecordingStudioBilling.gate_status(root_recording: graph[:customer_root], gate_key: "projects")
+    assert status.allowed
+    assert status.unlimited
+    assert_nil status.message
+    assert_nil status.upgrade_path
   end
 
   test "enforce gate quantity reserves multiple units against the limit" do

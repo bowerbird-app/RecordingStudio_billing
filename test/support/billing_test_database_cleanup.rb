@@ -15,6 +15,7 @@ module BillingTestDatabaseCleanup
       quoted_tables = tables.uniq.map { |table| connection.quote_table_name(table) }.join(", ")
 
       connection.execute("TRUNCATE TABLE #{quoted_tables} RESTART IDENTITY CASCADE")
+      Project.delete_all if defined?(Project)
       Workspace.delete_all
       AdminRoot.delete_all
       User.delete_all if defined?(User)

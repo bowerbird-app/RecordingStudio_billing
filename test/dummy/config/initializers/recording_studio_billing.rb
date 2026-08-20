@@ -186,7 +186,7 @@ Rails.application.config.to_prepare do
     "demo_projects",
     kind: :limit,
     label: "Projects",
-    count: ->(root:) { DemoUsageCounter.project_count(root) }
+    count: ->(root:) { Project.for_root(root).count }
   )
   RecordingStudioBilling.validate_gate_configuration!
 
