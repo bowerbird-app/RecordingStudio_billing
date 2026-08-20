@@ -109,8 +109,11 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     assert_not RecordingStudio.root_allowed?(RecordingStudioBilling::Purchase)
     assert_not defined?(RecordingStudioBilling::PurchaseEffect)
     assert_not_includes ActiveRecord::Base.connection.tables, "recording_studio_billing_purchase_effects"
-    assert_equal %w[RecordingStudioBilling::SubscriptionLine RecordingStudioBilling::Purchase],
-                 RecordingStudioBilling::EntitlementGrant::SOURCE_TYPES
+    assert_equal %w[
+      RecordingStudioBilling::SubscriptionLine
+      RecordingStudioBilling::Purchase
+      RecordingStudioBilling::DefaultEntitlementBootstrap
+    ], RecordingStudioBilling::EntitlementGrant::SOURCE_TYPES
   end
 
   test "purchases cannot be recorded straight onto a workspace root" do
