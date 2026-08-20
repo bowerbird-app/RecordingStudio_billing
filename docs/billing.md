@@ -109,6 +109,49 @@ RecordingStudioBilling.entitled?(root_recording: workspace, feature_key: "projec
 RecordingStudioBilling.feature_value(root_recording: workspace, feature_key: "seats")
 ```
 
+### App-owned gates
+
+Hosts declare what each plan limit *means* in application code. Billing resolves the allowance; the host counts usage and enforces at create/action sites:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.gates = {
+    "projects" => {
+      kind: :limit,
+      label: "Projects",
+      count: ->(root:) { Project.for_root(root).count }
+    },
+    "priority_support" => {
+      kind: :boolean,
+      feature_key: "priority_support",
+      label: "Priority support"
+    }
+  }
+end
+
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "projects") # => Result
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "projects") # raises when denied
+RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "projects")
+```
+
+Limit gates compare the configured `count` proc against `feature_value` for the same key. Boolean gates delegate to `entitled?`.
+
+### Freemium bootstrap
+
+Define a $0 plan in the admin catalogue and nominate it as the default free plan. When a billing account is created, Billing can project bootstrap grants from that plan's frozen published manifest — without a subscription or checkout:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.default_free_plan_product_key = "free_plan"
+end
+
+RecordingStudioBilling.ensure_account(root_recording: workspace, name: "Billing account")
+# or explicitly:
+RecordingStudioBilling.apply_default_free_entitlements!(root_recording: workspace)
+```
+
+Bootstrap grants are append-only. When the workspace later has a live subscription, paid subscription and purchase grants take precedence; bootstrap rows remain in the database but are ignored for access checks.
+
 Do not call `project_entitlements` after normal checkout or subscription-change projection unless you are repairing historical data. Replays of those projectors remain idempotent and re-ensure grants.
 
 People may act on a workspace through RecordingStudio Accessible. Whether the workspace has paid for a feature is a separate entitlement check on the root.

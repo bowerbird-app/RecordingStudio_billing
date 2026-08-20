@@ -124,6 +124,22 @@ module RecordingStudioBilling
       entitlement_access(root_recording:).feature_value(feature_key)
     end
 
+    def apply_default_free_entitlements!(...)
+      ApplyDefaultFreeEntitlements.call(...)
+    end
+
+    def enforce_gate!(root_recording:, gate_key:)
+      EnforceGate.call(root_recording:, gate_key:)
+    end
+
+    def require_gate!(root_recording:, gate_key:)
+      EnforceGate.call(root_recording:, gate_key:, raise_on_failure: true)
+    end
+
+    def gate_allowed?(root_recording:, gate_key:)
+      EnforceGate.call(root_recording:, gate_key:).allowed
+    end
+
     def credit_balance(root_recording:, product_recording:)
       product_id = product_recording.respond_to?(:id) ? product_recording.id : product_recording
       entitlement_access(root_recording:).credit_balance(product_id)

@@ -12,4 +12,12 @@ RecordingStudioBilling.configure do |config|
   # Change the path in routes.rb if you want a different URL than /plans.
   config.plans_page_route_helper = :plans_path
   config.plans_page_requires_sign_in = true
+  #
+  # Optional freemium bootstrap from a published $0 plan in your admin catalogue:
+  # config.default_free_plan_product_key = "free_plan"
+  #
+  # Optional app-owned gates (Billing resolves allowances; the host counts usage):
+  # config.gates = {
+  #   "projects" => { kind: :limit, label: "Projects", count: ->(root:) { Project.for_root(root).count } }
+  # }
 end

@@ -104,6 +104,9 @@ class DummyV1Catalogue
     )
     @account = account_recording.recordable
     @billing_admin = billing_admin_recording.recordable
+    RecordingStudioBilling.apply_default_free_entitlements!(
+      root_recording: @root_recording, account_recording: account_recording
+    )
     seed_customer_access!
   end
 
@@ -281,7 +284,7 @@ class DummyV1Catalogue
     {
       "demo_free_plan" => {
         amount: 0, recurrence: "recurring", interval: "month", kind: "plan",
-        trial_days: 0, quantity_mode: "fixed", feature_values: {}
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 2 }
       },
       "demo_monthly_plan" => {
         amount: 4_900, recurrence: "recurring", interval: "month", kind: "plan",
@@ -358,12 +361,18 @@ class DummyV1Catalogue
 
   def seed_features!
     monthly = @catalogue.fetch("demo_monthly_plan")
+    free = @catalogue.fetch("demo_free_plan")
     addon = @catalogue.fetch("demo_quantity_addon")
     credit_pack = @catalogue.fetch("demo_credit_pack")
     @priority_feature = find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
       parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
       kind: "boolean", definition: {}, unique_by: :product
+    )
+    @projects_feature = find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: free.fetch(:product), product_recording: free.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
     )
     find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
@@ -381,10 +390,10 @@ class DummyV1Catalogue
       parent: credit_pack.fetch(:product), product_recording: credit_pack.fetch(:product).recording,
       kind: "allowance", definition: {}, unique_by: :product
     )
-    unpublished = [@priority_feature, @usage_feature].reject { |feature| feature.state == "published" }
+    unpublished = [@priority_feature, @usage_feature, @projects_feature].reject { |feature| feature.state == "published" }
     return if unpublished.empty?
 
-    [[monthly.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|
+    [[monthly.fetch(:us_price)], [free.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|
       RecordingStudioBilling::CommercialPublisher.publish!(
         root_recording: @admin_root_recording,
         price_recording_ids: prices.map { |price| price.recording.id },
@@ -393,6 +402,7 @@ class DummyV1Catalogue
     end
     @priority_feature = refresh(@priority_feature)
     @usage_feature = refresh(@usage_feature)
+    @projects_feature = refresh(@projects_feature)
   end
 
   def seed_stripe_probe!

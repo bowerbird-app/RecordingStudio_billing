@@ -2,6 +2,19 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.6.0 — app-owned gates and freemium bootstrap
+
+Adds `recording_studio_billing_default_entitlement_bootstraps` and extends
+entitlement grant `source_type` to include
+`RecordingStudioBilling::DefaultEntitlementBootstrap`. Existing hosts run the
+new engine migration; fresh installs pick up the updated install SQL snapshot.
+
+Configure a published $0 plan product key and optional gates in
+`RecordingStudioBilling.configure`. New accounts receive bootstrap grants when
+`default_free_plan_product_key` is set. Re-seed or call
+`apply_default_free_entitlements!` for accounts that already existed before this
+upgrade if you need bootstrap rows in non-production environments.
+
 ## 0.5.0 — host plans route
 
 The install generator now adds a host-level plans route through

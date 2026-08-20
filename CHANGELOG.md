@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.6.0
+
+App-owned feature gates and silent freemium bootstrap from a published $0 catalogue plan.
+
+### Added
+
+- `config.gates` for host-defined limit and boolean gates with `enforce_gate!`,
+  `require_gate!`, and `gate_allowed?`.
+- `config.default_free_plan_product_key` and `apply_default_free_entitlements!`
+  to project bootstrap grants from a published free plan manifest when an account
+  is created (also invoked from `ensure_account` when configured).
+- `RecordingStudioBilling::DefaultEntitlementBootstrap` entitlement source.
+  Bootstrap grants are ignored while a live subscription is active.
+- Dummy seeds `demo_projects` (limit 2) on the free plan and a matching gate.
+
+### Upgrade notes
+
+- Run engine migrations (including `AddDefaultEntitlementBootstrap`) or reinstall
+  from the updated `install_recording_studio_billing.sql` snapshot on fresh hosts.
+- Set `config.default_free_plan_product_key` to a published plan product key and
+  declare `config.gates` for features your app enforces locally.
+- Ensure the nominated free plan is published with the intended feature values
+  before accounts are created in production.
+
 ## 0.5.0
 
 Hosts can mount a first-class customer plans page at any URL while the gem owns

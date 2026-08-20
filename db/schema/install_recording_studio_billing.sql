@@ -262,6 +262,16 @@ BEGIN
       AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule)
       AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value
   ) THEN RAISE EXCEPTION 'entitlement purchase grant does not match frozen source'; END IF;
+  IF NEW.source_type = 'RecordingStudioBilling::DefaultEntitlementBootstrap' AND NOT EXISTS (
+    SELECT 1 FROM recording_studio_billing_default_entitlement_bootstraps source
+    WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest
+  ) THEN RAISE EXCEPTION 'entitlement bootstrap source authority is invalid'; END IF;
+  IF NEW.source_type = 'RecordingStudioBilling::DefaultEntitlementBootstrap' AND NOT EXISTS (
+    SELECT 1 FROM recording_studio_billing_default_entitlement_bootstraps source
+    WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind)
+      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule)
+      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value
+  ) THEN RAISE EXCEPTION 'entitlement bootstrap grant does not match frozen source'; END IF;
   IF NOT rs_billing_safe_financial_json(jsonb_build_object('value', NEW.value)) THEN RAISE EXCEPTION 'entitlement grant contains unsafe data'; END IF;
   RETURN NEW;
 END;
@@ -1353,8 +1363,25 @@ CREATE TABLE public.recording_studio_billing_entitlement_grants (
     CONSTRAINT rs_billing_entitlement_grant_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT rs_billing_entitlement_grant_feature_kind CHECK (((feature_kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text]))),
     CONSTRAINT rs_billing_entitlement_grant_merge_rule CHECK (((merge_rule)::text = ANY (ARRAY[('replace'::character varying)::text, ('minimum'::character varying)::text, ('maximum'::character varying)::text, ('merge'::character varying)::text, ('append'::character varying)::text]))),
-    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY (ARRAY[('RecordingStudioBilling::SubscriptionLine'::character varying)::text, ('RecordingStudioBilling::Purchase'::character varying)::text]))),
+    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY (ARRAY[('RecordingStudioBilling::SubscriptionLine'::character varying)::text, ('RecordingStudioBilling::Purchase'::character varying)::text, ('RecordingStudioBilling::DefaultEntitlementBootstrap'::character varying)::text]))),
     CONSTRAINT rs_billing_entitlement_grant_value CHECK ((jsonb_typeof(value) IS NOT NULL))
+);
+
+--
+-- Name: recording_studio_billing_default_entitlement_bootstraps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_default_entitlement_bootstraps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    product_key character varying NOT NULL,
+    manifest_digest character varying NOT NULL,
+    commercial_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    applied_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rs_billing_default_entitlement_bootstrap_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text))
 );
 
 -- Name: recording_studio_billing_feature_overrides; Type: TABLE; Schema: public; Owner: -
@@ -2445,6 +2472,12 @@ ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT recording_studio_billing_entitlement_grants_pkey PRIMARY KEY (id);
 
+-- Name: recording_studio_billing_default_entitlement_bootstraps recording_studio_billing_default_entitlement_bootstraps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT recording_studio_billing_default_entitlement_bootstraps_pkey PRIMARY KEY (id);
+
 -- Name: recording_studio_billing_feature_overrides recording_studio_billing_feature_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3419,6 +3452,21 @@ CREATE UNIQUE INDEX idx_rs_billing_entitlement_grant_source_feature ON public.re
 --
 
 CREATE INDEX idx_rs_billing_entitlement_grants_access ON public.recording_studio_billing_entitlement_grants USING btree (root_recording_id, account_recording_id, feature_key);
+
+-- Name: idx_rs_billing_default_entitlement_bootstrap_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_default_entitlement_bootstrap_account ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (root_recording_id, account_recording_id);
+
+-- Name: idx_rs_billing_default_entitlement_bootstrap_root; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rs_billing_default_entitlement_bootstrap_root ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (root_recording_id);
+
+-- Name: idx_rs_billing_default_entitlement_bootstrap_account_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rs_billing_default_entitlement_bootstrap_account_lookup ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (account_recording_id);
 
 -- Name: idx_rs_billing_meter_aggregation_input; Type: INDEX; Schema: public; Owner: -
 --
@@ -4523,6 +4571,18 @@ ALTER TABLE ONLY public.recording_studio_billing_purchases
 
 ALTER TABLE ONLY public.recording_studio_billing_entitlement_grants
     ADD CONSTRAINT fk_rails_7f8dce0a7f FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+-- Name: recording_studio_billing_default_entitlement_bootstraps fk_rs_billing_default_entitlement_bootstrap_root; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT fk_rs_billing_default_entitlement_bootstrap_root FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+-- Name: recording_studio_billing_default_entitlement_bootstraps fk_rs_billing_default_entitlement_bootstrap_account; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT fk_rs_billing_default_entitlement_bootstrap_account FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 -- Name: recording_studio_billing_cost_cards fk_rails_7fe81ededc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
