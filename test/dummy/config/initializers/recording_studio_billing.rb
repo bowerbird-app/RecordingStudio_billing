@@ -188,6 +188,7 @@ Rails.application.config.to_prepare do
     label: "Projects",
     count: ->(root:) { DemoUsageCounter.project_count(root) }
   )
+  RecordingStudioBilling.validate_gate_configuration!
 
   registry = RecordingStudioBilling.configuration.tax_calculator_registry
   unless registry.keys.include?("dummy_exclusive")

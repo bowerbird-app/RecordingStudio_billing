@@ -169,13 +169,15 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
 
   test "gate configuration rejects mismatched feature definitions" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
+    RecordingStudioBilling.configuration.gates = {}
+    RecordingStudioBilling.register_gate(
+      "priority",
+      kind: :boolean,
+      feature_key: "projects",
+      label: "Priority"
+    )
     error = assert_raises(ArgumentError) do
-      RecordingStudioBilling.register_gate(
-        "priority",
-        kind: :boolean,
-        feature_key: "projects",
-        label: "Priority"
-      )
+      RecordingStudioBilling.validate_gate_configuration!
     end
     assert_match(/does not match feature/, error.message)
   end

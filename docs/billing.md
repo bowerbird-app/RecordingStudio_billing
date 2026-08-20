@@ -149,7 +149,10 @@ Result / `Denied` include `current`, `limit`, `remaining` (capacity left before 
 
 A plan feature value of `-1` (`RecordingStudioBilling::EnforceGate::UNLIMITED`) means unlimited for limit gates.
 
-When both `feature_definitions` and `gates` are present, Billing checks that each gate’s `feature_key` exists and that gate `kind` matches the feature `type`. Call `validate_gate_configuration!` after late registration if needed.
+When both `feature_definitions` and `gates` are present, call
+`validate_gate_configuration!` after registration (for example at the end of
+`to_prepare`) so Billing can check that each gate’s `feature_key` exists and that
+gate `kind` matches the feature `type`.
 
 Commercial limits always resolve on the workspace root. For child-scoped quantities (for example comments on a page), pass an optional `subject:` so the host `count` proc can scope its query. Billing does not walk the recording tree or store per-child grants.
 

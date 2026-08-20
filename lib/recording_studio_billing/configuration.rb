@@ -120,7 +120,6 @@ module RecordingStudioBilling
 
         result[normalized_key] = FeatureDefinitionRegistry.normalize(definition).freeze
       end.freeze
-      validate_gate_configuration!
     end
 
     def gates=(definitions)
@@ -133,7 +132,6 @@ module RecordingStudioBilling
         normalized = normalized.merge("feature_key" => normalized_key).freeze unless normalized.key?("feature_key")
         result[normalized_key] = normalized
       end.freeze
-      validate_gate_configuration!
     end
 
     # Merges one gate into the registry without replacing siblings.
@@ -142,7 +140,8 @@ module RecordingStudioBilling
     end
 
     # Ensures every gate references a known feature definition with a matching type.
-    # No-op when feature_definitions are empty (definitions often load later in to_prepare).
+    # Call after both feature_definitions and gates are configured (for example at
+    # the end of to_prepare). No-op when either registry is empty.
     def validate_gate_configuration!
       return self if feature_definitions.empty? || gates.empty?
 
