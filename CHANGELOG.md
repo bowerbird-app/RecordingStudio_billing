@@ -18,6 +18,9 @@ the controller, presenter, and ViewComponents.
   and `config.plans_page_requires_sign_in` (default `true`).
 - Billing **Plan** sidebar links and **View plans** buttons resolve through the
   host plans route when configured. `GET /billing/plan` redirects there.
+- Dummy Tailwind writes `@source` paths from `bundle show` before
+  `tailwindcss:build`, so Flatpack sidebar layout utilities compile under rbenv
+  as well as vendor/bundle and CI.
 
 ### Upgrade notes
 

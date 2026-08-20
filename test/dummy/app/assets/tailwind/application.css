@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./gem_sources.css";
 
 @theme inline {
   --color-primary: var(--color-primary);
@@ -14,18 +15,6 @@
 @source "../../../../../app/views/**/*.erb";
 @source "../../../../../app/components/**/*.{rb,erb}";
 
-/* FlatPack components: vendor, CI, and mise-installed git gems */
-@source "../../../vendor/bundle/**/flatpack*/app/components/**/*.{rb,erb}";
-@source "../../../vendor/bundle/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-@source "../../../../../vendor/bundle/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-@source "../../../../../../home/ubuntu/.local/share/mise/installs/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-@source "../../../../../../home/*/.local/share/mise/installs/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-
-/* Recording Studio views for the same gem locations */
-@source "../../../vendor/bundle/**/recording_studio*/app/views/**/*.erb";
-@source "../../../vendor/bundle/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
-@source "../../../../../vendor/bundle/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
-@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/recordingstudio-*/app/views/**/*.erb";
-@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
-@source "../../../../../../home/ubuntu/.local/share/mise/installs/ruby/**/bundler/gems/RecordingStudio-*/app/views/**/*.erb";
+/* Bundled gem sources are written by `rake tailwindcss:write_gem_sources`
+   (a prerequisite of tailwindcss:build / watch) so rbenv, mise, vendor/bundle,
+   and CI all scan Flatpack and Recording Studio from `bundle show`. */

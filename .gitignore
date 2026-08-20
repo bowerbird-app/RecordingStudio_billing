@@ -33,6 +33,7 @@ test/dummy/tmp/
 test/dummy/storage/
 test/dummy/vendor/bundle/
 test/dummy/app/assets/builds/
+test/dummy/app/assets/tailwind/gem_sources.css
 test/dummy/public/assets/
 
 # Credentials
