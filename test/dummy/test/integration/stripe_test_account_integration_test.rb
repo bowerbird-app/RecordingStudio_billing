@@ -3,8 +3,6 @@
 require "test_helper"
 
 class StripeTestAccountIntegrationTest < ActiveSupport::TestCase
-  parallelize(workers: 1)
-
   setup do
     skip "Stripe test credentials are not configured" unless DummyStripeTestCredentials.present?
   end

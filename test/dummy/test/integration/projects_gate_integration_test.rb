@@ -73,7 +73,9 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   private
 
   def seed_free_plan_and_bootstrap!
-    admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}"))
+    @catalogue_admin = AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}")
+    admin_root = RecordingStudio.root_recording_for(@catalogue_admin)
+    @catalogue_admin_recording = admin_root
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: admin_root, key: "billing_#{SecureRandom.hex(4)}")
     provider = admin_root.record(RecordingStudioBilling::ProviderAccount, parent_recording: admin.recording) do |account|
       account.billing_admin_recording = admin.recording
@@ -168,20 +170,7 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def cleanup_projects_fixtures!
-    return unless @root
-
-    Project.for_root(@root).find_each do |project|
-      project.recording&.destroy
-      project.delete
-    end
-    if @workspace
-      recording = RecordingStudio::Recording.find_by(recordable: @workspace)
-      recording&.destroy
-      @workspace.delete
-    end
-    @user&.delete
-  rescue StandardError
-    # Best-effort cleanup so other dummy integration tests keep the seeded default root.
+    BillingTestDatabaseCleanup.clear!
   end
 
   def acquire_database_lock!

@@ -3,38 +3,24 @@
 require "test_helper"
 
 class DummyStripeTestCredentialsTest < ActiveSupport::TestCase
-  parallelize(workers: 1)
-
-  setup do
-    @previous = {
-      "stripe_test_secret_key" => ENV["stripe_test_secret_key"],
-      "stripe_test_publishable_key" => ENV["stripe_test_publishable_key"],
-      "STRIPE_TEST_SECRET_KEY" => ENV["STRIPE_TEST_SECRET_KEY"],
-      "STRIPE_TEST_PUBLISHABLE_KEY" => ENV["STRIPE_TEST_PUBLISHABLE_KEY"],
-      "STRIPE_SECRET_KEY" => ENV["STRIPE_SECRET_KEY"],
-      "STRIPE_PUBLISHABLE_KEY" => ENV["STRIPE_PUBLISHABLE_KEY"]
-    }
-    @previous.each_key { |name| ENV.delete(name) }
-  end
-
-  teardown do
-    @previous.each do |name, value|
-      value.nil? ? ENV.delete(name) : ENV[name] = value
-    end
-  end
+  teardown { DummyStripeTestCredentials.env = nil }
 
   test "ignores live Stripe keys and empty values" do
-    ENV["stripe_test_secret_key"] = "sk_live_not_for_dummy"
-    ENV["STRIPE_SECRET_KEY"] = " "
-    ENV["stripe_test_publishable_key"] = "pk_live_not_for_dummy"
+    DummyStripeTestCredentials.env = {
+      "stripe_test_secret_key" => "sk_live_not_for_dummy",
+      "STRIPE_SECRET_KEY" => " ",
+      "stripe_test_publishable_key" => "pk_live_not_for_dummy"
+    }
 
     refute DummyStripeTestCredentials.present?
     assert_nil DummyStripeTestCredentials.to_h
   end
 
   test "reads Cursor Cloud lowercase Stripe test secret names" do
-    ENV["stripe_test_secret_key"] = "sk_test_dummy_secret"
-    ENV["stripe_test_publishable_key"] = "pk_test_dummy_publishable"
+    DummyStripeTestCredentials.env = {
+      "stripe_test_secret_key" => "sk_test_dummy_secret",
+      "stripe_test_publishable_key" => "pk_test_dummy_publishable"
+    }
 
     assert DummyStripeTestCredentials.present?
     credentials = DummyStripeTestCredentials.to_h

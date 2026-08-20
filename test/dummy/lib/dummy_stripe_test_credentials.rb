@@ -56,7 +56,15 @@ module DummyStripeTestCredentials
     }
   end
 
+  def env
+    @env || ENV
+  end
+
+  def env=(value)
+    @env = value
+  end
+
   def first_present(names)
-    names.map { |name| ENV[name].to_s.strip }.find(&:present?)
+    names.map { |name| env[name].to_s.strip }.find(&:present?)
   end
 end
