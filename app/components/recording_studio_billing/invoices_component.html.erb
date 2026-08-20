@@ -1,0 +1,57 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("invoices_title", "Invoices"),
+  subtitle: @presenter.copy("invoices_subtitle", "Statements, refunds, and adjustments for this workspace."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<div class="flex flex-col gap-6">
+  <% if @presenter.invoices.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.invoices.each do |invoice| %>
+            <%= render FlatPack::List::Item.new(
+              href: helpers.invoice_path(invoice, root_recording_id: @presenter.root_recording.id),
+              hover: true,
+              trailing: render(FlatPack::Badge::Component.new(text: @presenter.invoice_status(invoice), style: status_badge_style(@presenter.invoice_status(invoice)), size: :sm))
+            ) do %>
+              <%= @presenter.invoice_label(invoice) %>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render FlatPack::EmptyState::Component.new(
+      title: @presenter.copy("no_invoices", "No invoices yet."),
+      icon: :inbox
+    ) %>
+  <% end %>
+  <% if @presenter.adjustments.present? || @presenter.refunds.present? || @presenter.pending_money_rows.present? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.header do %>
+        <h3 class="text-lg font-semibold"><%= @presenter.copy("invoices_money_changes_title", "Refunds and adjustments") %></h3>
+      <% end %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% Array(@presenter.adjustments).each do |adjustment| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: @presenter.money_state(adjustment.financial_command.state), style: status_badge_style(@presenter.money_state(adjustment.financial_command.state)), size: :sm))) do %>
+              <%= @presenter.adjustment_label(adjustment) %>
+            <% end %>
+          <% end %>
+          <% Array(@presenter.refunds).each do |refund| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: @presenter.money_state(refund.financial_command.state), style: status_badge_style(@presenter.money_state(refund.financial_command.state)), size: :sm))) do %>
+              <%= @presenter.refund_label(refund) %>
+            <% end %>
+          <% end %>
+          <% Array(@presenter.pending_money_rows).each do |row| %>
+            <%= render FlatPack::List::Item.new do %><%= row %><% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:invoices).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

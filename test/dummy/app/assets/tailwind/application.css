@@ -1,15 +1,20 @@
 @import "tailwindcss";
+@import "./gem_sources.css";
 
-/* Include dummy app views for Tailwind CSS */
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-text: var(--color-primary-text);
+}
+
+/* Dummy host views and components */
 @source "../../views/**/*.erb";
+@source "../../components/**/*.{rb,erb}";
 
-/* Include RecordingStudio engine views for Tailwind CSS */
-@source "../../../vendor/bundle/**/recording_studio/app/views/**/*.erb";
-@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/recordingstudio-*/app/views/**/*.erb";
-
-/* Scan FlatPack components for classes used by the bundled ViewComponents */
-@source "../../../vendor/bundle/**/flatpack/app/components/**/*.{rb,erb}";
-@source "../../../../../../usr/local/bundle/ruby/**/bundler/gems/flatpack-*/app/components/**/*.{rb,erb}";
-
-/* Include the engine's views in the Tailwind build */
+/* Billing engine views and components */
 @source "../../../../../app/views/**/*.erb";
+@source "../../../../../app/components/**/*.{rb,erb}";
+
+/* Bundled gem sources are written by `rake tailwindcss:write_gem_sources`
+   (a prerequisite of tailwindcss:build / watch) so rbenv, mise, vendor/bundle,
+   and CI all scan Flatpack and Recording Studio from `bundle show`. */

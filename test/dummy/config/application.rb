@@ -41,6 +41,10 @@ module Dummy
       g.orm :active_record, primary_key_type: :uuid
     end
 
+    # Preserve PostgreSQL functions and triggers used for immutable billing history.
+    config.active_record.schema_format = :sql
+    config.paths["db/migrate"] << Rails.root.join("db/migrate").to_s
+
     # Don't generate system test files.
     config.generators.system_tests = nil
   end

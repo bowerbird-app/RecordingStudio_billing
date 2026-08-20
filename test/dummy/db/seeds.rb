@@ -2,51 +2,17 @@
 # development, test). The code here should be idempotent so that it can be executed at any point in every environment.
 # The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
 
-find_or_record_child = lambda do |recordable, root_recording, parent_recording|
-  RecordingStudio::Recording.find_by(
-    root_recording: root_recording,
-    parent_recording: parent_recording,
-    recordable: recordable,
-    trashed_at: nil
-  ) || RecordingStudio.record!(
-    action: "created",
-    recordable: recordable,
-    root_recording: root_recording,
-    parent_recording: parent_recording
-  ).recording
-end
+require_relative "dummy_v1_catalogue"
 
-# Create the admin user
-user = User.find_or_create_by!(email: "admin@admin.com") do |u|
-  u.password = "Password"
-  u.password_confirmation = "Password"
-end
+result = DummyV1Catalogue.call
 
-# Create the workspace recordables
-workspace = Workspace.find_or_create_by!(name: "Studio Workspace")
-accessible_workspace = Workspace.find_or_create_by!(name: "Client Workspace")
-private_workspace = Workspace.find_or_create_by!(name: "Private Workspace")
-folder = Folder.find_or_create_by!(name: "Product Docs")
-page = Page.find_or_create_by!(title: "Getting Started")
-
-previous_actor = Current.actor
-Current.actor = user
-
-begin
-  # Create the root recording
-  root_recording = RecordingStudio.root_recording_for(workspace)
-  accessible_root_recording = RecordingStudio.root_recording_for(accessible_workspace)
-  private_root_recording = RecordingStudio.root_recording_for(private_workspace)
-
-  folder_recording = find_or_record_child.call(folder, root_recording, root_recording)
-
-  find_or_record_child.call(page, root_recording, folder_recording)
-ensure
-  Current.actor = previous_actor
-end
-
-puts "Seeded: admin@admin.com / Password"
-puts "Seeded: Workspace '#{workspace.name}' with root recording ##{root_recording.id}"
-puts "Seeded: Workspace '#{accessible_workspace.name}' with root recording ##{accessible_root_recording.id}"
-puts "Seeded: Workspace '#{private_workspace.name}' with root recording ##{private_root_recording.id}"
-puts "Seeded: Folder '#{folder.name}' and page '#{page.title}'"
+puts "Seeded: admin@admin.com / Password with workspace billing access"
+puts "Seeded: Workspace '#{result.workspace.name}' with root recording ##{result.root_recording.id}"
+puts "Seeded: Admin root '#{result.admin_root.name}' with root recording ##{result.admin_root_recording.id}"
+puts "Seeded: Billing account '#{result.account.name}' and billing admin '#{result.billing_admin.key}'"
+puts "Seeded: Fake provider '#{result.fake_provider.key}' with no credentials or network calls"
+puts "Seeded: Stripe test provider '#{result.stripe_test_provider.key}' with a credential-free configuration probe and no network calls"
+puts "Seeded: published products and market prices for US, UK, Italy, Germany, and global"
+puts "Seeded: metered API-call service with allowance, rates, costs, and US overage caps"
+puts "Seeded: free, monthly, annual (with trial), quantity-addon, and prepaid credit-pack examples"
+puts "Seeded: checkout presentations, hybrid subscription, usage, refund, adjustment, and reconciliation fixtures"

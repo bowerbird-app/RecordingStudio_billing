@@ -1,0 +1,44 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("settings_title", "Billing settings"),
+  subtitle: @presenter.copy("settings_subtitle", "Workspace billing contact details and payment portal."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<div class="flex flex-col gap-6">
+  <%= render FlatPack::Alert::Component.new(description: @presenter.notice, style: :info) %>
+  <% if @presenter.portal_available? %>
+    <%= render FlatPack::Button::Component.new(
+      text: @presenter.copy("settings_payment_details", "Manage payment details"),
+      style: :secondary,
+      size: :md,
+      url: helpers.portal_billing_path(root_recording_id: @presenter.root_recording.id),
+      method: :post
+    ) %>
+  <% end %>
+  <%= form_with url: helpers.update_settings_billing_path(root_recording_id: @presenter.root_recording.id), method: :patch do %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <div class="flex flex-col gap-4">
+          <%= render FlatPack::TextInput::Component.new(name: "account[name]", value: @presenter.account.name, label: @presenter.copy("settings_display_name", "Billing display name")) %>
+          <%= render FlatPack::EmailInput::Component.new(name: "account[contact_email]", value: @presenter.account.contact_email, label: @presenter.copy("settings_contact_email", "Contact email")) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[billing_country_code]", value: @presenter.account.billing_country_code, label: @presenter.copy("settings_country", "Billing country"), max_characters: 2) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[billing_currency_code]", value: @presenter.account.billing_currency_code, label: @presenter.copy("settings_currency", "Billing currency"), max_characters: 3) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[locale]", value: @presenter.account.locale, label: @presenter.copy("settings_language", "Language")) %>
+          <%= render FlatPack::Select::Component.new(name: "account[time_zone]", options: ActiveSupport::TimeZone.all.map(&:name), value: @presenter.account.time_zone, label: @presenter.copy("settings_time_zone", "Time zone"), placeholder: @presenter.copy("settings_time_zone_placeholder", "Select a time zone")) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[tax_location_country_code]", value: @presenter.account.tax_location_country_code, label: @presenter.copy("settings_tax_country", "Tax country"), max_characters: 2) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[tax_location_region_code]", value: @presenter.account.tax_location_region_code, label: @presenter.copy("settings_tax_region", "Tax region")) %>
+          <%= render FlatPack::TextInput::Component.new(name: "account[tax_location_postal_code]", value: @presenter.account.tax_location_postal_code, label: @presenter.copy("settings_postal_code", "Postal code")) %>
+        </div>
+      <% end %>
+      <% card.footer do %>
+        <%= render FlatPack::Button::Component.new(text: @presenter.copy("settings_save", "Save settings"), style: :primary, size: :md, type: :submit) %>
+      <% end %>
+    <% end %>
+  <% end %>
+  <% if @presenter.support_url.present? %>
+    <%= render FlatPack::Button::Component.new(text: @presenter.copy("support_label", "Billing support"), style: :secondary, size: :md, url: @presenter.support_url, target: "_blank") %>
+  <% end %>
+</div>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:settings).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

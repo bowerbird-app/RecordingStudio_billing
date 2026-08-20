@@ -3,71 +3,83 @@
 require "test_helper"
 
 class ConfigurationTest < Minitest::Test
+  class GenericAdapter
+    def capabilities
+      @capabilities ||= RecordingStudioBilling::ProviderCapabilities.new
+    end
+
+    def call(**)
+      RecordingStudioBilling::AdapterResponse.new(status: "unsupported")
+    end
+  end
+
   def setup
-    @configuration = GemTemplate::Configuration.new
+    @configuration = RecordingStudioBilling::Configuration.new
   end
 
-  def test_merge_updates_known_attributes
-    @configuration.merge!(api_key: "abc123", timeout: 9, enable_feature_x: true)
-
-    assert_equal "abc123", @configuration.api_key
-    assert_equal 9, @configuration.timeout
-    assert_equal true, @configuration.enable_feature_x
+  def test_defaults_to_the_built_in_stripe_provider
+    assert_equal :stripe, @configuration.provider
+    assert_instance_of RecordingStudioBilling::StripeAdapter, @configuration.provider_registry.fetch(:stripe)
   end
 
-  def test_merge_ignores_unknown_keys
-    @configuration.merge!(unknown_key: "ignored", timeout: 7)
+  def test_merge_accepts_a_provider_override
+    @configuration.merge!("provider" => "test_provider")
 
-    refute_respond_to @configuration, :unknown_key
-    assert_equal 7, @configuration.timeout
+    assert_equal :test_provider, @configuration.provider
   end
 
-  def test_merge_with_non_enumerable_is_noop
-    original = @configuration.to_h
+  def test_host_can_select_a_custom_adapter_without_replacing_stripe
+    adapter = GenericAdapter.new
 
-    @configuration.merge!(nil)
+    @configuration.provider_registry.register(:alternate, adapter)
+    @configuration.provider = :alternate
 
-    assert_nil @configuration.api_key if original[:api_key].nil?
-    assert_equal original[:api_key], @configuration.api_key unless original[:api_key].nil?
-    assert_equal original[:timeout], @configuration.timeout
-    assert_equal original[:enable_feature_x], @configuration.enable_feature_x
+    assert_equal :alternate, @configuration.provider
+    assert_same adapter, @configuration.provider_registry.fetch(:alternate)
+    assert_instance_of RecordingStudioBilling::StripeAdapter, @configuration.provider_registry.fetch(:stripe)
   end
 
-  def test_initialize_uses_environment_api_key_and_defaults
-    previous_value = ENV.fetch("GEM_TEMPLATE_API_KEY", nil)
-    ENV["GEM_TEMPLATE_API_KEY"] = "env-token"
+  def test_accepts_a_stripe_credential_resolver
+    resolver = -> {}
 
-    configuration = GemTemplate::Configuration.new
+    @configuration.stripe_credential_resolver = resolver
 
-    assert_equal "env-token", configuration.api_key
-    assert_equal false, configuration.enable_feature_x
-    assert_equal 5, configuration.timeout
-    assert_instance_of GemTemplate::Hooks, configuration.hooks
-  ensure
-    ENV["GEM_TEMPLATE_API_KEY"] = previous_value
+    assert_same resolver, @configuration.stripe_credential_resolver
   end
 
-  def test_merge_accepts_string_keys
-    @configuration.merge!("api_key" => "string-key", "timeout" => 12)
+  def test_normalizes_stripe_trusted_origins_and_registers_the_opt_in_tax_calculator
+    @configuration.stripe_trusted_origins = ["https://app.example.test/", "https://app.example.test"]
 
-    assert_equal "string-key", @configuration.api_key
-    assert_equal 12, @configuration.timeout
+    assert_equal ["https://app.example.test"], @configuration.stripe_trusted_origins
+    assert_instance_of RecordingStudioBilling::StripeAdapter::TaxCalculator,
+                       @configuration.tax_calculator_registry.fetch(:stripe_tax)
   end
 
-  def test_to_h_reports_registered_hook_counts
-    @configuration.hooks.before_initialize { nil }
-    @configuration.hooks.before_initialize { nil }
-    @configuration.hooks.after_service { nil }
+  def test_rejects_a_blank_provider
+    error = assert_raises(ArgumentError) { @configuration.provider = "  " }
 
-    result = @configuration.to_h
-
-    assert_equal 2, result.fetch(:hooks_registered).fetch(:before_initialize)
-    assert_equal 1, result.fetch(:hooks_registered).fetch(:after_service)
+    assert_equal "provider must be present", error.message
   end
 
-  def test_configure_without_block_is_safe
-    GemTemplate.configure
+  def test_merge_rejects_unknown_keys
+    error = assert_raises(ArgumentError) { @configuration.merge!(unknown_key: "ignored") }
 
-    assert_kind_of GemTemplate::Configuration, GemTemplate.configuration
+    assert_equal "unsupported commercial configuration key: unknown_key", error.message
+  end
+
+  def test_authorizer_must_be_callable
+    error = assert_raises(ArgumentError) { @configuration.commercial_authorizer = :not_callable }
+
+    assert_equal "commercial_authorizer must respond to call", error.message
+  end
+
+  def test_merge_accepts_customer_delivery_copy_and_support_link
+    @configuration.merge!(
+      billing_copy: { settings_notice: "Contact billing support." },
+      support_url: "https://support.example.test/billing"
+    )
+
+    assert_equal "Contact billing support.", @configuration.billing_copy.fetch("settings_notice")
+    assert_equal "https://support.example.test/billing", @configuration.support_url
   end
 end

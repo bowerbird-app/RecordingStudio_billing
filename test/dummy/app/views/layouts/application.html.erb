@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="rounded">
+<html data-theme="rounded" class="h-full overscroll-none">
   <head>
     <title><%= content_for(:title) || "Dummy" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,23 +11,20 @@
 
     <%= yield :head %>
 
-    <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
-    <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
-
     <link rel="icon" href="/icon.png" type="image/png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
-    <%# Load app styles, FlatPack token styles, and utility classes %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "flat_pack/variables", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "flat_pack/application", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "flat_pack/rich_text", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+    <%= javascript_importmap_tags if respond_to?(:javascript_importmap_tags) %>
   </head>
 
-  <body>
-    <main class="container mx-auto mt-28 px-5 flex">
+  <body class="m-0 min-h-full bg-(--surface-page-background-color) text-(--surface-content-color)">
+    <main class="container mx-auto mt-28 px-5">
       <%= yield %>
     </main>
   </body>

@@ -2,16 +2,17 @@
 
 RecordingStudio.configure do |config|
   # Registered delegated_type recordables (strings or classes)
-  config.recordable_types = [ "Workspace", "Folder", "Page" ]
+  config.recordable_types = [
+    "Workspace",
+    "AdminRoot",
+    *RecordingStudioBilling::RECORDABLE_TYPES
+  ]
 
   # Require each configured ActiveRecord type to call recording_studio_recordable.
   config.require_recordable_declarations = true
 
   # Actor resolver for events when no actor is explicitly supplied
   config.actor = -> { Current.actor }
-
-  # Prefer an explicit actor on write paths in non-test environments.
-  config.require_actor = !Rails.env.test?
 
   # Emit ActiveSupport::Notifications events
   config.event_notifications_enabled = true

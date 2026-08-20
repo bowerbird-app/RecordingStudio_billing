@@ -1,3 +1,5 @@
+FROM postgres:16 AS postgres_client
+
 FROM ruby:3.3-slim
 
 # Avoid warnings by switching to noninteractive
@@ -17,6 +19,10 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Keep SQL dumps compatible with the PostgreSQL major version used by the
+# database service. The base distribution may ship a newer pg_dump.
+COPY --from=postgres_client /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
 
 # Enable corepack for Yarn
 RUN corepack enable || true

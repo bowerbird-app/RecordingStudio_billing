@@ -1,0 +1,31 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("plan_requests_title", "Plan requests"),
+  subtitle: @presenter.copy("plan_requests_subtitle", "Changes wait here until they are confirmed."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% if @presenter.request_rows.present? %>
+  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+    <% card.body do %>
+      <%= render FlatPack::List::Component.new(spacing: :dense) do %>
+        <% @presenter.request_rows.each do |change| %>
+          <%= render FlatPack::List::Item.new do %>
+            <div class="flex flex-wrap items-center gap-2">
+              <span><%= change[:label] %></span>
+              <%= render FlatPack::Badge::Component.new(text: change[:state], style: request_badge_style(change[:state]), size: :sm) %>
+              <span class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("change_effective", "Effective") %>: <%= change[:effective] %></span>
+            </div>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+<% else %>
+  <%= render FlatPack::EmptyState::Component.new(
+    title: @presenter.copy("no_plan_requests", "There are no plan requests yet."),
+    icon: :inbox
+  ) %>
+<% end %>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:plan_requests).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

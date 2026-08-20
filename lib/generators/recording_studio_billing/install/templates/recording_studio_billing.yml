@@ -1,0 +1,11 @@
+default: &default
+  provider: stripe
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

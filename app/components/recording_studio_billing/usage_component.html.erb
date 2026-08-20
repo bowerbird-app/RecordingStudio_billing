@@ -1,0 +1,110 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("usage_title", "Usage"),
+  subtitle: @presenter.copy("usage_subtitle", "Included usage and prepaid credits for this workspace."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<div class="flex flex-col gap-6">
+  <% if @presenter.credit_rows.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.header do %>
+        <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_credits_balance_title", "Credit balances") %></h3>
+      <% end %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.credit_rows.each do |label, balance| %>
+            <%= render FlatPack::List::Item.new do %><%= label %>: <%= balance %><% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+    <% card.header do %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_periods_title", "Usage this period") %></h3>
+    <% end %>
+    <% card.body do %>
+      <% if @presenter.period_rows.any? %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.period_rows.each do |period| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: period[:state], style: status_badge_style(period[:state]), size: :sm))) do %>
+              <div class="flex flex-col gap-1">
+                <strong><%= period[:usage_key] %></strong>
+                <span class="text-sm text-[var(--surface-muted-content-color)]"><%= period[:window] %></span>
+                <% if period[:included].present? %>
+                  <span class="text-sm text-[var(--surface-muted-content-color)]"><%= period[:included] %></span>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% else %>
+        <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("usage_no_periods", "No usage has been recorded this period.") %></p>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+    <% card.header do %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_credits_title", "Prepaid credits") %></h3>
+    <% end %>
+    <% card.body do %>
+      <% if @presenter.grant_rows.any? %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.grant_rows.each do |grant| %>
+            <%= render FlatPack::List::Item.new do %>
+              <%= grant[:key] %>: <%= grant[:available] %> available of <%= grant[:quantity] %>; <%= grant[:expires_at] %>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% else %>
+        <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("usage_no_credits", "No prepaid credits yet.") %></p>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+    <% card.header do %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_charges_title", "Usage charges") %></h3>
+    <% end %>
+    <% card.body do %>
+      <% if @presenter.allocation_rows.any? %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.allocation_rows.each do |allocation| %>
+            <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: allocation[:state], style: status_badge_style(allocation[:state]), size: :sm))) do %>
+              <div class="flex flex-col gap-1">
+                <span><%= allocation[:key] %>: <%= allocation[:measured] %> used, <%= allocation[:credited] %> covered by credits, <%= allocation[:excess] %> extra</span>
+                <% if allocation[:prepaid].positive? %>
+                  <span class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("usage_prepaid", "From prepaid credits") %>: <%= allocation[:prepaid] %></span>
+                <% end %>
+                <% if allocation[:extra_usage].present? %>
+                  <span class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("usage_extra", "Extra usage") %>: <%= allocation[:extra_usage] %></span>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% else %>
+        <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("usage_no_charges", "No extra usage charges this period.") %></p>
+      <% end %>
+    <% end %>
+  <% end %>
+  <% if @presenter.usage_rows.any? { |_label, value| value.present? } %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <%= render FlatPack::List::Component.new(divider: true) do %>
+          <% @presenter.usage_rows.each do |label, value| %>
+            <% if value.present? %>
+              <%= render FlatPack::List::Item.new do %><%= label %>: <%= value %><% end %>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+  <%= render FlatPack::Alert::Component.new(
+    description: @presenter.copy("usage_notice", "Usage is recorded by your workspace. This page is read-only."),
+    style: :info
+  ) %>
+</div>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:usage).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

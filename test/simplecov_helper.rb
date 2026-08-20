@@ -10,7 +10,7 @@ end
 
 SimpleCov.start do
   enable_coverage :branch
-  skip "/test/"
-  skip "/config/"
-  skip "/db/"
+  add_filter "/test/"
+  add_filter "/config/"
+  add_filter "/db/"
 end

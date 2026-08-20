@@ -1,0 +1,10 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("choose_plan_title", "Choose a plan"),
+  subtitle: @presenter.copy("choose_plan_subtitle", "Pick the plan that fits this workspace. You can change later."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<%= render RecordingStudioBilling::PlanCardsComponent.new(presenter: @presenter) %>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:subscriptions).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

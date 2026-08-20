@@ -1,0 +1,10 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: @presenter.copy("overview_title", "Billing"),
+  subtitle: @presenter.copy("overview_subtitle", "Your current plan and billing for this workspace."),
+  variant: :h1
+) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<%= render RecordingStudioBilling::CurrentPlanComponent.new(presenter: @presenter) %>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:overview).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

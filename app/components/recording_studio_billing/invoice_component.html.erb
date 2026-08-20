@@ -1,0 +1,34 @@
+<%= render FlatPack::PageTitle::Component.new(title: @presenter.invoice_heading, variant: :h1) %>
+<% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<div class="flex flex-col gap-6">
+  <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+    <% card.header do %>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="text-3xl font-bold"><%= @presenter.invoice_total %></div>
+        <%= render FlatPack::Badge::Component.new(text: @presenter.invoice_status, style: status_badge_style(@presenter.invoice_status), size: :sm) %>
+      </div>
+    <% end %>
+    <% card.body do %>
+      <%= render FlatPack::List::Component.new(divider: true) do %>
+        <% @presenter.line_rows.each do |line| %>
+          <%= render FlatPack::List::Item.new do %>
+            <%= line[:description] %>: <%= line[:quantity] %> x <%= line[:amount] %>
+          <% end %>
+        <% end %>
+      <% end %>
+      <% if @presenter.financial_rows.present? %>
+        <%= render FlatPack::List::Component.new(divider: true, class: "mt-4") do %>
+          <% @presenter.financial_rows.each do |row| %>
+            <%= render FlatPack::List::Item.new do %><%= row %><% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+    <% card.footer do %>
+      <%= render FlatPack::Button::Component.new(text: @presenter.copy("invoice_download", "Download invoice"), style: :secondary, size: :md, url: helpers.download_invoice_path(@presenter.invoice, root_recording_id: @presenter.root_recording.id)) %>
+    <% end %>
+  <% end %>
+</div>
+<% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
+<% @presenter.page_contents(:invoice).each { |content| %><%= render_extension(content) %><% } %>
+<% footer_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

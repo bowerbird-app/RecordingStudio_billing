@@ -1,3 +1,5 @@
+inherit_from: .rubocop_todo.yml
+
 AllCops:
   TargetRubyVersion: 3.3
   NewCops: enable
@@ -13,24 +15,28 @@ Style/StringLiterals:
   Enabled: true
   EnforcedStyle: double_quotes
 
-Layout/LineLength:
-  Max: 120
-
 # Relax metrics for test files and generators
 Metrics/ClassLength:
   Exclude:
     - 'test/**/*'
-    - 'lib/gem_template/hooks.rb'
+    - 'db/migrate/**/*'
+    - 'lib/recording_studio_billing/hooks.rb'
 
 Metrics/MethodLength:
   Exclude:
     - 'test/**/*'
+    - 'db/migrate/**/*'
     - 'lib/generators/**/*'
 
 Metrics/AbcSize:
   Exclude:
     - 'test/**/*'
+    - 'db/migrate/**/*'
     - 'lib/generators/**/*'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'test/**/*'
 
 # Allow empty blocks in tests (common for stubs/mocks)
 Lint/EmptyBlock:
@@ -50,5 +56,5 @@ Naming/VariableNumber:
 # Don't require super in service initialize methods
 Lint/MissingSuper:
   Exclude:
-    - 'lib/gem_template/services/**/*'
+    - 'lib/recording_studio_billing/services/**/*'
     - 'test/services/**/*'

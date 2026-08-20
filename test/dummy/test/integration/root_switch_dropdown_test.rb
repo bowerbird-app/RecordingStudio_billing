@@ -6,7 +6,7 @@ require "devise/test/integration_helpers"
 class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
-  test "home page renders the root switch dropdown trigger" do
+  test "home page renders workspace and administration roots in the switch dropdown" do
     user = User.find_or_create_by!(email: "root-switch-test@example.com") do |record|
       record.password = "Password123!"
       record.password_confirmation = "Password123!"
@@ -15,12 +15,18 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     sign_in user
 
     workspace = Workspace.create!(name: "Dropdown Workspace")
+    admin_root = AdminRoot.create!(name: "Dropdown Administration")
     RecordingStudio.root_recording_for(workspace)
+    RecordingStudio.root_recording_for(admin_root)
 
     get root_path
 
     assert_response :success
     assert_includes response.body, workspace.name
+    assert_includes response.body, admin_root.name
+    assert_includes response.body, "flat-pack--sidebar-layout"
+    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-billing-layout="flat-pack-sidebar"'
   end
 
   test "root switch page renders with the host sidebar" do
@@ -37,7 +43,10 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     get "/recording_studio_root_switchable/v1/root_switch?scope=all_workspaces"
 
     assert_response :success
-    assert_includes response.body, "Install"
+    assert_includes response.body, "Billing"
+    assert_includes response.body, "flat-pack--sidebar-layout"
+    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-billing-layout="flat-pack-sidebar"'
   end
 
   test "switching returns to the current page when it is a valid internal route" do
@@ -57,11 +66,11 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
       scope: "all_workspaces",
       root_switch: {
         root_recording_id: target_root_recording.id,
-        return_to: "/docs/install"
+        return_to: "/"
       }
     }
 
-    assert_redirected_to "/docs/install"
+    assert_redirected_to "/"
   end
 
   test "switching falls back to home when return_to is not a valid internal route" do

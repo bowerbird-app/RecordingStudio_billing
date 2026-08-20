@@ -1,55 +1,142 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## Unreleased
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## 0.5.0
 
-## [Unreleased]
-
-## [0.1.3] - 2026-08-18
-
-### Changed
-- Upgraded the dummy app to RecordingStudio `v4.0.0`, RecordingStudioAccessible `0.6.0` (RS 4 support branch), and RecordingStudioRootSwitchable `v0.4.0`
-- Bumped FlatPack from `v0.1.129` to `v0.1.132`
-- Refreshed root and dummy lockfiles to current Rails `8.1.3.1` and compatible dependency updates (including Solid Cable 4, Solid Queue 1.6, Puma 8, SimpleCov 1). `image_processing` stays on 1.x to avoid a system `libvips` requirement in CI
-- Enabled `:accessible` on `Workspace`, added Accessible initializer allowlisting `User`, and installed the RecordingStudio 4.0 harden indexes migration plus Accessible accesses table recreation
-- Updated FlatPack sidebar items to the `text:` API required by `v0.1.132`
-- Removed unused root `sprockets-rails` dependency (dummy app uses Propshaft)
-- Added `minitest-mock` so Minitest 6 still supports `Object#stub` in engine and dummy tests
-
-### Upgrade Notes
-- Host apps copying this template must move to RecordingStudio `~> 4.0` with Accessible `~> 0.6` and Root Switchable `~> 0.4`
-- Until Accessible `0.6.0` is tagged on main, pin the published RS 4 support branch/ref
-- Run `rails g recording_studio:migrations` (or install `harden_recording_studio_indexes_and_constraints`) and `rails db:migrate`
-- Prefer `Recording.recent` / explicit `order:` (no default newest-first order); follow RecordingStudio `docs/UPGRADING.md` for Event append-only and query-safety changes
-- Configure `RecordingStudioAccessible` `access_actor_types` and enable `:accessible` with `RecordingStudio.enable_capability(:accessible, on: YourRoot)`
-
-## [0.1.2] - 2026-07-21
-
-### Changed
-- Bumped the dummy app FlatPack dependency from `v0.1.33` to `v0.1.129`
-
-## [0.1.1] - 2026-04-28
-
-### Changed
-- Bumped the dummy app FlatPack dependency from `0.1.2` to `0.1.33` and pinned it by tag in `test/dummy/Gemfile`
-
-## [0.1.0] - 2025-12-04
+Hosts can mount a first-class customer plans page at any URL while the gem owns
+the controller, presenter, and ViewComponents.
 
 ### Added
-- Initial release
-- Rails mountable engine structure
-- PostgreSQL with UUID primary keys support
-- TailwindCSS v4 integration
-- GitHub Codespaces devcontainer configuration
-- Docker Compose setup with PostgreSQL and Redis
-- Install generator for host applications
-- Comprehensive README and documentation
-- Basic test suite with Minitest
 
-[Unreleased]: https://github.com/bowerbird-app/gem_template/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/bowerbird-app/gem_template/releases/tag/v0.1.3
-[0.1.2]: https://github.com/bowerbird-app/gem_template/releases/tag/v0.1.2
-[0.1.1]: https://github.com/bowerbird-app/gem_template/releases/tag/v0.1.1
-[0.1.0]: https://github.com/bowerbird-app/gem_template/releases/tag/v0.1.0
+- `draw_recording_studio_billing_plans path: "/plans"` routing helper for host
+  `config/routes.rb`. Default install adds `/plans`.
+- `RecordingStudioBilling::PlansController#show` renders `PlansPageComponent`
+  and `PlanCardsComponent` inside the host's `recording_studio/default_layout`
+  only.
+- `RecordingStudioBilling::PlansPresenter`, `config.plans_page_route_helper`,
+  and `config.plans_page_requires_sign_in` (default `true`).
+- Billing **Plan** sidebar links and **View plans** buttons resolve through the
+  host plans route when configured. `GET /billing/plan` redirects there.
+- Dummy Tailwind writes `@source` paths from `bundle show` before
+  `tailwindcss:build`, so Flatpack sidebar layout utilities compile under rbenv
+  as well as vendor/bundle and CI.
+
+### Upgrade notes
+
+- Re-run `rails generate recording_studio_billing:install` is not required for
+  existing hosts. Add `draw_recording_studio_billing_plans path: "/plans"` (or
+  your chosen path) to `config/routes.rb` and set
+  `config.plans_page_route_helper` to match the route `as:` name.
+- Ensure the host provides `app/views/layouts/recording_studio/default_layout.html.erb`
+  from Recording Studio getting-started setup.
+
+## 0.4.0
+
+One-time purchases are Recording Studio recordables. Clean-install only.
+
+### Breaking
+
+- `RecordingStudioBilling::Purchase` is a recordable under the account recording,
+  written with `record!`. It is an immutable snapshot: triggers reject `UPDATE`
+  and `DELETE`.
+- Removed `RecordingStudioBilling::PurchaseEffect` and its table. A purchase was
+  always paired with exactly one effect, so the purchase now carries the whole
+  story. Read the kind from `purchase.mode` (`one_off_addon` or
+  `one_off_credit_pack`) and the timing from `purchase.completed_at`.
+- `EntitlementGrant#source_type` is `RecordingStudioBilling::Purchase` instead of
+  `RecordingStudioBilling::PurchaseEffect`.
+- `CreditLedgerEntry` credits reference `purchase_id` instead of
+  `purchase_effect_id`.
+- `Invoice` references `purchase_recording_id` (the stable Recording id) instead
+  of `purchase_id`, matching `subscription_recording_id`. Checkout invoice
+  projection still keys invoices by `financial_command` and leaves those
+  columns null when money is projected before the purchase exists.
+
+### Added
+
+- `Purchase.for_root`, `Purchase.recording_for`, `Purchase#current`,
+  `Purchase#current_recording`, and `Purchase#to_param` (returns the Recording
+  id), matching `Subscription`.
+- Completing a one-time checkout item logs a `purchase_completed` event on the
+  account recording.
+
+## 0.3.0
+
+Customer subscriptions are Recording Studio recordables. Clean-install only.
+
+### Breaking
+
+- `RecordingStudioBilling::Subscription` is a recordable under the account
+  recording, and the new `RecordingStudioBilling::SubscriptionLine` ("Plan line")
+  is a recordable under the subscription. Both are immutable snapshots written
+  with `record!` and `revise`, so lifecycle changes and term changes append a new
+  row instead of updating one.
+- Removed `RecordingStudioBilling::SubscriptionItem` and
+  `RecordingStudioBilling::SubscriptionItemVersion`, along with their tables.
+  Read current terms from `subscription.lines` / `subscription.active_lines`, and
+  read history from `SubscriptionLine.where(subscription_recording_id: ...)`.
+- `SubscriptionChangeIntent`, `Invoice`, and `PlanUpdateApplication` reference
+  `subscription_recording_id` (the stable Recording id) instead of
+  `subscription_id`. A revision changes the recordable row id; the Recording id
+  does not.
+- `EntitlementGrant#source_type` is `RecordingStudioBilling::SubscriptionLine`
+  instead of `RecordingStudioBilling::SubscriptionItemVersion`.
+- Customer subscription routes carry the Recording id. `Subscription#to_param`
+  returns it, and the controller still accepts a recordable id.
+
+### Added
+
+- `Subscription#current` and `Subscription#current_recording` (and the same pair
+  on `SubscriptionLine`) walk a superseded snapshot forward to the live one.
+- `Subscription.recording_for` accepts a Recording, a snapshot, or either id.
+
+## 0.2.1
+
+Entitlement grants project automatically when checkout completes.
+
+### Fixed
+
+- Completing checkout now projects entitlement grants (and credit-pack ledger
+  entries) from each new subscription item version or purchase effect. Replaying
+  checkout projection re-ensures those grants. Hosts can call `entitled?` /
+  `feature_value` after checkout without a separate `project_entitlements` step.
+  Applied subscription changes already projected entitlements; that path is
+  unchanged.
+
+## 0.2.0
+
+Version `0.2.0`. Clean-install V1 contract reset. There is no upgrade path from
+earlier experimental schemas.
+
+### Breaking
+
+- Price and overage-price `scope` is `market` (was `default`).
+- Billing option tax policies are `exclusive`, `inclusive`, and `provider_default` (removed `automatic`).
+- Collection methods are `automatic` and `send_invoice` (removed `invoice` and `manual` as collection values). Checkout presentation `invoice` is unchanged.
+- Fake and dummy financial adapters now advertise the same checkout presentations as Stripe: `embedded`, `redirect`, `payment_link`, `invoice`, `no_charge`.
+- Engine schema is a single `InstallRecordingStudioBilling` migration plus `db/schema/install_recording_studio_billing.sql`. Historical billing migrations were removed. Reinstall from a fresh database.
+- Admin inventory is labeled **Products and pricing**.
+- Provider capability checks use `commercial_configuration` instead of `catalogue`.
+
+### Added
+
+- `RecordingStudioBilling::V1Contract` for canonical V1 vocabulary and Stripe-shaped provider capabilities, including the shared market list used at checkout.
+- Stripe checkout support for invoice presentation and `send_invoice` collection.
+
+### Fixed
+
+- Dummy seeds stay idempotent when loaded twice in one process. Plan-update and feature fixtures are found by key (and product, for features that share a key).
+- Dummy UI loads FlatPack (`flat_pack/application` plus Tailwind sources that scan FlatPack components). Signed-in dummy pages use the gem-template left sidebar. Billing engine views use Recording Studio's `recording_studio/default_layout` when the host provides it.
+- The engine no longer installs a restrictive Content-Security-Policy when the host has none, so import maps and Stimulus can run. Stripe origins are appended only when the host already has a CSP.
+- Dummy catalogue seeds the V1 commercial graph: distinct Italy/Germany euro plan prices, a trial on the annual plan, a metered API-call service (not a credit pack), an allowance feature, prepaid credit-pack grants, checkout presentations, an uncertain refund, and a reconciliation issue. Fake tax calculators are registered with tax left off.
+- Customer checkout is one lifecycle for embedded, redirect, payment link, invoice, and no-charge presentations. Charge Market finalization can requote, restart, reject, or review; frozen Italy/Germany euro prices stay on the original quote until the customer starts again.
+- Billable workspace roots enable RecordingStudio Accessible. Dummy seeds grant the seeded admin `edit` on Studio Workspace so `/billing` works without stubbing authorization. Customer billing copy uses plans, prices, invoices, and usage instead of identifiers, option keys, or Market labels.
+- Customer plan changes are select → compare → confirm → result, with cancel/resume confirmation and an effective date. Payments and invoices show refunds and adjustments, including requests waiting for confirmation. The payment portal is restricted to payment methods, address, tax IDs, and invoice history.
+- Completing checkout after a cancellation reactivates the same execution-group subscription. Dummy seeds apply the hybrid cancellation before the live monthly checkout so the Plan page has a current plan.
+- Customer billing screens are gem-owned pages mounted in Recording Studio's default layout. The host sidebar renders `CustomerSidebarComponent`. Plan is title, subtitle, and pricing cards; plan-request history is its own page; cancel stays on Overview. Overview, Plan, Plan requests, Add-ons, Usage, Invoices, Payments, Settings, checkout, invoice, and cancel/resume confirmation use FlatPack page titles, cards, lists, badges, and buttons.
+- Display market resolution accepts verified host-country evidence, so Plan cards show the customer market price (dummy US $0 / $49 / $490) instead of the global fallback.
+
+## 0.1.2
+
+- Initial engine checkout from the RecordingStudio gem template.

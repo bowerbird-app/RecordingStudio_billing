@@ -36,9 +36,9 @@ This will:
 | `enable_feature_x`  | Boolean | `false`                          | Toggle optional feature X.                 |
 | `timeout`           | Integer | `5`                              | Timeout (seconds) for external calls.      |
 
-### RecordingStudio Host-App Declarations
+### RecordingStudio v3 Host-App Declarations
 
-The dummy host app pins RecordingStudio to `v4.0.0` and keeps strict recordable declarations enabled:
+The dummy host app pins RecordingStudio to `recording_studio/v3.0.0` and keeps strict recordable declarations enabled:
 
 ```ruby
 RecordingStudio.configure do |config|
@@ -48,19 +48,10 @@ end
 
 class Workspace < ApplicationRecord
   recording_studio_recordable label: "Workspace", root: true
-  RecordingStudio.enable_capability(:accessible, on: self)
 end
 
 class Folder < ApplicationRecord
   recording_studio_recordable label: "Folder", root: false, allowed_parent_types: ["Workspace", "Folder"]
-end
-```
-
-Configure Accessible actor allowlisting:
-
-```ruby
-RecordingStudioAccessible.configure do |config|
-  config.access_actor_types = ["User"]
 end
 ```
 

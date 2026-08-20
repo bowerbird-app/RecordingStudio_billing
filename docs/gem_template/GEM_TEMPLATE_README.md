@@ -7,6 +7,8 @@
 ---
 
 > **📌 Note:** This documentation directory (`docs/gem_template/`) is preserved during gem renaming and serves as architectural reference material. When you rename your gem, these files intentionally remain under `gem_template` to document the original template structure.
+>
+> RecordingStudio Billing product docs live in the repository `README.md` and [docs/billing.md](../billing.md). Do not treat this template folder as the billing contract.
 
 ---
 

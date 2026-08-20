@@ -1,9 +1,0 @@
-<% if node[:children].any? %>
-  <% parent_builder.node(label: node[:label], expanded: true) do |branch| %>
-    <% node[:children].each do |child_node| %>
-      <%= render partial: "recording_tree_node", locals: { parent_builder: branch, node: child_node } %>
-    <% end %>
-  <% end %>
-<% else %>
-  <% parent_builder.node(label: node[:label]) %>
-<% end %>
