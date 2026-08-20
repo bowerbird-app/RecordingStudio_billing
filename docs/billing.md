@@ -136,6 +136,34 @@ RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "proje
 
 Limit gates compare the configured `count` proc against `feature_value` for the same key. Boolean gates delegate to `entitled?`.
 
+Commercial limits always resolve on the workspace root. For child-scoped quantities (for example comments on a page), pass an optional `subject:` so the host `count` proc can scope its query. Billing does not walk the recording tree or store per-child grants.
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.gates = {
+    "pages" => {
+      kind: :limit,
+      label: "Pages",
+      count: ->(root:) { Page.for_root(root).count }
+    },
+    "comments_per_page" => {
+      kind: :limit,
+      label: "Comments",
+      count: ->(root:, subject:) { subject.comments.count }
+    }
+  }
+end
+
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages")
+RecordingStudioBilling.require_gate!(
+  root_recording: workspace,
+  gate_key: "comments_per_page",
+  subject: page
+)
+```
+
+If a gate `count` proc requires `subject:` and the call omits it, Billing raises `ArgumentError`. Root-only gates keep accepting `count: ->(root:) { ... }` and ignore an unused subject.
+
 ### Freemium bootstrap
 
 Define a $0 plan in the admin catalogue and nominate it as the default free plan. When a billing account is created, Billing can project bootstrap grants from that plan's frozen published manifest — without a subscription or checkout:

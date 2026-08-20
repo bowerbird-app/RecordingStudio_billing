@@ -18,9 +18,10 @@ module RecordingStudioBilling
 
     def self.call(...) = new(...).call
 
-    def initialize(root_recording:, gate_key:, raise_on_failure: false)
+    def initialize(root_recording:, gate_key:, subject: nil, raise_on_failure: false)
       @root_recording = RecordingStudio.root_recording_or_self(root_recording)
       @gate_key = gate_key.to_s
+      @subject = subject
       @raise_on_failure = raise_on_failure == true
     end
 
@@ -34,7 +35,7 @@ module RecordingStudioBilling
 
     private
 
-    attr_reader :gate_key, :raise_on_failure, :root_recording
+    attr_reader :gate_key, :raise_on_failure, :root_recording, :subject
 
     def evaluate(gate)
       case gate.fetch("kind")
@@ -51,12 +52,25 @@ module RecordingStudioBilling
       limit = RecordingStudioBilling.feature_value(root_recording:, feature_key: gate_key)
       return denied("no #{gate_label(gate)} allowance is configured") if limit.nil?
 
-      current = Integer(gate.fetch("count").call(root: root_recording))
+      current = Integer(current_count(gate))
       allowed = current < limit
       reason = allowed ? nil : "#{gate_label(gate)} limit reached (#{current}/#{limit})"
       Result.new(allowed:, gate_key:, reason:, current:, limit:)
-    rescue ArgumentError, TypeError
+    rescue ArgumentError, TypeError => e
+      raise if e.message.start_with?("gate ") || e.message.include?("subject is required")
+
       raise ArgumentError, "gate count must return an integer"
+    end
+
+    def current_count(gate)
+      count = gate.fetch("count")
+      raise ArgumentError, "gate #{gate_key} requires subject" if gate.fetch("requires_subject", false) && subject.nil?
+
+      if gate.fetch("accepts_subject", false) && !subject.nil?
+        count.call(root: root_recording, subject:)
+      else
+        count.call(root: root_recording)
+      end
     end
 
     def evaluate_boolean(gate)

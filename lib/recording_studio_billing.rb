@@ -128,16 +128,16 @@ module RecordingStudioBilling
       ApplyDefaultFreeEntitlements.call(...)
     end
 
-    def enforce_gate!(root_recording:, gate_key:)
-      EnforceGate.call(root_recording:, gate_key:)
+    def enforce_gate!(root_recording:, gate_key:, subject: nil)
+      EnforceGate.call(root_recording:, gate_key:, subject:)
     end
 
-    def require_gate!(root_recording:, gate_key:)
-      EnforceGate.call(root_recording:, gate_key:, raise_on_failure: true)
+    def require_gate!(root_recording:, gate_key:, subject: nil)
+      EnforceGate.call(root_recording:, gate_key:, subject:, raise_on_failure: true)
     end
 
-    def gate_allowed?(root_recording:, gate_key:)
-      EnforceGate.call(root_recording:, gate_key:).allowed
+    def gate_allowed?(root_recording:, gate_key:, subject: nil)
+      EnforceGate.call(root_recording:, gate_key:, subject:).allowed
     end
 
     def credit_balance(root_recording:, product_recording:)

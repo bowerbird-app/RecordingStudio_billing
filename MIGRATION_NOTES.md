@@ -15,6 +15,10 @@ Configure a published $0 plan product key and optional gates in
 `apply_default_free_entitlements!` for accounts that already existed before this
 upgrade if you need bootstrap rows in non-production environments.
 
+Limit gates may pass optional `subject:` into the host `count` proc for
+child-scoped quantities (for example comments on a page). Commercial limits
+still resolve on the root; there are no per-child entitlement grants.
+
 ## 0.5.0 — host plans route
 
 The install generator now adds a host-level plans route through

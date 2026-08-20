@@ -18,6 +18,9 @@ RecordingStudioBilling.configure do |config|
   #
   # Optional app-owned gates (Billing resolves allowances; the host counts usage):
   # config.gates = {
-  #   "projects" => { kind: :limit, label: "Projects", count: ->(root:) { Project.for_root(root).count } }
+  #   "pages" => { kind: :limit, label: "Pages", count: ->(root:) { Page.for_root(root).count } },
+  #   "comments_per_page" => {
+  #     kind: :limit, label: "Comments", count: ->(root:, subject:) { subject.comments.count }
+  #   }
   # }
 end

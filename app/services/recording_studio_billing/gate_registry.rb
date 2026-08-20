@@ -23,6 +23,8 @@ module RecordingStudioBilling
           raise ArgumentError, "limit gate count must respond to call" unless count.respond_to?(:call)
 
           normalized["count"] = count
+          normalized["accepts_subject"] = accepts_keyword?(count, :subject)
+          normalized["requires_subject"] = requires_keyword?(count, :subject)
         when "boolean"
           feature_key = gate[:feature_key].presence || gate[:key].presence
           raise ArgumentError, "boolean gate requires feature_key" if feature_key.blank?
@@ -31,6 +33,17 @@ module RecordingStudioBilling
         end
 
         normalized.freeze
+      end
+
+      def accepts_keyword?(callable, keyword)
+        parameters = callable.parameters
+        return true if parameters.any? { |type, _| type == :keyrest }
+
+        parameters.any? { |type, name| name == keyword && %i[key keyreq].include?(type) }
+      end
+
+      def requires_keyword?(callable, keyword)
+        callable.parameters.any? { |type, name| name == keyword && type == :keyreq }
       end
 
       private

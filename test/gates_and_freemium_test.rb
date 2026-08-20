@@ -109,11 +109,51 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
     end
   end
 
+  test "enforce gate accepts optional subject for child-scoped counts" do
+    RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+      "comments_per_page" => {
+        source: "catalogue", merge_rule: "replace", default: 0, type: "limit", meter_key: nil,
+        usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 2,
+        validation: { "minimum" => 0 }
+      }
+    )
+    RecordingStudioBilling.configuration.gates = RecordingStudioBilling.configuration.gates.merge(
+      "comments_per_page" => {
+        kind: :limit,
+        label: "Comments",
+        count: ->(root:, subject:) { root && subject.fetch(:comments) }
+      }
+    )
+    graph = published_free_plan_catalogue(
+      option_feature_values: { "projects" => 2, "comments_per_page" => 4 }
+    )
+    RecordingStudioBilling.ensure_account(root_recording: graph[:customer_root], name: "Customer")
+
+    page = { comments: 3 }
+    allowed = RecordingStudioBilling.enforce_gate!(
+      root_recording: graph[:customer_root], gate_key: "comments_per_page", subject: page
+    )
+    assert allowed.allowed
+    assert_equal 3, allowed.current
+    assert_equal 4, allowed.limit
+
+    page = { comments: 4 }
+    denied = RecordingStudioBilling.enforce_gate!(
+      root_recording: graph[:customer_root], gate_key: "comments_per_page", subject: page
+    )
+    refute denied.allowed
+
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.enforce_gate!(root_recording: graph[:customer_root], gate_key: "comments_per_page")
+    end
+    assert_match(/requires subject/, error.message)
+  end
+
   private
 
-  def published_free_plan_catalogue
+  def published_free_plan_catalogue(option_feature_values: { "projects" => 2 })
     published_catalogue(kind: "plan", recurrence: "recurring", interval: "month", amount: 0,
-                        product_key: "free_plan", option_feature_values: { "projects" => 2 }, skip_account: true)
+                        product_key: "free_plan", option_feature_values:, skip_account: true)
   end
 
   def entitlement_features

@@ -9,7 +9,9 @@ App-owned feature gates and silent freemium bootstrap from a published $0 catalo
 ### Added
 
 - `config.gates` for host-defined limit and boolean gates with `enforce_gate!`,
-  `require_gate!`, and `gate_allowed?`.
+  `require_gate!`, and `gate_allowed?`. Optional `subject:` scopes child counts
+  (for example comments on a page) while commercial limits still resolve on the
+  root.
 - `config.default_free_plan_product_key` and `apply_default_free_entitlements!`
   to project bootstrap grants from a published free plan manifest when an account
   is created (also invoked from `ensure_account` when configured).
