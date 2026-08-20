@@ -136,9 +136,7 @@ module RecordingStudioBilling
 
     def default_free_plan_product_key=(value)
       key = value&.to_s&.strip
-      if key.present? && !key.match?(/\A[a-z][a-z0-9_]*\z/)
-        raise ArgumentError, "default_free_plan_product_key is invalid"
-      end
+      raise ArgumentError, "default_free_plan_product_key is invalid" if key.present? && !key.match?(/\A[a-z][a-z0-9_]*\z/)
 
       @default_free_plan_product_key = key.presence
     end

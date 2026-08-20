@@ -71,7 +71,7 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
     bootstrap = RecordingStudioBilling::DefaultEntitlementBootstrap.sole
     assert_equal "free_plan", bootstrap.product_key
     assert_equal account.recording.id, bootstrap.account_recording_id
-    assert account.recording.events.any? { |event| event.action == "default_free_entitlements_applied" }
+    assert(account.recording.events.any? { |event| event.action == "default_free_entitlements_applied" })
 
     second = RecordingStudioBilling.apply_default_free_entitlements!(root_recording: graph[:customer_root])
     assert second.existing?
@@ -141,8 +141,8 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
     germany_market = market("germany", "DE", provider_recording, provider_root, admin.recording, "requote")
     graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
     option, published_italy_price, = published_option(graph, kind:, recurrence:, interval:, trial_days:, amount:,
-                                                      checkout_policy:, product_key:, option_feature_values:,
-                                                      price_feature_values:)
+                                                             checkout_policy:, product_key:, option_feature_values:,
+                                                             price_feature_values:)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success,
                                                                capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"],
                                                                                                                               markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes: ["redirect"], quantities: ["fixed"], composition: ["single"]))
@@ -150,12 +150,12 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
     RecordingStudioBilling.register_provider("fake", adapter)
     customer_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Customer #{SecureRandom.hex(4)}"))
     account_recording = unless skip_account
-                            record_child(
-                              RecordingStudioBilling::Account.new(root_recording: customer_root, name: "Customer account",
-                                                                  billing_country_code: account_country),
-                              customer_root, customer_root
-                            )
-                          end
+                          record_child(
+                            RecordingStudioBilling::Account.new(root_recording: customer_root, name: "Customer account",
+                                                                billing_country_code: account_country),
+                            customer_root, customer_root
+                          )
+                        end
     graph.merge(customer_root:, account_recording:, option:, italy_price: published_italy_price)
   end
 
