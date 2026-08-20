@@ -2,6 +2,7 @@
 
 class ProjectsController < ApplicationController
   before_action :require_workspace_root!
+  helper_method :workspace_root_id
 
   def index
     @projects = Project.for_root(workspace_root).order(:created_at)
@@ -38,6 +39,10 @@ class ProjectsController < ApplicationController
         current_root_recording
       end
     end
+  end
+
+  def workspace_root_id
+    workspace_root&.id
   end
 
   def require_workspace_root!
