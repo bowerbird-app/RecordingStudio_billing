@@ -5,6 +5,7 @@ RecordingStudio.configure do |config|
   config.recordable_types = [
     "Workspace",
     "AdminRoot",
+    "Project",
     *RecordingStudioBilling::RECORDABLE_TYPES
   ]
 

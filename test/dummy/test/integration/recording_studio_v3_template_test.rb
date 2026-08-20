@@ -64,6 +64,7 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   test "dummy app validates the billing recordable hierarchy" do
     assert RecordingStudio.validate_recordable_declarations!
     assert_equal %w[AdminRoot Workspace], RecordingStudio.root_recordable_types.sort
+    assert_equal ["Workspace"], RecordingStudio.allowed_parent_types_for("Project")
     assert_equal ["Workspace"], RecordingStudio.allowed_parent_types_for("RecordingStudioBilling::Account")
     assert_equal ["AdminRoot"], RecordingStudio.allowed_parent_types_for("RecordingStudioBilling::BillingAdmin")
   end

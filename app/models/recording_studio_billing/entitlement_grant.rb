@@ -2,7 +2,11 @@
 
 module RecordingStudioBilling
   class EntitlementGrant < RecordingStudioBilling::ApplicationRecord
-    SOURCE_TYPES = %w[RecordingStudioBilling::SubscriptionLine RecordingStudioBilling::Purchase].freeze
+    SOURCE_TYPES = %w[
+      RecordingStudioBilling::SubscriptionLine
+      RecordingStudioBilling::Purchase
+      RecordingStudioBilling::DefaultEntitlementBootstrap
+    ].freeze
 
     belongs_to :root_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     belongs_to :account_recording, class_name: "RecordingStudio::Recording", inverse_of: false

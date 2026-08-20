@@ -257,43 +257,7 @@ $$;
 
 CREATE FUNCTION public.rs_billing_protect_entitlement_projection() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'entitlement projections are append-only'; END IF;
-  IF NOT EXISTS (
-    SELECT 1
-    FROM recording_studio_recordings root
-    JOIN recording_studio_recordings account_recording ON account_recording.id = NEW.account_recording_id
-    JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id
-    WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL
-      AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = root.id AND account_recording.parent_recording_id = root.id AND account_recording.trashed_at IS NULL AND account.root_recording_id = root.id
-  ) THEN RAISE EXCEPTION 'entitlement root or account authority is invalid'; END IF;
-  IF NEW.source_type = 'RecordingStudioBilling::SubscriptionLine' AND NOT EXISTS (
-    SELECT 1 FROM recording_studio_billing_subscription_lines source
-    JOIN recording_studio_recordings subscription_recording ON subscription_recording.id = source.subscription_recording_id
-    JOIN recording_studio_billing_subscriptions subscription ON subscription.id = subscription_recording.recordable_id
-    WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest AND subscription_recording.recordable_type = 'RecordingStudioBilling::Subscription' AND subscription.root_recording_id = NEW.root_recording_id AND subscription.account_recording_id = NEW.account_recording_id
-  ) THEN RAISE EXCEPTION 'entitlement subscription source authority is invalid'; END IF;
-  IF NEW.source_type = 'RecordingStudioBilling::SubscriptionLine' AND NOT EXISTS (
-    SELECT 1 FROM recording_studio_billing_subscription_lines source
-    WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind)
-      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule)
-      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value
-  ) THEN RAISE EXCEPTION 'entitlement subscription grant does not match frozen source'; END IF;
-  IF NEW.source_type = 'RecordingStudioBilling::Purchase' AND NOT EXISTS (
-    SELECT 1 FROM recording_studio_billing_purchases source
-    WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest
-  ) THEN RAISE EXCEPTION 'entitlement purchase source authority is invalid'; END IF;
-  IF NEW.source_type = 'RecordingStudioBilling::Purchase' AND NOT EXISTS (
-    SELECT 1 FROM recording_studio_billing_purchases source
-    WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind)
-      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule)
-      AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value
-  ) THEN RAISE EXCEPTION 'entitlement purchase grant does not match frozen source'; END IF;
-  IF NOT rs_billing_safe_financial_json(jsonb_build_object('value', NEW.value)) THEN RAISE EXCEPTION 'entitlement grant contains unsafe data'; END IF;
-  RETURN NEW;
-END;
-$$;
+    AS $$ BEGIN IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'entitlement projections are append-only'; END IF; IF NOT EXISTS ( SELECT 1 FROM recording_studio_recordings root JOIN recording_studio_recordings account_recording ON account_recording.id = NEW.account_recording_id JOIN recording_studio_billing_accounts account ON account.id = account_recording.recordable_id WHERE root.id = NEW.root_recording_id AND root.parent_recording_id IS NULL AND root.root_recording_id = root.id AND root.trashed_at IS NULL AND account_recording.recordable_type = 'RecordingStudioBilling::Account' AND account_recording.root_recording_id = root.id AND account_recording.parent_recording_id = root.id AND account_recording.trashed_at IS NULL AND account.root_recording_id = root.id ) THEN RAISE EXCEPTION 'entitlement root or account authority is invalid'; END IF; IF NEW.source_type = 'RecordingStudioBilling::SubscriptionLine' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_subscription_lines source JOIN recording_studio_recordings subscription_recording ON subscription_recording.id = source.subscription_recording_id JOIN recording_studio_billing_subscriptions subscription ON subscription.id = subscription_recording.recordable_id WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest AND subscription_recording.recordable_type = 'RecordingStudioBilling::Subscription' AND subscription.root_recording_id = NEW.root_recording_id AND subscription.account_recording_id = NEW.account_recording_id ) THEN RAISE EXCEPTION 'entitlement subscription source authority is invalid'; END IF; IF NEW.source_type = 'RecordingStudioBilling::SubscriptionLine' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_subscription_lines source WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value ) THEN RAISE EXCEPTION 'entitlement subscription grant does not match frozen source'; END IF; IF NEW.source_type = 'RecordingStudioBilling::Purchase' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_purchases source WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest ) THEN RAISE EXCEPTION 'entitlement purchase source authority is invalid'; END IF; IF NEW.source_type = 'RecordingStudioBilling::Purchase' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_purchases source WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value ) THEN RAISE EXCEPTION 'entitlement purchase grant does not match frozen source'; END IF; IF NEW.source_type = 'RecordingStudioBilling::DefaultEntitlementBootstrap' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_default_entitlement_bootstraps source WHERE source.id = NEW.source_id AND source.root_recording_id = NEW.root_recording_id AND source.account_recording_id = NEW.account_recording_id AND source.manifest_digest = NEW.manifest_digest ) THEN RAISE EXCEPTION 'entitlement bootstrap source authority is invalid'; END IF; IF NEW.source_type = 'RecordingStudioBilling::DefaultEntitlementBootstrap' AND NOT EXISTS ( SELECT 1 FROM recording_studio_billing_default_entitlement_bootstraps source WHERE source.id = NEW.source_id AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'type'] = to_jsonb(NEW.feature_kind) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'definition', 'merge_rule'] = to_jsonb(NEW.merge_rule) AND source.commercial_snapshot #> ARRAY['canonical_data', 'features', NEW.feature_key, 'value'] = NEW.value ) THEN RAISE EXCEPTION 'entitlement bootstrap grant does not match frozen source'; END IF; IF NOT rs_billing_safe_financial_json(jsonb_build_object('value', NEW.value)) THEN RAISE EXCEPTION 'entitlement grant contains unsafe data'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -1180,6 +1144,18 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: projects; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.projects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: recording_studio_accesses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1483,6 +1459,23 @@ CREATE TABLE public.recording_studio_billing_credit_ledger_entries (
 
 
 --
+-- Name: recording_studio_billing_default_entitlement_bootstraps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recording_studio_billing_default_entitlement_bootstraps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    root_recording_id uuid NOT NULL,
+    account_recording_id uuid NOT NULL,
+    product_key character varying NOT NULL,
+    manifest_digest character varying NOT NULL,
+    commercial_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    applied_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: recording_studio_billing_entitlement_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1503,7 +1496,7 @@ CREATE TABLE public.recording_studio_billing_entitlement_grants (
     CONSTRAINT rs_billing_entitlement_grant_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT rs_billing_entitlement_grant_feature_kind CHECK (((feature_kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text]))),
     CONSTRAINT rs_billing_entitlement_grant_merge_rule CHECK (((merge_rule)::text = ANY (ARRAY[('replace'::character varying)::text, ('minimum'::character varying)::text, ('maximum'::character varying)::text, ('merge'::character varying)::text, ('append'::character varying)::text]))),
-    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY (ARRAY[('RecordingStudioBilling::SubscriptionLine'::character varying)::text, ('RecordingStudioBilling::Purchase'::character varying)::text]))),
+    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY ((ARRAY['RecordingStudioBilling::SubscriptionLine'::character varying, 'RecordingStudioBilling::Purchase'::character varying, 'RecordingStudioBilling::DefaultEntitlementBootstrap'::character varying])::text[]))),
     CONSTRAINT rs_billing_entitlement_grant_value CHECK ((jsonb_typeof(value) IS NOT NULL))
 );
 
@@ -2812,6 +2805,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: projects projects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: recording_studio_accesses recording_studio_accesses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2913,6 +2914,14 @@ ALTER TABLE ONLY public.recording_studio_billing_cost_rates
 
 ALTER TABLE ONLY public.recording_studio_billing_credit_ledger_entries
     ADD CONSTRAINT recording_studio_billing_credit_ledger_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recording_studio_billing_default_entitlement_bootstraps recording_studio_billing_default_entitlement_bootstraps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT recording_studio_billing_default_entitlement_bootstraps_pkey PRIMARY KEY (id);
 
 
 --
@@ -3511,6 +3520,13 @@ CREATE INDEX idx_on_account_recording_id_d4af546da8 ON public.recording_studio_b
 
 
 --
+-- Name: idx_on_account_recording_id_dea619c30e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_account_recording_id_dea619c30e ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (account_recording_id);
+
+
+--
 -- Name: idx_on_account_recording_id_df8c8b4dfc; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3966,6 +3982,13 @@ CREATE INDEX idx_on_root_recording_id_88b3d7e1ce ON public.recording_studio_bill
 
 
 --
+-- Name: idx_on_root_recording_id_8f05a6d8dc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_root_recording_id_8f05a6d8dc ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (root_recording_id);
+
+
+--
 -- Name: idx_on_root_recording_id_90af0f36c2; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4320,6 +4343,13 @@ CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_purchase_key ON public.recordin
 --
 
 CREATE UNIQUE INDEX idx_rs_billing_credit_ledger_usage_event ON public.recording_studio_billing_credit_ledger_entries USING btree (usage_event_id);
+
+
+--
+-- Name: idx_rs_billing_default_entitlement_bootstrap_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rs_billing_default_entitlement_bootstrap_account ON public.recording_studio_billing_default_entitlement_bootstraps USING btree (root_recording_id, account_recording_id);
 
 
 --
@@ -5619,6 +5649,14 @@ ALTER TABLE ONLY public.recording_studio_billing_rates
 
 
 --
+-- Name: recording_studio_billing_default_entitlement_bootstraps fk_rails_24ba279d6e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT fk_rails_24ba279d6e FOREIGN KEY (root_recording_id) REFERENCES public.recording_studio_recordings(id);
+
+
+--
 -- Name: recording_studio_recordings fk_rails_26012d5ca3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5936,6 +5974,14 @@ ALTER TABLE ONLY public.recording_studio_billing_adjustment_intents
 
 ALTER TABLE ONLY public.recording_studio_billing_usage_events
     ADD CONSTRAINT fk_rails_6f1eea0ab2 FOREIGN KEY (late_usage_period_id) REFERENCES public.recording_studio_billing_usage_periods(id);
+
+
+--
+-- Name: recording_studio_billing_default_entitlement_bootstraps fk_rails_7162f564ee; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recording_studio_billing_default_entitlement_bootstraps
+    ADD CONSTRAINT fk_rails_7162f564ee FOREIGN KEY (account_recording_id) REFERENCES public.recording_studio_recordings(id);
 
 
 --
@@ -6737,6 +6783,8 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260820010001'),
+('20260820000001'),
 ('20260817000002'),
 ('20260817000001'),
 ('20260816000001'),

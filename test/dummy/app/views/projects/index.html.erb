@@ -1,0 +1,80 @@
+<%= render FlatPack::PageTitle::Component.new(
+  title: "Projects",
+  subtitle: "A live inventory gate — Billing holds the limit, this app counts the rows.",
+  variant: :h1
+) %>
+
+<div class="flex flex-col gap-6">
+  <% if flash[:notice].present? %>
+    <%= render FlatPack::Alert::Component.new(description: flash[:notice], style: :success) %>
+  <% end %>
+  <% if flash[:alert].present? %>
+    <%= render FlatPack::Alert::Component.new(description: flash[:alert], style: :danger) %>
+  <% end %>
+
+  <% if @gate_status.unlimited %>
+    <%= render FlatPack::Alert::Component.new(
+      description: "Projects are unlimited on this plan. Make as many as you like.",
+      style: :info
+    ) %>
+  <% elsif @gate_status.allowed %>
+    <%= render FlatPack::Alert::Component.new(
+      description: "You can still add #{@gate_status.remaining} of #{@gate_status.limit} projects.",
+      style: :info
+    ) %>
+  <% else %>
+    <%= render FlatPack::Alert::Component.new(
+      description: @gate_status.message,
+      style: :warning
+    ) %>
+    <% if @gate_status.upgrade_path.present? %>
+      <%= render FlatPack::Button::Component.new(
+        text: "See plans",
+        style: :secondary,
+        size: :md,
+        url: @gate_status.upgrade_path
+      ) %>
+    <% end %>
+  <% end %>
+
+  <% if @gate_status.allowed || @gate_status.unlimited %>
+    <%= form_with url: projects_path(root_recording_id: workspace_root_id), method: :post do %>
+      <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+        <% card.body do %>
+          <div class="flex flex-col gap-4">
+            <%= render FlatPack::TextInput::Component.new(
+              name: "project[name]",
+              label: "Project name",
+              placeholder: "Launch checklist"
+            ) %>
+          </div>
+        <% end %>
+        <% card.footer do %>
+          <%= render FlatPack::Button::Component.new(
+            text: "Create project",
+            style: :primary,
+            size: :md,
+            type: :submit
+          ) %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+
+  <% if @projects.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.body do %>
+        <ul class="flex flex-col gap-3">
+          <% @projects.each do |project| %>
+            <li class="text-sm"><%= project.name %></li>
+          <% end %>
+        </ul>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= render FlatPack::EmptyState::Component.new(
+      title: "No projects yet",
+      description: "Create one to see the free-plan limit in action."
+    ) %>
+  <% end %>
+</div>

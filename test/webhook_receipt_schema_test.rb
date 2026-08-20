@@ -39,8 +39,13 @@ class WebhookReceiptSchemaTest < ActiveSupport::TestCase
   test "install schema is a single clean-install migration" do
     migrations = Dir.glob(File.expand_path("../db/migrate/*.rb", __dir__)).map { |path| File.basename(path) }
 
-    assert_equal ["20260816000001_install_recording_studio_billing.rb"], migrations
+    assert_equal [
+      "20260816000001_install_recording_studio_billing.rb",
+      "20260820000001_add_default_entitlement_bootstrap.rb"
+    ], migrations
     schema = File.read(File.expand_path("../db/schema/install_recording_studio_billing.sql", __dir__))
+    assert_includes schema, "recording_studio_billing_default_entitlement_bootstraps"
+    assert_includes schema, "RecordingStudioBilling::DefaultEntitlementBootstrap"
     assert_includes schema, "idx_rs_billing_webhook_effect_receipt_identity"
     assert_includes schema, "idx_rs_billing_unresolved_webhook_receipt"
     assert_includes schema, "fk_rs_billing_manifests_root"

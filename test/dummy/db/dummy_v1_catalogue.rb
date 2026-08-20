@@ -83,6 +83,8 @@ class DummyV1Catalogue
     publish_unpublished_prices!
     refresh_published_records!
     seed_features!
+    apply_default_free_entitlements!
+    seed_sample_projects!
     seed_stripe_probe!
     seed_customer_journeys!
   end
@@ -281,15 +283,15 @@ class DummyV1Catalogue
     {
       "demo_free_plan" => {
         amount: 0, recurrence: "recurring", interval: "month", kind: "plan",
-        trial_days: 0, quantity_mode: "fixed", feature_values: {}
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 2 }
       },
       "demo_monthly_plan" => {
         amount: 4_900, recurrence: "recurring", interval: "month", kind: "plan",
-        trial_days: 0, quantity_mode: "fixed", feature_values: {}
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 10 }
       },
       "demo_annual_plan" => {
         amount: 49_000, recurrence: "recurring", interval: "year", kind: "plan",
-        trial_days: 14, quantity_mode: "fixed", feature_values: {}
+        trial_days: 14, quantity_mode: "fixed", feature_values: { "demo_projects" => 25 }
       },
       "demo_quantity_addon" => {
         amount: 1_000, recurrence: "recurring", interval: "month", kind: "addon",
@@ -358,12 +360,29 @@ class DummyV1Catalogue
 
   def seed_features!
     monthly = @catalogue.fetch("demo_monthly_plan")
+    free = @catalogue.fetch("demo_free_plan")
     addon = @catalogue.fetch("demo_quantity_addon")
     credit_pack = @catalogue.fetch("demo_credit_pack")
     @priority_feature = find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
       parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
       kind: "boolean", definition: {}, unique_by: :product
+    )
+    @projects_feature = find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: free.fetch(:product), product_recording: free.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
+    )
+    find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
+    )
+    annual = @catalogue.fetch("demo_annual_plan")
+    find_or_record(
+      RecordingStudioBilling::Feature, "demo_projects",
+      parent: annual.fetch(:product), product_recording: annual.fetch(:product).recording,
+      kind: "limit", definition: {}, unique_by: :product
     )
     find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
@@ -381,10 +400,10 @@ class DummyV1Catalogue
       parent: credit_pack.fetch(:product), product_recording: credit_pack.fetch(:product).recording,
       kind: "allowance", definition: {}, unique_by: :product
     )
-    unpublished = [@priority_feature, @usage_feature].reject { |feature| feature.state == "published" }
+    unpublished = [@priority_feature, @usage_feature, @projects_feature].reject { |feature| feature.state == "published" }
     return if unpublished.empty?
 
-    [[monthly.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|
+    [[monthly.fetch(:us_price)], [free.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|
       RecordingStudioBilling::CommercialPublisher.publish!(
         root_recording: @admin_root_recording,
         price_recording_ids: prices.map { |price| price.recording.id },
@@ -393,6 +412,23 @@ class DummyV1Catalogue
     end
     @priority_feature = refresh(@priority_feature)
     @usage_feature = refresh(@usage_feature)
+    @projects_feature = refresh(@projects_feature)
+  end
+
+  def apply_default_free_entitlements!
+    account_recording = RecordingStudio::Recording.unscoped.find_by!(
+      root_recording: @root_recording, parent_recording: @root_recording,
+      recordable_type: "RecordingStudioBilling::Account", trashed_at: nil
+    )
+    RecordingStudioBilling.apply_default_free_entitlements!(
+      root_recording: @root_recording, account_recording: account_recording
+    )
+  end
+
+  def seed_sample_projects!
+    return if Project.for_root(@root_recording).exists?
+
+    @root_recording.record(Project) { |project| project.name = "Starter project" }
   end
 
   def seed_stripe_probe!

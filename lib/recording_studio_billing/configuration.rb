@@ -16,7 +16,8 @@ require_relative "../../app/services/recording_studio_billing/stripe_tax_calcula
 
 module RecordingStudioBilling
   class Configuration
-    attr_reader :provider, :hooks, :tax_policy, :discount_policy, :feature_definitions, :market_default_country, :commercial_authorizer,
+    attr_reader :provider, :hooks, :tax_policy, :discount_policy, :feature_definitions, :gates,
+                :default_free_plan_product_key, :market_default_country, :commercial_authorizer,
                 :provider_registry, :tax_calculator_registry, :stripe_credential_resolver, :billing_copy, :support_url,
                 :billing_presenter_overrides, :billing_provider_components, :stripe_trusted_origins, :stripe_tax_code_resolver,
                 :stripe_portal_customer_resolver, :stripe_portal_configuration_id, :billing_portal_context_resolver,
@@ -37,6 +38,8 @@ module RecordingStudioBilling
       }.freeze
       @discount_policy = { enabled: false, policy_version: "v1", rules: [] }.freeze
       @feature_definitions = {}
+      @gates = {}
+      @default_free_plan_product_key = nil
       @market_default_country = nil
       @commercial_authorizer = nil
       @billing_copy = {}.freeze
@@ -58,7 +61,9 @@ module RecordingStudioBilling
         provider: provider,
         tax_policy: tax_policy,
         discount_policy: discount_policy,
-        feature_definitions: feature_definitions,
+        feature_definitions: feature_definitions.keys,
+        gates: gates.keys,
+        default_free_plan_product_key: default_free_plan_product_key,
         market_default_country: market_default_country,
         billing_copy: billing_copy,
         support_url: support_url,
@@ -111,10 +116,54 @@ module RecordingStudioBilling
       registry = definitions.respond_to?(:to_h) ? definitions.to_h : {}
       @feature_definitions = registry.each_with_object({}) do |(key, definition), result|
         normalized_key = key.to_s
-        raise ArgumentError, "feature key is invalid" unless normalized_key.match?(CommercialRecordable::KEY_FORMAT)
+        raise ArgumentError, "feature key is invalid" unless normalized_key.match?(/\A[a-z][a-z0-9_]*\z/)
 
         result[normalized_key] = FeatureDefinitionRegistry.normalize(definition).freeze
       end.freeze
+    end
+
+    def gates=(definitions)
+      registry = definitions.respond_to?(:to_h) ? definitions.to_h : {}
+      @gates = registry.each_with_object({}) do |(key, definition), result|
+        normalized_key = key.to_s
+        raise ArgumentError, "gate key is invalid" unless normalized_key.match?(/\A[a-z][a-z0-9_]*\z/)
+
+        normalized = GateRegistry.normalize(definition.merge(key: normalized_key))
+        normalized = normalized.merge("feature_key" => normalized_key).freeze unless normalized.key?("feature_key")
+        result[normalized_key] = normalized
+      end.freeze
+    end
+
+    # Merges one gate into the registry without replacing siblings.
+    def register_gate(key, definition)
+      self.gates = gates.merge(key.to_s => definition)
+    end
+
+    # Ensures every gate references a known feature definition with a matching type.
+    # Call after both feature_definitions and gates are configured (for example at
+    # the end of to_prepare). No-op when either registry is empty.
+    def validate_gate_configuration!
+      return self if feature_definitions.empty? || gates.empty?
+
+      gates.each do |gate_key, gate|
+        feature_key = gate.fetch("feature_key", gate_key)
+        definition = feature_definitions[feature_key]
+        raise ArgumentError, "gate #{gate_key} references unknown feature definition: #{feature_key}" unless definition
+
+        expected = gate.fetch("kind")
+        actual = definition.fetch("type")
+        next if expected == actual
+
+        raise ArgumentError, "gate #{gate_key} kind #{expected} does not match feature #{feature_key} type #{actual}"
+      end
+      self
+    end
+
+    def default_free_plan_product_key=(value)
+      key = value&.to_s&.strip
+      raise ArgumentError, "default_free_plan_product_key is invalid" if key.present? && !key.match?(/\A[a-z][a-z0-9_]*\z/)
+
+      @default_free_plan_product_key = key.presence
     end
 
     def market_default_country=(value)

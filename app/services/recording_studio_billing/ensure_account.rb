@@ -38,7 +38,9 @@ module RecordingStudioBilling
         root_recording: root,
         parent_recording: root
       )
-      Account.with_current_recording.find(account.id)
+      created = Account.with_current_recording.find(account.id)
+      ApplyDefaultFreeEntitlements.call(root_recording: root, account_recording: created.recording, optional: true)
+      created
     end
 
     def current_account(root)

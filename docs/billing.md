@@ -109,6 +109,95 @@ RecordingStudioBilling.entitled?(root_recording: workspace, feature_key: "projec
 RecordingStudioBilling.feature_value(root_recording: workspace, feature_key: "seats")
 ```
 
+### App-owned gates
+
+Hosts declare what each plan limit *means* in application code. Billing resolves the allowance; the host counts usage and enforces at create/action sites.
+
+Use gates for **inventory-style** checks (booleans and live quantity counts). Use usage, allowances, credits, and overage APIs for **consumed meters** (API calls this period). Do not wire metered consumption through `config.gates`.
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.feature_definitions = {
+    "pages" => { source: "catalogue", merge_rule: "replace", default: 0, type: "limit", ... },
+    "priority_support" => { source: "catalogue", merge_rule: "replace", default: false, type: "boolean", ... }
+  }
+
+  config.register_gate("pages", kind: :limit, label: "Pages", count: ->(root:) { Page.for_root(root).count })
+  config.register_gate(
+    "create_page",
+    kind: :limit,
+    feature_key: "pages", # gate key may differ from the plan feature key
+    count: ->(root:) { Page.for_root(root).count }
+  )
+  config.register_gate(
+    "priority_support",
+    kind: :boolean,
+    feature_key: "priority_support",
+    label: "Priority support"
+  )
+end
+
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages") # soft Result
+RecordingStudioBilling.enforce_gate!(root_recording: workspace, gate_key: "pages", mode: :hard) # raises
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages") # hard convenience
+RecordingStudioBilling.gate_allowed?(root_recording: workspace, gate_key: "pages")
+RecordingStudioBilling.require_gate!(root_recording: workspace, gate_key: "pages", quantity: 3)
+
+status = RecordingStudioBilling.gate_status(root_recording: workspace, gate_key: "pages")
+# => allowed, current, limit, remaining, unlimited, code, reason, message, upgrade_path, …
+RecordingStudioBilling.gate_message(status) # product copy from deny code (also accepts EnforceGate::Denied)
+```
+
+Limit gates compare `current + quantity` to `feature_value` (default `quantity: 1`). Boolean gates delegate to `entitled?`.
+
+Soft checks (`enforce_gate!`, `gate_allowed?`, `gate_status`) never raise. Hard checks (`require_gate!` or `mode: :hard`) raise `EnforceGate::Denied`. Use soft checks for UI banners and hard checks at write sites.
+
+Result / `Denied` include `current`, `limit`, `remaining` (capacity left before this request), `quantity`, and a stable `code` (`limit_reached`, `not_configured`, `not_entitled`). Override deny copy through `config.billing_copy` keys such as `gate_limit_reached`.
+
+A plan feature value of `-1` (`RecordingStudioBilling::EnforceGate::UNLIMITED`) means unlimited for limit gates.
+
+When both `feature_definitions` and `gates` are present, call
+`validate_gate_configuration!` after registration (for example at the end of
+`to_prepare`) so Billing can check that each gate’s `feature_key` exists and that
+gate `kind` matches the feature `type`.
+
+Commercial limits always resolve on the workspace root. For child-scoped quantities (for example comments on a page), pass an optional `subject:` so the host `count` proc can scope its query. Billing does not walk the recording tree or store per-child grants.
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.register_gate(
+    "comments_per_page",
+    kind: :limit,
+    label: "Comments",
+    count: ->(root:, subject:) { subject.comments.count }
+  )
+end
+
+RecordingStudioBilling.require_gate!(
+  root_recording: workspace,
+  gate_key: "comments_per_page",
+  subject: page
+)
+```
+
+If a gate `count` proc requires `subject:` and the call omits it, Billing raises `ArgumentError`. Root-only gates keep accepting `count: ->(root:) { ... }` and ignore an unused subject.
+
+### Freemium bootstrap
+
+Define a $0 plan in the admin catalogue and nominate it as the default free plan. When a billing account is created, Billing can project bootstrap grants from that plan's frozen published manifest — without a subscription or checkout:
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.default_free_plan_product_key = "free_plan"
+end
+
+RecordingStudioBilling.ensure_account(root_recording: workspace, name: "Billing account")
+# or explicitly:
+RecordingStudioBilling.apply_default_free_entitlements!(root_recording: workspace)
+```
+
+Bootstrap grants are append-only. When the workspace later has a live subscription, paid subscription and purchase grants take precedence; bootstrap rows remain in the database but are ignored for access checks.
+
 Do not call `project_entitlements` after normal checkout or subscription-change projection unless you are repairing historical data. Replays of those projectors remain idempotent and re-ensure grants.
 
 People may act on a workspace through RecordingStudio Accessible. Whether the workspace has paid for a feature is a separate entitlement check on the root.

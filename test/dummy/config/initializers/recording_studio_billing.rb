@@ -150,6 +150,7 @@ end
 RecordingStudioBilling.configure do |config|
   config.provider = :fake
   config.commercial_authorizer = ->(**) { true }
+  config.default_free_plan_product_key = "demo_free_plan"
   config.billing_location_context_resolver = lambda do |**|
     { host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("US", :host) }
   end
@@ -173,8 +174,21 @@ Rails.application.config.to_prepare do
       source: "catalogue", merge_rule: "replace", default: 5, type: "allowance", meter_key: "demo_api_calls",
       usage_unit_key: "demo_api_call", replenishment: "period", lifecycle: "subscription", consumption: "metered",
       ordering: 2, validation: { "minimum" => 0 }
+    },
+    "demo_projects" => {
+      source: "catalogue", merge_rule: "replace", default: 0, type: "limit", meter_key: nil,
+      usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 3,
+      validation: { "minimum" => 0 }
     }
   }
+
+  RecordingStudioBilling.register_gate(
+    "demo_projects",
+    kind: :limit,
+    label: "Projects",
+    count: ->(root:) { Project.for_root(root).count }
+  )
+  RecordingStudioBilling.validate_gate_configuration!
 
   registry = RecordingStudioBilling.configuration.tax_calculator_registry
   unless registry.keys.include?("dummy_exclusive")

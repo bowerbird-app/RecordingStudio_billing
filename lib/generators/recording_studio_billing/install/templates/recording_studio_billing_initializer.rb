@@ -12,4 +12,27 @@ RecordingStudioBilling.configure do |config|
   # Change the path in routes.rb if you want a different URL than /plans.
   config.plans_page_route_helper = :plans_path
   config.plans_page_requires_sign_in = true
+  #
+  # Optional freemium bootstrap from a published $0 plan in your admin catalogue:
+  # config.default_free_plan_product_key = "free_plan"
+  #
+  # Optional app-owned gates (Billing resolves allowances; the host counts usage):
+  # config.register_gate(
+  #   "pages",
+  #   kind: :limit,
+  #   label: "Pages",
+  #   count: ->(root:) { Page.for_root(root).count }
+  # )
+  # config.register_gate(
+  #   "comments_per_page",
+  #   kind: :limit,
+  #   label: "Comments",
+  #   count: ->(root:, subject:) { subject.comments.count }
+  # )
+  # Prefer register_gate over replacing config.gates so engines can contribute.
+  # Inventory limits use gates; metered API/usage allowances use usage APIs.
+  # Plan feature value -1 means unlimited for limit gates.
+  # Soft checks: enforce_gate! / gate_allowed? / gate_status
+  # Hard checks: require_gate! or enforce_gate!(mode: :hard)
+  # Denied copy: gate_message(result) — override via config.billing_copy["gate_limit_reached"] etc.
 end
