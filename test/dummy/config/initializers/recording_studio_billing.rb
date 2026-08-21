@@ -172,11 +172,15 @@ unless Rails.env.test?
       config.stripe_credential_resolver = -> { DummyStripeTestCredentials.to_h }
       config.stripe_trusted_origins = [ DummyStripeTestCredentials::RETURN_ORIGIN ]
     end
-    RecordingStudioBilling::CheckoutSelectionsController.prepend(DummyStripeCheckoutExecution)
   end
 end
 
 Rails.application.config.to_prepare do
+  if DummyStripeTestCredentials.user_flow_enabled?
+    controller = "RecordingStudioBilling::CheckoutSelectionsController".constantize
+    controller.prepend(DummyStripeCheckoutExecution) unless controller < DummyStripeCheckoutExecution
+  end
+
   RecordingStudioBilling.configuration.feature_definitions = {
     "demo_priority_support" => {
       source: "catalogue", merge_rule: "replace", default: false, type: "boolean", meter_key: nil,
