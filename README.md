@@ -143,10 +143,9 @@ class. Hooks run only during rendering; they must not make billing state changes
 - `RecordingStudioBilling::BillingAdmin` is the `:billing_admin` child
   recordable.
 - The admin support concern uses the public
-  `RecordingStudioAdmin::AllowsAdminSections` API to register `:root` plus the
-  site-scoped `:billing_commercial`, `:billing_financial`, and
-  `:billing_operations` sections. Hosts enable `:accessible` on the Admin root
-  themselves.
+  `RecordingStudioAdmin::AllowsAdminSections` API to register the site-scoped
+  `:billing_commercial`, `:billing_financial`, and `:billing_operations`
+  sections. Hosts enable `:accessible` on the Admin root themselves.
 
 The capability metadata uses Recording Studio's public
 `register_capability`, `enable_capability`, and `recording_studio_recordable`
