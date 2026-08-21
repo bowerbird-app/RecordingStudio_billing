@@ -25,6 +25,10 @@ module DummyStripeTestCredentials
     secret_key.present?
   end
 
+  def user_flow_enabled?
+    present? && !Rails.env.test?
+  end
+
   def to_h
     return unless present?
 

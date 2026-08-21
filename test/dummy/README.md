@@ -81,6 +81,18 @@ bin/rails stripe:ping
 it. Live `sk_live` keys are ignored. The dummy test suite skips the live Stripe
 probe unless those test keys are in the environment.
 
+### Test a subscription in the browser
+
+With Stripe test keys present, development seeds a **Stripe Test Workspace** and
+a **Stripe test monthly plan** at $1/month. Sign in, switch to that workspace,
+open **Plan**, and choose the Stripe plan. The dummy executes this test checkout
+inline and renders Stripe's embedded Checkout form.
+
+Use Stripe's test card `4242 4242 4242 4242`, any future expiry, and any CVC.
+The completed payment, customer, and subscription appear only in Stripe test
+mode. The dummy still waits for a verified webhook or reconciliation before it
+marks the purchase complete.
+
 Dummy checkout presentations and collection methods match the production Stripe
 contract: `embedded`, `redirect`, `payment_link`, `invoice`, `no_charge` and
 `automatic` / `send_invoice`. Price scope is `market`. Checkout pages show

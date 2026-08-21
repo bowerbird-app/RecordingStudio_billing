@@ -73,9 +73,7 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   private
 
   def seed_free_plan_and_bootstrap!
-    @catalogue_admin = AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}")
-    admin_root = RecordingStudio.root_recording_for(@catalogue_admin)
-    @catalogue_admin_recording = admin_root
+    admin_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: admin_root, key: "billing_#{SecureRandom.hex(4)}")
     provider = admin_root.record(RecordingStudioBilling::ProviderAccount, parent_recording: admin.recording) do |account|
       account.billing_admin_recording = admin.recording

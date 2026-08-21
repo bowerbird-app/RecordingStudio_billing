@@ -87,6 +87,7 @@ class DummyV1Catalogue
     seed_sample_projects!
     seed_stripe_probe!
     seed_customer_journeys!
+    seed_stripe_user_flow!
   end
 
   def seed_hierarchy!
@@ -442,6 +443,62 @@ class DummyV1Catalogue
       provider_account_recording: @stripe_test_provider.recording, provider_key: "stripe",
       request: { "purpose" => "dummy_stripe_configuration_probe" }
     )
+  end
+
+  def seed_stripe_user_flow!
+    return unless DummyStripeTestCredentials.user_flow_enabled?
+
+    workspace = Workspace.find_or_create_by!(name: "Stripe Test Workspace")
+    workspace_root = RecordingStudio.root_recording_for(workspace)
+    RecordingStudioBilling.ensure_account(root_recording: workspace_root, name: "Stripe Test Account")
+    grant_stripe_workspace_access!(workspace_root)
+
+    market = find_or_record(
+      RecordingStudioBilling::Market, "stripe_test_us_market",
+      provider_account_recording: @stripe_test_provider.recording, country_codes: ["US"],
+      country_groups: {}, allowed_currency_codes: ["USD"], default_currency_code: "USD",
+      priority: 10, specificity: 1, regional_country_codes: [], global_fallback: false,
+      ppa_policy: "standard", rounding_policy: "half_up", tax_presentation_policy: "exclusive",
+      verification_policy: "requote"
+    )
+    product = find_or_record(
+      RecordingStudioBilling::Product, "stripe_test_monthly_plan",
+      provider_account_recording: @stripe_test_provider.recording, kind: "plan",
+      feature_values: { "demo_projects" => 10 }
+    )
+    option = find_or_record(
+      RecordingStudioBilling::BillingOption, "stripe_test_monthly_plan_option",
+      parent: product, product_recording: product.recording, recurrence: "recurring",
+      interval: "month", interval_count: 1, quantity_mode: "fixed", default_quantity: 1,
+      pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0,
+      trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate",
+      checkout_policy: "allowed", tax_policy: "exclusive"
+    )
+    price = find_or_record(
+      RecordingStudioBilling::Price, "stripe_test_monthly_plan_us_price",
+      parent: option, billing_option_recording: option.recording, market_recording: market.recording,
+      amount_minor: 100, currency_code: "USD", currency_exponent: 2,
+      pricing_model: "flat", version: 1, scope: "market"
+    )
+    current_price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price.key)
+    return if current_price.state == "published"
+
+    RecordingStudioBilling::CommercialPublisher.publish!(
+      root_recording: @admin_root_recording,
+      price_recording_ids: [current_price.recording.id],
+      actor: @user
+    )
+  end
+
+  def grant_stripe_workspace_access!(workspace_root)
+    previous = RecordingStudioAccessible.configuration.access_management_authorizer
+    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
+    result = RecordingStudioAccessible.grant_access(
+      recording: workspace_root, actor: @user, role: "edit", manager_actor: @user
+    )
+    raise "dummy catalogue could not grant Stripe workspace access: #{result.error}" unless result.success?
+  ensure
+    RecordingStudioAccessible.configuration.access_management_authorizer = previous
   end
 
   def seed_customer_journeys!

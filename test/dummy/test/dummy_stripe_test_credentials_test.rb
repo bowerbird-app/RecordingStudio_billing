@@ -32,6 +32,7 @@ class DummyStripeTestCredentialsTest < ActiveSupport::TestCase
 
   test "the dummy test environment does not install a Stripe credential resolver" do
     assert Rails.env.test?
+    refute DummyStripeTestCredentials.user_flow_enabled?
     assert_nil RecordingStudioBilling.configuration.stripe_credential_resolver
   end
 end

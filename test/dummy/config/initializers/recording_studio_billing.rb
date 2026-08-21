@@ -2,6 +2,7 @@
 
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_financial_adapter", __dir__)
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_tax_calculator", __dir__)
+require File.expand_path("../../lib/dummy_stripe_checkout_execution", __dir__)
 require File.expand_path("../../lib/dummy_stripe_test_credentials", __dir__)
 
 module RecordingStudioBilling
@@ -171,6 +172,7 @@ unless Rails.env.test?
       config.stripe_credential_resolver = -> { DummyStripeTestCredentials.to_h }
       config.stripe_trusted_origins = [ DummyStripeTestCredentials::RETURN_ORIGIN ]
     end
+    RecordingStudioBilling::CheckoutSelectionsController.prepend(DummyStripeCheckoutExecution)
   end
 end
 
