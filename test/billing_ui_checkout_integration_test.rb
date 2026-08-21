@@ -376,10 +376,10 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def stripe_embedded_checkout_test?
-    [
-      "test_Stripe_embedded_checkout_mounts_transient_data_and_browser_return_cannot_fulfil_the_intent",
-      "test_pending_Stripe_checkout_session_presents_while_provider_confirmation_remains_open",
-      "test_pending_provider_checkout_without_a_created_session_does_not_mount_presentation"
+    %w[
+      test_Stripe_embedded_checkout_mounts_transient_data_and_browser_return_cannot_fulfil_the_intent
+      test_pending_Stripe_checkout_session_presents_while_provider_confirmation_remains_open
+      test_pending_provider_checkout_without_a_created_session_does_not_mount_presentation
     ].include?(name)
   end
 
@@ -523,7 +523,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       )
     end
 
-    def call(command:, request:, idempotency_key:)
+    def call(**)
       RecordingStudioBilling::AdapterResponse.new(
         status: "pending",
         provider_reference: "cs_test_pending_session",
@@ -555,7 +555,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       )
     end
 
-    def call(command:, request:, idempotency_key:)
+    def call(**)
       RecordingStudioBilling::AdapterResponse.new(
         status: "pending",
         result: { "reason" => "provider_timeout" },
@@ -563,7 +563,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       )
     end
 
-    def checkout_presentation(provider_reference:)
+    def checkout_presentation(**)
       { mode: "embedded", client_secret: "must_not_render", publishable_key: "must_not_render" }
     end
   end
