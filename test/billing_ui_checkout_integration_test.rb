@@ -62,6 +62,30 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_equal 1, first_intent.reload.attempts.count
   end
 
+  test "plans-style checkout without country_code uses trusted host market context" do
+    post "/billing/billing/checkout", params: {
+      checkout_request_key: SecureRandom.hex(16),
+      items: { "0" => { billing_option_recording_id: @option.recording.id } }
+    }
+
+    assert_redirected_to %r{/billing/checkout/}
+    intent = RecordingStudioBilling::CheckoutIntent.for_root(@root).sole
+    assert_equal "pending_provider", intent.state
+    assert_equal ["IT"], intent.items.first.market_recording.recordable.country_codes
+  end
+
+  test "plans-style checkout without country or host evidence fails closed" do
+    RecordingStudioBilling.configuration.billing_location_context_resolver = nil
+
+    post "/billing/billing/checkout", params: {
+      checkout_request_key: SecureRandom.hex(16),
+      items: { "0" => { billing_option_recording_id: @option.recording.id } }
+    }
+
+    assert_redirected_to %r{/plans\?root_recording_id=}
+    assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
+  end
+
   test "same checkout request key with changed selection redirects safely without a second command" do
     post "/billing/billing/checkout", params: selection_params
 

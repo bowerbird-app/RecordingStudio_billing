@@ -125,6 +125,15 @@ module RecordingStudioBilling
       product = option.product_recording.recordable
       raise ActiveRecord::RecordNotFound, "commercial item not found" unless product.is_a?(Product)
 
+      # #region agent log
+      begin
+        require "json"
+        File.open("/opt/cursor/logs/debug.log", "a") do |f|
+          f.puts(JSON.generate({ hypothesisId: "A", location: "create_checkout_intent.rb:resolve_item", message: "market inputs", data: { host_country_present: !host_country.nil?, host_country_class: host_country.class.name, country_code: @country_code, stage: stage.to_s, option_key: option.key }, timestamp: (Time.now.to_f * 1000).to_i, runId: "post-fix" }))
+        end
+      rescue StandardError
+      end
+      # #endregion
       resolution = market_resolution(product, stage:, previous:, account_country:, provider_country:, host_country:)
       market = resolution.market
       currency = resolution.currency_code
