@@ -168,20 +168,7 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def cleanup_projects_fixtures!
-    return unless @root
-
-    Project.for_root(@root).find_each do |project|
-      project.recording&.destroy
-      project.delete
-    end
-    if @workspace
-      recording = RecordingStudio::Recording.find_by(recordable: @workspace)
-      recording&.destroy
-      @workspace.delete
-    end
-    @user&.delete
-  rescue StandardError
-    # Best-effort cleanup so other dummy integration tests keep the seeded default root.
+    BillingTestDatabaseCleanup.clear!
   end
 
   def acquire_database_lock!

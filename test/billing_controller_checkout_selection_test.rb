@@ -42,6 +42,31 @@ class BillingControllerCheckoutSelectionTest < Minitest::Test
     assert_equal "payment_link", selection.fetch(:presentation)
   end
 
+  def test_trusted_host_country_reads_configured_billing_location_context
+    previous = RecordingStudioBilling.configuration.billing_location_context_resolver
+    host = RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("US", :host)
+    RecordingStudioBilling.configuration.billing_location_context_resolver = lambda do |**|
+      { host_country: host }
+    end
+    controller = controller_with(params: {})
+    controller.define_singleton_method(:root_recording) { :root }
+
+    assert_equal host, controller.send(:trusted_host_country)
+  ensure
+    RecordingStudioBilling.configuration.billing_location_context_resolver = previous
+  end
+
+  def test_trusted_host_country_fails_closed_when_resolver_errors
+    previous = RecordingStudioBilling.configuration.billing_location_context_resolver
+    RecordingStudioBilling.configuration.billing_location_context_resolver = ->(**) { raise "boom" }
+    controller = controller_with(params: {})
+    controller.define_singleton_method(:root_recording) { :root }
+
+    assert_nil controller.send(:trusted_host_country)
+  ensure
+    RecordingStudioBilling.configuration.billing_location_context_resolver = previous
+  end
+
   private
 
   def controller_with(params:)

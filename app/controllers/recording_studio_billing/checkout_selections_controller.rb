@@ -11,7 +11,8 @@ module RecordingStudioBilling
         items: checkout_selection.fetch(:items),
         country_code: checkout_selection[:country_code],
         currency_code: checkout_selection[:currency_code],
-        presentation: checkout_selection[:presentation]
+        presentation: checkout_selection[:presentation],
+        host_country: trusted_host_country
       )
       raise ArgumentError, "checkout request conflicts with existing selection" if result.conflict?
 
@@ -22,6 +23,15 @@ module RecordingStudioBilling
     end
 
     private
+
+    def trusted_host_country
+      context = RecordingStudioBilling.configuration.billing_location_context_resolver&.call(
+        root_recording: root_recording
+      )
+      context.to_h[:host_country]
+    rescue StandardError
+      nil
+    end
 
     def checkout_selection
       items = params.require(:items)

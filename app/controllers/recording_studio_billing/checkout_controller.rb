@@ -24,12 +24,27 @@ module RecordingStudioBilling
 
     def checkout_presentation
       command = @checkout_intent.financial_command
-      return {} unless @checkout_intent.state == "awaiting_confirmation" && command&.provider_reference?
+      return {} unless presentable_checkout_command?(command)
 
       adapter = RecordingStudioBilling.provider_adapter(command.provider_adapter_key)
       return {} unless adapter.respond_to?(:checkout_presentation)
 
       adapter.checkout_presentation(provider_reference: command.provider_reference)
+    end
+
+    # Stripe creates a Checkout Session with status=pending and leaves the intent
+    # in pending_provider until payment is confirmed. Presentation must still be
+    # available so the browser can mount the session while confirmation is pending.
+    def presentable_checkout_command?(command)
+      return false unless command&.provider_reference?
+      return true if @checkout_intent.state == "awaiting_confirmation"
+      return true if @checkout_intent.state == "pending_provider" && checkout_session_created?(command)
+
+      false
+    end
+
+    def checkout_session_created?(command)
+      command&.normalized_result.to_h["checkout_session_created"] == true
     end
 
     def checkout_presenter(presentation)

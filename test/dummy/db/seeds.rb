@@ -16,3 +16,6 @@ puts "Seeded: published products and market prices for US, UK, Italy, Germany, a
 puts "Seeded: metered API-call service with allowance, rates, costs, and US overage caps"
 puts "Seeded: free, monthly, annual (with trial), quantity-addon, and prepaid credit-pack examples"
 puts "Seeded: checkout presentations, hybrid subscription, usage, refund, adjustment, and reconciliation fixtures"
+if DummyStripeTestCredentials.user_flow_enabled?
+  puts "Seeded: Stripe Test Workspace with a $1 monthly test plan for browser checkout"
+end

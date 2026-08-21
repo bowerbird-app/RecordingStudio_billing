@@ -67,7 +67,7 @@ module RecordingStudioBilling
 
       session = stripe_hash(stripe_client(credential).v1.checkout.sessions.retrieve(provider_reference))
 
-      if session["ui_mode"] == "embedded" && session["client_secret"].present?
+      if session["ui_mode"].to_s.in?(%w[embedded embedded_page]) && session["client_secret"].present?
         { mode: "embedded", client_secret: session["client_secret"],
           publishable_key: credential.fetch(:publishable_key, "") }
       elsif stripe_browser_url?(session["url"])
@@ -173,7 +173,7 @@ module RecordingStudioBilling
       }
       apply_native_tax!(params, checkout.fetch("tax", {}), command)
       apply_collection_method!(params, collection_method, checkout, recurring?(items))
-      params["ui_mode"] = presentation unless %w[payment_link invoice].include?(presentation)
+      apply_checkout_ui_mode!(params, presentation)
       if presentation == "embedded" && credential[:return_url].present?
         assign_trusted_url!(params, "return_url",
                             credential[:return_url])
@@ -299,6 +299,13 @@ module RecordingStudioBilling
                           metadata: { "adapter" => "stripe" })
     end
 
+    def apply_checkout_ui_mode!(params, presentation)
+      case presentation
+      when "embedded" then params["ui_mode"] = "embedded_page"
+      when "redirect" then params["ui_mode"] = "hosted_page"
+      end
+    end
+
     def stripe_checkout_mode(session)
       mode = session.dig("metadata", "recording_studio_billing_presentation").to_s
       %w[payment_link invoice redirect].include?(mode) ? mode : "redirect"
@@ -404,10 +411,24 @@ module RecordingStudioBilling
                                                                                       item[:manifest_digest]).to_s }.compact }
         product["tax_code"] = stripe_tax_code(tax) if tax.fetch("enabled", false)
         price_data = { "currency" => currency.to_s.downcase, "unit_amount" => amount, "product_data" => product }
+        price_data["recurring"] = stripe_recurring_terms(item) if recurring_item?(item)
         price_data["tax_behavior"] = tax.fetch("behavior") if tax.fetch("enabled",
                                                                         false) && tax.fetch("behavior") != "provider_default"
         { "price_data" => price_data, "quantity" => quantity }
       end
+    end
+
+    def recurring_item?(item)
+      (item["recurrence"] || item[:recurrence]) == "recurring"
+    end
+
+    def stripe_recurring_terms(item)
+      interval = (item["interval"] || item[:interval]).to_s
+      interval_count = item["interval_count"] || item[:interval_count]
+      raise ArgumentError unless interval.in?(%w[day week month year])
+      raise ArgumentError unless interval_count.is_a?(Integer) && interval_count.positive?
+
+      { "interval" => interval, "interval_count" => interval_count }
     end
 
     def native_tax(checkout)
