@@ -24,54 +24,12 @@ module RecordingStudioBilling
 
     def checkout_presentation
       command = @checkout_intent.financial_command
-      presentable = presentable_checkout_command?(command)
-      # #region agent log
-      begin
-        require "json"
-        File.open("/opt/cursor/logs/debug.log", "a") do |f|
-          f.puts(JSON.generate({
-                                 hypothesisId: "D", location: "checkout_controller.rb:checkout_presentation",
-                                 message: "presentation gate",
-                                 data: {
-                                   intent_state: @checkout_intent.state, command_state: command&.state,
-                                   has_provider_reference: command&.provider_reference?,
-                                   checkout_session_created: checkout_session_created?(command),
-                                   presentable: presentable, adapter_key: command&.provider_adapter_key
-                                 },
-                                 timestamp: (Time.now.to_f * 1000).to_i, runId: "post-fix"
-                               }))
-        end
-      rescue StandardError
-      end
-      # #endregion
-      return {} unless presentable
+      return {} unless presentable_checkout_command?(command)
 
       adapter = RecordingStudioBilling.provider_adapter(command.provider_adapter_key)
       return {} unless adapter.respond_to?(:checkout_presentation)
 
-      presentation = adapter.checkout_presentation(provider_reference: command.provider_reference)
-      # #region agent log
-      begin
-        require "json"
-        values = presentation.respond_to?(:to_h) ? presentation.to_h : {}
-        File.open("/opt/cursor/logs/debug.log", "a") do |f|
-          f.puts(JSON.generate({
-                                 hypothesisId: "F", location: "checkout_controller.rb:checkout_presentation:result",
-                                 message: "presentation returned",
-                                 data: {
-                                   mode: values[:mode] || values["mode"],
-                                   has_client_secret: values[:client_secret].present? || values["client_secret"].present?,
-                                   has_url: values[:url].present? || values["url"].present?,
-                                   has_publishable_key: values[:publishable_key].present? || values["publishable_key"].present?,
-                                   empty: values.empty?
-                                 },
-                                 timestamp: (Time.now.to_f * 1000).to_i, runId: "post-fix"
-                               }))
-        end
-      rescue StandardError
-      end
-      # #endregion
-      presentation
+      adapter.checkout_presentation(provider_reference: command.provider_reference)
     end
 
     # Stripe creates a Checkout Session with status=pending and leaves the intent
