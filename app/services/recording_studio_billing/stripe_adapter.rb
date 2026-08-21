@@ -411,10 +411,24 @@ module RecordingStudioBilling
                                                                                       item[:manifest_digest]).to_s }.compact }
         product["tax_code"] = stripe_tax_code(tax) if tax.fetch("enabled", false)
         price_data = { "currency" => currency.to_s.downcase, "unit_amount" => amount, "product_data" => product }
+        price_data["recurring"] = stripe_recurring_terms(item) if recurring_item?(item)
         price_data["tax_behavior"] = tax.fetch("behavior") if tax.fetch("enabled",
                                                                         false) && tax.fetch("behavior") != "provider_default"
         { "price_data" => price_data, "quantity" => quantity }
       end
+    end
+
+    def recurring_item?(item)
+      (item["recurrence"] || item[:recurrence]) == "recurring"
+    end
+
+    def stripe_recurring_terms(item)
+      interval = (item["interval"] || item[:interval]).to_s
+      interval_count = item["interval_count"] || item[:interval_count]
+      raise ArgumentError unless interval.in?(%w[day week month year])
+      raise ArgumentError unless interval_count.is_a?(Integer) && interval_count.positive?
+
+      { "interval" => interval, "interval_count" => interval_count }
     end
 
     def native_tax(checkout)

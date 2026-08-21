@@ -68,6 +68,67 @@ class StripeAdapterTest < Minitest::Test
     refute_includes [response.result, response.error_details, response.metadata].to_s, credential
   end
 
+  def test_subscription_checkout_sends_recurring_price_terms
+    captured = nil
+    sessions = Object.new
+    sessions.define_singleton_method(:create) do |params, _options|
+      captured = params
+      Struct.new(:id).new("cs_subscription_123")
+    end
+    client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: -> { "sk_test" },
+      client_factory: ->(_secret) { client }
+    )
+    command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
+    request = {
+      "request" => {
+        "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
+        "checkout_items" => {
+          "item-1" => {
+            "amount_minor" => 100, "quantity" => 1, "recurrence" => "recurring",
+            "interval" => "month", "interval_count" => 1
+          }
+        }
+      }
+    }
+
+    response = adapter.call(command:, request:, idempotency_key: "subscription-key")
+
+    assert_equal "pending", response.status
+    assert_equal "subscription", captured.fetch("mode")
+    assert_equal({ "interval" => "month", "interval_count" => 1 },
+                 captured.dig("line_items", 0, "price_data", "recurring"))
+  end
+
+  def test_subscription_checkout_rejects_invalid_recurring_terms_before_calling_stripe
+    client_calls = 0
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: -> { "sk_test" },
+      client_factory: lambda { |_secret|
+        client_calls += 1
+        raise "Stripe client should not be constructed"
+      }
+    )
+    command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
+    request = {
+      "request" => {
+        "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
+        "checkout_items" => {
+          "item-1" => {
+            "amount_minor" => 100, "quantity" => 1, "recurrence" => "recurring",
+            "interval" => "fortnight", "interval_count" => 1
+          }
+        }
+      }
+    }
+
+    response = adapter.call(command:, request:, idempotency_key: "invalid-subscription-key")
+
+    assert_equal "invalid", response.status
+    assert_equal 0, client_calls
+  end
+
   def test_payment_link_is_an_intent_bound_checkout_session_with_a_transient_url
     captured = nil
     sessions = Object.new

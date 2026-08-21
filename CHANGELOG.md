@@ -19,6 +19,10 @@ changing the fail-closed test suite.
   a $1 Stripe Checkout session against the test account.
 - Stripe Checkout `redirect` sends `ui_mode=hosted_page` and `embedded` sends
   `ui_mode=embedded_page`, matching Stripe's March 2026 Checkout Session enum.
+- Stripe subscription Checkout sends recurring interval terms from the frozen
+  billing option.
+- Dummy development seeds a separate Stripe Test Workspace and $1 monthly plan,
+  then executes only its Stripe test checkouts inline for browser testing.
 
 ### Upgrade notes
 
@@ -29,6 +33,9 @@ changing the fail-closed test suite.
   the local fake provider; `stripe:ping` is the live adapter check.
 - Hosts using Stripe Checkout `redirect` or `embedded` now send Stripe's
   `hosted_page` / `embedded_page` ui modes. No host code change is required.
+- Subscription Checkout now requires valid recurring `interval` and
+  `interval_count` terms. Existing published recurring billing options already
+  provide them; invalid frozen terms fail before a Stripe request.
 
 ## 0.6.0
 

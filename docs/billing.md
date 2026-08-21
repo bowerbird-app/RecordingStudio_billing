@@ -40,6 +40,13 @@ Webhook tables come from `recording_studio_webhooks`. Billing inbound-event tabl
 
 Do not introduce a second production checkout vocabulary in the dummy app.
 
+Stripe subscription Checkout uses inline recurring price terms from the frozen
+billing option (`interval` and `interval_count`). In dummy development, valid
+Stripe test credentials also add a separate Stripe Test Workspace and $1 monthly
+plan. Its controller executes only Stripe test checkouts inline so a developer
+can complete the embedded browser flow; production hosts keep provider
+execution in their own job system.
+
 The dummy seed is the V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets with distinct Italy vs Germany euro plan prices, free / monthly / annual (trial) / add-on / credit-pack / metered-service products, published manifests, checkout presentations (`embedded`, `redirect`, `payment_link`, `invoice`, `no_charge`), Italy and Germany euro checkout intents, hybrid subscription journeys, usage with allowance and overage, refunds and adjustments, and at least one reconciliation issue. Fake tax calculators are registered. Tax stays off until a later tax-demo pass.
 
 Checkout is one customer-facing lifecycle for every presentation. The browser may send option IDs, quantities, a country or currency preference, and a presentation preference. The server freezes money, tax treatment, Charge Market, and the commercial manifest. If the final Charge Market would change price or terms, checkout requotes, restarts, rejects, or holds for review. Browser return pages show intent state only; they never fulfil a purchase.
