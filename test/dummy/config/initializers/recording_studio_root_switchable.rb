@@ -29,12 +29,6 @@ RecordingStudioRootSwitchable.configure do |config|
         end
       end
     end
-    scope.access_check = lambda do |root:, actor:, **|
-      next false if actor.blank? || root.blank?
-
-      RecordingStudioAccessible.authorized?(actor: actor, recording: root, role: :view)
-    end
-
     scope.default_root = lambda do |roots:, **|
       roots.first
     end
