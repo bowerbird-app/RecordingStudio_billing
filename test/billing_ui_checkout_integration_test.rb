@@ -126,6 +126,61 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", command.reload.state
   end
 
+  test "pending Stripe checkout session presents while provider confirmation remains open" do
+    use_pending_stripe_session_checkout_adapter!
+    sign_in @user
+    switch_root(@root)
+
+    intent = create_embedded_checkout_intent(quantity: 1)
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: @root)
+    command = intent.reload.financial_command
+
+    assert_equal "pending_provider", intent.state
+    assert_equal "requires_reconciliation", command.state
+    assert_equal true, command.normalized_result["checkout_session_created"]
+    assert command.provider_reference?
+
+    get "/billing/checkout/#{intent.id}", params: { root_recording_id: @root.id }
+
+    assert_response :success
+    assert_select "[data-checkout-intent-state=pending_provider]"
+    assert_select "[data-stripe-checkout-client-secret='cs_test_pending_secret']"
+    assert_select "[data-stripe-publishable-key='pk_test_pending']"
+    assert_includes response.body, "https://js.stripe.com/v3/"
+    persisted = [intent.attributes, command.attributes, intent.attempts.map(&:attributes)].inspect
+    refute_includes persisted, "cs_test_pending_secret"
+    refute_includes persisted, "pk_test_pending"
+
+    get "/billing/checkout/#{intent.id}/return", params: { root_recording_id: @root.id }
+
+    assert_response :success
+    assert_equal "pending_provider", intent.reload.state
+    assert_equal "requires_reconciliation", command.reload.state
+  end
+
+  test "pending provider checkout without a created session does not mount presentation" do
+    use_pending_timeout_checkout_adapter!
+    sign_in @user
+    switch_root(@root)
+
+    intent = create_embedded_checkout_intent(quantity: 1)
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: @root)
+    command = intent.reload.financial_command
+
+    assert_equal "pending_provider", intent.state
+    assert_equal "requires_reconciliation", command.state
+    refute command.provider_reference?
+    refute_equal true, command.normalized_result["checkout_session_created"]
+
+    get "/billing/checkout/#{intent.id}", params: { root_recording_id: @root.id }
+
+    assert_response :success
+    assert_select "[data-checkout-intent-state=pending_provider]"
+    refute_includes response.body, "data-stripe-checkout-client-secret"
+    refute_includes response.body, "data-stripe-publishable-key"
+    refute_includes response.body, "https://js.stripe.com/v3/"
+  end
+
   test "checkout pages render redirect payment link invoice and no-charge without fulfilling on return" do
     use_presentation_checkout_adapter!
     root, option = published_checkout_option(adapter_key: "fake")
@@ -321,7 +376,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def stripe_embedded_checkout_test?
-    name == "test_Stripe_embedded_checkout_mounts_transient_data_and_browser_return_cannot_fulfil_the_intent"
+    [
+      "test_Stripe_embedded_checkout_mounts_transient_data_and_browser_return_cannot_fulfil_the_intent",
+      "test_pending_Stripe_checkout_session_presents_while_provider_confirmation_remains_open",
+      "test_pending_provider_checkout_without_a_created_session_does_not_mount_presentation"
+    ].include?(name)
   end
 
   def create_presented_checkout_intent(root, option, presentation:)
@@ -408,6 +467,16 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     RecordingStudioBilling.register_provider("stripe", StripeEmbeddedCheckoutAdapter.new)
   end
 
+  def use_pending_stripe_session_checkout_adapter!
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider("stripe", PendingStripeSessionCheckoutAdapter.new)
+  end
+
+  def use_pending_timeout_checkout_adapter!
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider("stripe", PendingTimeoutCheckoutAdapter.new)
+  end
+
   def project_recurring_subscription(root, option)
     intent = RecordingStudioBilling.create_checkout_intent(
       root_recording: root, local_idempotency_key: "recurring-#{SecureRandom.uuid}", country_code: "IT",
@@ -438,6 +507,64 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       return {} unless provider_reference == "fake-operation"
 
       { mode: "embedded", client_secret: "cs_test_embedded_secret", publishable_key: "pk_test_embedded" }
+    end
+  end
+
+  # Mirrors StripeAdapter: session create returns pending + checkout_session_created while
+  # payment confirmation is still open, leaving the intent in pending_provider.
+  class PendingStripeSessionCheckoutAdapter < RecordingStudioBilling::FakeFinancialAdapter
+    def initialize
+      super(
+        outcome: :pending,
+        capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+          operations: ["checkout"], currencies: ["EUR"], markets: ["IT"], collection_methods: ["automatic"],
+          checkout_modes: ["embedded"], quantities: ["adjustable"], composition: ["single"]
+        )
+      )
+    end
+
+    def call(command:, request:, idempotency_key:)
+      RecordingStudioBilling::AdapterResponse.new(
+        status: "pending",
+        provider_reference: "cs_test_pending_session",
+        result: { "checkout_session_created" => true, "presentation" => "embedded" },
+        metadata: { "adapter" => "stripe" },
+        uncertain_outcome: true
+      )
+    end
+
+    def provider_reference_type(command:, provider_reference:)
+      "checkout.session" if command.command_type == "checkout" && provider_reference.to_s.start_with?("cs_")
+    end
+
+    def checkout_presentation(provider_reference:)
+      return {} unless provider_reference == "cs_test_pending_session"
+
+      { mode: "embedded", client_secret: "cs_test_pending_secret", publishable_key: "pk_test_pending" }
+    end
+  end
+
+  class PendingTimeoutCheckoutAdapter < RecordingStudioBilling::FakeFinancialAdapter
+    def initialize
+      super(
+        outcome: :pending,
+        capabilities: RecordingStudioBilling::ProviderCapabilities.new(
+          operations: ["checkout"], currencies: ["EUR"], markets: ["IT"], collection_methods: ["automatic"],
+          checkout_modes: ["embedded"], quantities: ["adjustable"], composition: ["single"]
+        )
+      )
+    end
+
+    def call(command:, request:, idempotency_key:)
+      RecordingStudioBilling::AdapterResponse.new(
+        status: "pending",
+        result: { "reason" => "provider_timeout" },
+        uncertain_outcome: true
+      )
+    end
+
+    def checkout_presentation(provider_reference:)
+      { mode: "embedded", client_secret: "must_not_render", publishable_key: "must_not_render" }
     end
   end
 
