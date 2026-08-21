@@ -111,22 +111,24 @@ class DummyV1Catalogue
   end
 
   def seed_customer_access!
-    previous = RecordingStudioAccessible.configuration.access_management_authorizer
-    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
-    result = RecordingStudioAccessible.grant_access(
-      recording: @root_recording,
-      actor: @user,
-      role: "edit",
-      manager_actor: @user
-    )
-    unless result.success?
-      raise "dummy catalogue could not grant workspace billing access: #{result.error}"
-    end
+    bootstrap_owner_access!(@root_recording)
+    bootstrap_owner_access!(@admin_root_recording)
     unless RecordingStudioAccessible.authorized?(actor: @user, recording: @root_recording, role: :edit)
       raise "dummy catalogue workspace billing access was not granted"
     end
-  ensure
-    RecordingStudioAccessible.configuration.access_management_authorizer = previous
+    unless RecordingStudioAccessible.authorized?(actor: @user, recording: @admin_root_recording, role: :view)
+      raise "dummy catalogue admin root access was not granted"
+    end
+  end
+
+  def bootstrap_owner_access!(recording)
+    result = RecordingStudioAccessible.bootstrap_owner_access!(
+      recording: recording,
+      actor: @user
+    )
+    return if result.success?
+
+    raise "dummy catalogue could not bootstrap owner access: #{result.error}"
   end
 
   def seed_providers!
@@ -491,14 +493,7 @@ class DummyV1Catalogue
   end
 
   def grant_stripe_workspace_access!(workspace_root)
-    previous = RecordingStudioAccessible.configuration.access_management_authorizer
-    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
-    result = RecordingStudioAccessible.grant_access(
-      recording: workspace_root, actor: @user, role: "edit", manager_actor: @user
-    )
-    raise "dummy catalogue could not grant Stripe workspace access: #{result.error}" unless result.success?
-  ensure
-    RecordingStudioAccessible.configuration.access_management_authorizer = previous
+    bootstrap_owner_access!(workspace_root)
   end
 
   def seed_customer_journeys!

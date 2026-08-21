@@ -20,13 +20,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     RecordingStudioBilling.configuration.billing_location_context_resolver = lambda do |**|
       { host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :host) }
     end
-    @access_management_authorizer = RecordingStudioAccessible.configuration.access_management_authorizer
-    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
-    @authorized = RecordingStudioAccessible.method(:authorized?)
-    RecordingStudioAccessible.define_singleton_method(:authorized?) { |**| true }
     @user = User.create!(email: "billing-ui-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
                          password_confirmation: "Password1!")
     @root, @option = published_checkout_option(adapter_key: stripe_embedded_checkout_test? ? "stripe" : "fake")
+    bootstrap = RecordingStudioAccessible.bootstrap_owner_access!(recording: @root, actor: @user)
+    raise bootstrap.error unless bootstrap.success?
     Current.actor = @user
     sign_in @user
     switch_root(@root)
@@ -38,8 +36,6 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
 
   teardown do
     Current.actor = nil
-    RecordingStudioAccessible.define_singleton_method(:authorized?, @authorized)
-    RecordingStudioAccessible.configuration.access_management_authorizer = @access_management_authorizer
     RecordingStudioBilling.configuration.billing_location_context_resolver = @billing_location_context_resolver
     BillingTestDatabaseCleanup.clear! if @database_lock_held
   ensure

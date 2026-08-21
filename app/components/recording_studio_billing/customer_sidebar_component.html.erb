@@ -1,12 +1,12 @@
 <%= render FlatPack::Sidebar::Group::Component.new(
-  label: "Billing",
+  title: "Billing",
   icon: :credit_card,
-  default_open: billing_open?
+  open: billing_open?
 ) do |group| %>
   <% group.items do %>
     <% items.each do |item| %>
       <%= render FlatPack::Sidebar::Item::Component.new(
-        label: item.fetch(:label),
+        text: item.fetch(:label),
         href: item.fetch(:href),
         icon: item[:icon],
         active: item[:page]&.to_sym == current_page

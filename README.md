@@ -34,19 +34,21 @@ support in the host application controller:
 mount RecordingStudioBilling::Engine, at: "/billing"
 ```
 
-Customer billing views use the host's Recording Studio default layout
-(`recording_studio/default_layout`) when that template exists, then the
-gem-template left sidebar (`flat_pack_sidebar`), then `application`.
+Customer billing views use Recording Studio's default layout
+(`recording_studio/default_layout`) only. Include
+`RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Devise
+sign-in stays on the host `application` layout. Do not add a second sidebar
+shell.
 
 The customer area is a set of gem-owned screens the host mounts. Each screen
 is one job: Overview, Plan, Plan requests, Add-ons, Usage, Invoices, Payments,
 and Billing settings. The **Plan** picker also mounts at a host-nominated route
 (default `/plans`) via `draw_recording_studio_billing_plans`; the gem owns the
 controller and ViewComponents. Billing pages render inside Recording Studio's
-`recording_studio/default_layout` when that template exists; the plans page uses
-that layout exclusively. The Plan page is a title, subtitle, and up to three
-pricing cards. Hosts render `RecordingStudioBilling::CustomerSidebarComponent`
-in that layout's sidebar so billing links update with the gem. Every request uses the selected root;
+`recording_studio/default_layout` and set PageNav back/close. The Plan page is a
+title, subtitle, and up to three pricing cards. Hosts that still want a sidebar
+can render `RecordingStudioBilling::CustomerSidebarComponent` themselves; dummy
+does not. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
 Customer billing authorizes through RecordingStudio Accessible role grants on
 the workspace root (`view` to read, `edit` to checkout or change a plan).
@@ -141,9 +143,10 @@ class. Hooks run only during rendering; they must not make billing state changes
 - `RecordingStudioBilling::BillingAdmin` is the `:billing_admin` child
   recordable.
 - The admin support concern uses the public
-  `RecordingStudioAdmin::AllowsAdminSections` API to register the site-scoped
-  `:billing_commercial`, `:billing_financial`, and `:billing_operations`
-  sections.
+  `RecordingStudioAdmin::AllowsAdminSections` API to register `:root` plus the
+  site-scoped `:billing_commercial`, `:billing_financial`, and
+  `:billing_operations` sections. Hosts enable `:accessible` on the Admin root
+  themselves.
 
 The capability metadata uses Recording Studio's public
 `register_capability`, `enable_capability`, and `recording_studio_recordable`
@@ -475,7 +478,8 @@ class AdminRoot < ApplicationRecord
   include RecordingStudio::Recordable
   include RecordingStudioBilling::BillingAdminSupport
 
-  recording_studio_recordable label: "Admin", root: true
+  recording_studio_recordable label: "Admin", root: true, shared: false
+  RecordingStudio.enable_capability(:accessible, on: self)
 end
 ```
 
@@ -485,11 +489,12 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 ## Dummy app
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
-Codespaces, and idempotent seeds. Signed-in dummy pages use the gem-template
-left sidebar (`flat_pack_sidebar`). That sidebar mounts
-`RecordingStudioBilling::CustomerSidebarComponent`. Mounted billing pages use Recording Studio's
-`recording_studio/default_layout`, which this dummy implements with the same
-FlatPack sidebar shell. Its credential-free demonstration products include
+Codespaces, and idempotent seeds. Signed-in dummy and billing pages use
+Recording Studio's `recording_studio/default_layout` only (`data-theme` rounded,
+PageNav back/close). Devise sign-in stays on `layouts/application`. Dummy
+seeds bootstrap the first owner on the workspace and Admin root with
+`bootstrap_owner_access!`, then mount staff admin at `/admin`. Its credential-free
+demonstration products include
 fake-provider checkout prices across US, UK, Italy, Germany, and a global
 fallback. Monthly and annual plans have distinct Italy and Germany euro prices. The dummy also
 seeds a metered API-call service with an allowance, rates, costs, and US

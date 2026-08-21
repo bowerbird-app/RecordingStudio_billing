@@ -5,6 +5,7 @@ require "recording_studio_accessible"
 module RecordingStudioBilling
   class ApplicationController < ActionController::Base
     include RecordingStudio::RootSwitchable::ControllerSupport if defined?(RecordingStudio::RootSwitchable::ControllerSupport)
+    include RecordingStudio::UsesDefaultLayout if defined?(RecordingStudio::UsesDefaultLayout)
     include Devise::Controllers::Helpers if defined?(Devise::Controllers::Helpers)
     include BillingWorkspaceContext
     include HostLayoutSupport
@@ -21,13 +22,7 @@ module RecordingStudioBilling
     def billing_host_layout
       return "application" if non_html_format?
 
-      if host_layout?("recording_studio/default_layout")
-        "recording_studio/default_layout"
-      elsif host_layout?("flat_pack_sidebar")
-        "flat_pack_sidebar"
-      else
-        "application"
-      end
+      "recording_studio/default_layout"
     end
 
     def authenticate_billing_user!

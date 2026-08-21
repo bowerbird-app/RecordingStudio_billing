@@ -111,13 +111,13 @@
 				<%= render FlatPack::Button::Component.new(
 					text: @presenter.cancellation? ? @presenter.copy("cancel_confirm", "Confirm cancellation") : @presenter.copy("resume_confirm", "Confirm resumption"),
 					style: @presenter.cancellation? ? :danger : :primary,
-					url: @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id),
+					href: @presenter.cancellation? ? helpers.cancel_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id) : helpers.resume_subscription_path(@presenter.subscription, root_recording_id: @presenter.root_recording.id),
 					method: :post
 				) %>
 				<%= render FlatPack::Button::Component.new(
 					text: @presenter.cancellation? ? @presenter.copy("cancel_keep", "Keep plan") : @presenter.copy("resume_keep", "Keep plan paused"),
 					style: :ghost,
-					url: helpers.root_path(root_recording_id: @presenter.root_recording.id)
+					href: helpers.root_path(root_recording_id: @presenter.root_recording.id)
 				) %>
 			</div>
 		<% end %>

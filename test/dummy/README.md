@@ -7,12 +7,12 @@ test keys are present, the dummy can also call the Stripe test account.
 
 ## What it covers
 
-- Devise authentication with a seeded admin user who has Accessible `edit` on the Studio Workspace
+- Devise authentication with a seeded admin user who is the first Accessible owner of Studio Workspace and Billing Administration
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
-- FlatPack UI: sign-in uses the gem-template `application` layout; signed-in dummy pages use the left `flat_pack_sidebar` layout; mounted billing pages use Recording Studio's `recording_studio/default_layout` (the same left sidebar shell in this host)
+- FlatPack UI: sign-in uses the gem-template `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use Recording Studio's `recording_studio/default_layout` only (PageNav back/close, no left sidebar)
 - Tailwind source scanning for dummy views, billing views/components, and bundled FlatPack/Recording Studio gems (`bin/rails tailwindcss:build` writes those gem paths first)
-- Mounted customer billing. RecordingStudioAdmin **Products and pricing** is registered for later host wiring
+- Mounted customer billing at `/billing` and staff admin at `/admin`. RecordingStudioAdmin **Products and pricing** is registered on the Admin root
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
 - Seeded checkout presentations, Italy vs Germany euro checkout quotes, a live monthly plan on the Plan page, usage, refund/adjustment (including an uncertain refund), plan-change states, a restricted payment portal, and a reconciliation issue. Tax calculators are registered and tax stays off
 
@@ -49,6 +49,8 @@ bin/rails db:reset
 
 - `/` — dummy home
 - `/billing` — customer billing
+- `/plans` — plan picker
+- `/admin` — staff admin (Admin root)
 - `/dummy_portal` — demonstration payment portal (payment methods, address, tax IDs, invoice history)
 - `/users/sign_in` — Devise sign-in
 - `/up` — Rails health check
@@ -117,6 +119,6 @@ lists, badges, and buttons.
 Use it to verify the billing engine in a real host. If a layout, route, asset
 source, or Recording Studio initializer change breaks here, fix that before
 changing adapters. Keep user-facing copy on **products, prices, and checkout**;
-leave recordings and recordables in code. The dummy admin can open `/billing`
-because seeds grant Accessible `edit` on the workspace. A signed-in user
-without that grant receives `404`.
+leave recordings and recordables in code. The dummy admin can open `/billing` and `/admin` because seeds bootstrap
+Accessible ownership on the workspace and Admin root. A signed-in user
+without a workspace grant receives `404` on customer billing.

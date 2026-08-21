@@ -1,3 +1,4 @@
+<% dummy_page_nav(title: "Payment details") %>
 <%= render FlatPack::PageTitle::Component.new(
   title: "Payment details",
   subtitle: "This portal can update payment methods, billing address, tax IDs, and invoice history. Plan changes stay in billing.",
@@ -13,6 +14,6 @@
     <% end %>
   <% end %>
   <% card.footer do %>
-    <%= render FlatPack::Button::Component.new(text: "Back to billing settings", style: :secondary, url: "/billing/billing/settings") %>
+    <%= render FlatPack::Button::Component.new(text: "Back to billing settings", style: :secondary, href: "/billing/billing/settings") %>
   <% end %>
 <% end %>

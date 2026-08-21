@@ -63,7 +63,7 @@ module RecordingStudioBilling
     def redirect_button
       render FlatPack::Button::Component.new(
         text: presenter.copy("checkout_continue", "Continue to secure checkout"),
-        style: :primary, size: :md, url: presenter.presentation[:url], data: { turbo: false }
+        style: :primary, size: :md, href: presenter.presentation[:url], data: { turbo: false }
       )
     end
 
@@ -74,7 +74,7 @@ module RecordingStudioBilling
     def render_action(action)
       if action[:kind] == :button && action[:url].present?
         render FlatPack::Button::Component.new(
-          text: action[:text], style: :primary, size: :md, url: action[:url], data: { turbo: false }
+          text: action[:text], style: :primary, size: :md, href: action[:url], data: { turbo: false }
         )
       else
         helpers.tag.p(action[:text], data: { checkout_action: presenter.respond_to?(:presentation_mode) ? presenter.presentation_mode : nil })

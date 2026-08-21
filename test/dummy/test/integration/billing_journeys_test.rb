@@ -33,10 +33,11 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Monthly plan"
     assert_includes response.body, "$49"
     assert_includes response.body, "View plans"
-    assert_includes response.body, "flat-pack--sidebar-layout"
-    assert_includes response.body, "flat_pack/application"
+    assert_includes response.body, 'data-recording-studio-default-layout="true"'
     assert_includes response.body, 'data-theme="rounded"'
-    assert_includes response.body, 'data-billing-layout="recording-studio-default"'
+    assert_includes response.body, "flat-pack-page-nav"
+    refute_includes response.body, "flat-pack--sidebar-layout"
+    refute_includes response.body, "data-billing-layout"
     refute_includes response.body, "Current versions"
     refute_includes response.body, "Market:"
   end
@@ -56,6 +57,12 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   end
 
   test "admin operations reject an actor without Recording Studio Admin access" do
+    outsider = User.create!(
+      email: "no-admin-#{SecureRandom.hex(4)}@example.test",
+      password: "Password",
+      password_confirmation: "Password"
+    )
+    sign_in outsider
     price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: "demo_monthly_plan_us_price")
 
     post "/billing/admin/operations/publish_price/#{price.id}"
@@ -239,7 +246,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Choose a plan"
     assert_includes response.body, "Pick the plan that fits this workspace"
     assert_includes response.body, "Choose this plan"
-    assert_includes response.body, 'data-billing-layout="recording-studio-default"'
+    assert_includes response.body, 'data-recording-studio-default-layout="true"'
+    assert_includes response.body, "flat-pack-page-nav"
     refute_includes response.body, "$51"
     refute_includes response.body, "Usage ·"
     refute_includes response.body, "Cancel plan"

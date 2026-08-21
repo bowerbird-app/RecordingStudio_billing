@@ -17,6 +17,7 @@ module RecordingStudioBilling
       end
 
       base.recording_studio_admin_sections do
+        section :root
         section :billing_commercial
         section :billing_financial
         section :billing_operations

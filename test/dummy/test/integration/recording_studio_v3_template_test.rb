@@ -11,7 +11,7 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_equal :application_layout, RecordingStudioRootSwitchable.configuration.layout
     assert_includes ApplicationController.ancestors, RecordingStudio::RootSwitchable::ControllerSupport
     assert_includes AdminRoot.ancestors, RecordingStudioBilling::BillingAdminSupport
-    assert_equal %w[billing_commercial billing_financial billing_operations],
+    assert_equal %w[billing_commercial billing_financial billing_operations root],
                  AdminRoot.recording_studio_admin_section_keys_for(nil, nil, nil)
   end
 

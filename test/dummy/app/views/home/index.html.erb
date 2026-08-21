@@ -1,5 +1,14 @@
+<% dummy_page_nav(title: "Billing demo") %>
+
 <%= render FlatPack::PageTitle::Component.new(
   title: "Recording Studio Billing",
   subtitle: "A provider-neutral billing foundation with explicit adapter registration.",
   variant: :h1
 ) %>
+
+<div class="mt-6 flex flex-wrap gap-3">
+  <%= render FlatPack::Button::Component.new(text: "Billing", style: :primary, size: :md, href: "/billing") %>
+  <%= render FlatPack::Button::Component.new(text: "Plans", style: :secondary, size: :md, href: "/plans") %>
+  <%= render FlatPack::Button::Component.new(text: "Projects", style: :secondary, size: :md, href: main_app.projects_path) %>
+  <%= render FlatPack::Button::Component.new(text: "Admin", style: :ghost, size: :md, href: "/admin") %>
+</div>

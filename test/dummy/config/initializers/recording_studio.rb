@@ -12,6 +12,9 @@ RecordingStudio.configure do |config|
   # Require each configured ActiveRecord type to call recording_studio_recordable.
   config.require_recordable_declarations = true
 
+  # Shown in the shared default layout title fallback.
+  config.app_name = "Billing Demo" if config.respond_to?(:app_name=)
+
   # Actor resolver for events when no actor is explicitly supplied
   config.actor = -> { Current.actor }
 

@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+## 0.7.0
+
+Lift onto Recording Studio 4.2 and the matching Accessible / Admin / Webhooks /
+Root Switchable / Flatpack pins. This is a version, enablement, and dummy-layout
+change only.
+
+### Breaking
+
+- Gemspec floor is now `recording_studio ~> 4.2`, `recording_studio_accessible ~> 0.7.0`,
+  `recording_studio_admin ~> 2.0.1`, `recording_studio_webhooks ~> 0.2.0`,
+  `recording_studio_root_switchable ~> 0.5.0`, and `flat_pack ~> 0.1.133`.
+- Customer billing and the plans page use Recording Studio
+  `UsesDefaultLayout` / `recording_studio/default_layout` only. The
+  `flat_pack_sidebar` fallback is gone.
+- `Billable` no longer calls Accessible `Compatibility.register_access_capability!`.
+  Accessible 0.7 registers `:accessible`; hosts enable it with
+  `RecordingStudio.enable_capability(:accessible, on: Type)` (already done for
+  workspace roots by `Billable`).
+- Dummy authenticated pages drop the gem-template left sidebar. Sign-in stays on
+  `layouts/application`. Staff admin is mounted at `/admin` on the Admin root
+  with Accessible grants.
+- Flatpack 0.1.133 buttons use `href:` (not `url:`). Host sidebar helpers that
+  still render `CustomerSidebarComponent` must pass item `text:` and group
+  `title:`.
+
+### Added
+
+- Dummy Accessible / Admin / default-layout initializers match the 4.2 family.
+  Seeds bootstrap the first owner on the workspace and Admin root with
+  `bootstrap_owner_access!`.
+
+### Upgrade notes
+
+- Bump host Gemfile pins to the 4.2 family listed above. Dummy GitHub tags are
+  `v4.2.0`, `v0.7.0`, `2.0.1`, `v0.2.0`, `v0.5.0`, and `v0.1.133`.
+- Include `RecordingStudio::UsesDefaultLayout` on authenticated controllers.
+  Do not copy a second sidebar shell. Set `html data-theme="rounded"` on Devise
+  `application`; authenticated pages use the engine default layout.
+- Configure `RecordingStudioAccessible` `access_actor_types` (for example
+  `["User"]`). Enable `:accessible` on the Admin root. First owner: 
+  `bootstrap_owner_access!`. Later invites stay `grant_access`.
+- Mount admin with `recording_studio_admin_for` against the Admin root. Do not
+  use `user.admin?` or `AllowsAccessibleChildren`.
+- Replace Flatpack Button `url:` with `href:` on any host overrides of billing
+  screens.
+
 ## 0.6.1
 
 Dummy host can talk to a Stripe test account from Cloud Agent secrets without

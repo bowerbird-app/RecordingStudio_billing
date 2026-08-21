@@ -36,9 +36,9 @@ This will:
 | `enable_feature_x`  | Boolean | `false`                          | Toggle optional feature X.                 |
 | `timeout`           | Integer | `5`                              | Timeout (seconds) for external calls.      |
 
-### RecordingStudio v3 Host-App Declarations
+### RecordingStudio host-app declarations
 
-The dummy host app pins RecordingStudio to `recording_studio/v3.0.0` and keeps strict recordable declarations enabled:
+The dummy host app pins RecordingStudio to `v4.2.0` and keeps strict recordable declarations enabled:
 
 ```ruby
 RecordingStudio.configure do |config|
