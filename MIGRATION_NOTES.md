@@ -2,7 +2,7 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
-## 0.8.0 — product and billing option names
+## 0.9.0 — product and billing option names
 
 Adds required `name` on `recording_studio_billing_products` and
 `recording_studio_billing_billing_options`. Fresh installs pick it up from
