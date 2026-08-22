@@ -111,11 +111,17 @@ free ($0), monthly ($49), and annual ($490) plans. The live monthly plan is mark
 current. Choose this plan is the only card action. Cancel is on Overview.
 Change-request examples live on **Plan requests** (`/billing/billing/plan_requests`).
 `/billing/billing/plan` redirects to `/plans` when the host route is configured.
-`RecordingStudioBilling::CustomerSidebarComponent` so those screens sit in Recording Studio's
-layout. Recurring dummy checkouts share one execution group, so the cancelled hybrid
-journey is history on that same plan. Add-ons, Usage, Invoices, Payments, Billing settings,
-checkout, invoice detail, and the demonstration payment portal use the same Flatpack cards,
-lists, badges, and buttons.
+Those screens sit in Recording Studio's default layout (PageNav back, no sidebar,
+no Sign out or Root Switchable control in that slot). Recurring dummy checkouts
+share one execution group, so the cancelled hybrid journey is history on that
+same plan. Add-ons, Usage, Invoices, Payments, Billing settings, checkout,
+invoice detail, and the demonstration payment portal use the same Flatpack cards,
+lists, badges, and buttons. The seeded Usage page calls `effective_entitlements`,
+which raises when the live usage allowance (5) and prepaid credit pack (1000)
+both grant `demo_api_calls` with `replace`. That is catalogue data, not a layout
+bug. When Stripe test keys are present, a $1 Stripe test monthly plan is also
+published on the shared catalogue and can take one of the Plan page's three card
+slots.
 
 ## Why this app exists
 
