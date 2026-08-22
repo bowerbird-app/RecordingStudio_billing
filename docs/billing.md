@@ -262,6 +262,38 @@ end
 
 Admin inventory lives under **Products and pricing**. The section key remains `billing_commercial` for hosts that already registered that navigation id.
 
+The site Admin root (`BillingAdminSupport`) enables three hubs:
+
+| Hub | Widgets | Hub screen table |
+| --- | --- | --- |
+| Products and pricing | Products, Prices, Published manifests | Published manifests |
+| Financial records | Invoices, Payments, Financial commands | Financial commands |
+| Billing operations | Subscriptions, Plan updates, Reconciliation issues | Reconciliation issues |
+
+A widget with a child screen links through to that inventory. Recording Studio
+Admin only enables a screen when an enabled section links it, so each hub also
+links the rest of its site-scoped inventory for discovery and direct URLs.
+Screens that filter on a catalogue `key` read `catalogue_key` from the query
+string. Admin routes already use `params[:key]` for the screen id, so reusing
+`key` as a filter hid every row.
+Account billing operations (feature overrides) is hidden on the site Admin
+root. It becomes visible only when admin access is a `:billing` workspace root.
+Dummy Admin hubs render `recording_studio_accessible_avatars` in the
+default-layout slot. Configure `avatar_resolver` so granted actors become
+avatars; + Access is only the empty-grant fallback.
+
+Products inventory has a primary New button. It opens the Admin create screen
+on the same Products and pricing section. The form asks for Name, then Key,
+Kind, and Provider. Save posts to `create_draft_product`, which writes a
+draft with `RecordingStudio.record!`. That path authorizes the registered
+`billing_products` `create` action (`required_role :admin`). It does not use
+a generic Admin form that writes published rows. Revise stays `revise`.
+Publish stays `CommercialPublisher`.
+
+Product and BillingOption require a human `name` as well as the stable
+catalogue `key`. Inventory shows both. Dummy seeds use labels such as Monthly
+plan, not copies of the key.
+
 Commercial publication still writes `rs_v3_commercial_configurations`. Capability checks use `commercial_configuration`, not a catalogue capability.
 
 ## What V1 does not include
@@ -270,4 +302,4 @@ Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, g
 
 ## Host layouts
 
-Customer billing controllers render inside Recording Studio's default layout (`recording_studio/default_layout`) only. Include `RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Sign-in stays on the host `application` layout. Billing screens set PageNav back/close. Do not put Sign out or a Root Switchable control in the default-layout slot. Hosts that want a sidebar can still render `RecordingStudioBilling::CustomerSidebarComponent`; dummy does not. Rebuild Tailwind after install so FlatPack component classes are present.
+Customer billing controllers render inside Recording Studio's default layout (`recording_studio/default_layout`) only. Include `RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Sign-in stays on the host `application` layout. Billing screens set PageNav back/close. Do not put Sign out or a Root Switchable control in the default-layout slot. Hosts that want a sidebar can still render `RecordingStudioBilling::CustomerSidebarComponent`; dummy does not. Dummy puts `data-theme="rounded"` on `html` as well as `body` so Flatpack #159 can rebind button radius and charcoal primary. Rebuild Tailwind after install so FlatPack component classes are present. Do not copy button CSS into this gem.

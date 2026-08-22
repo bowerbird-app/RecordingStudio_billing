@@ -190,13 +190,15 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     product = RecordingStudio.record!(
       action: "created",
       recordable: RecordingStudioBilling::Product.new(
-        provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}", kind: "service", feature_values: {}
+        provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}", name: "Lifecycle service",
+        kind: "service", feature_values: {}
       ), root_recording: provider_root, parent_recording: admin
     ).recording
     option = RecordingStudio.record!(
       action: "created",
       recordable: RecordingStudioBilling::BillingOption.new(
-        product_recording: product, key: "plan_#{SecureRandom.hex(4)}", recurrence: "recurring", interval: "month", interval_count: 1,
+        product_recording: product, key: "plan_#{SecureRandom.hex(4)}", name: "Monthly",
+        recurrence: "recurring", interval: "month", interval_count: 1,
         quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic",
         payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate",
         checkout_policy: "allowed", tax_policy: "exclusive"
@@ -395,12 +397,14 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     admin = provider.parent_recording
     product = RecordingStudio.record!(
       action: "created", recordable: RecordingStudioBilling::Product.new(
-        provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}", kind: "service", feature_values: {}
+        provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}", name: "Lifecycle service",
+        kind: "service", feature_values: {}
       ), root_recording: provider_root, parent_recording: admin
     ).recording
     option = RecordingStudio.record!(
       action: "created", recordable: RecordingStudioBilling::BillingOption.new(
-        product_recording: product, key: "plan_#{SecureRandom.hex(4)}", recurrence: "recurring", interval: "month", interval_count: 1,
+        product_recording: product, key: "plan_#{SecureRandom.hex(4)}", name: "Monthly",
+        recurrence: "recurring", interval: "month", interval_count: 1,
         quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0,
         trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"
       ), root_recording: provider_root, parent_recording: product

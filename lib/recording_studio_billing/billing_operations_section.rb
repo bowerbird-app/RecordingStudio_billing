@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "recording_studio_admin"
+require "recording_studio_billing/billing_admin_hubs"
 
 module RecordingStudioBilling
   class BillingCommercialSection < RecordingStudioAdmin::Section
@@ -10,8 +11,6 @@ module RecordingStudioBilling
     subtitle "Products, prices, markets, and providers"
     blast_radius :site
     availability_scope :all
-
-    link :products, text: "View products and pricing", url: ->(context) { context.admin_screen_path("billing_commercial") }
   end
 
   class BillingFinancialSection < RecordingStudioAdmin::Section
@@ -21,8 +20,6 @@ module RecordingStudioBilling
     subtitle "Commands, checkout, tax, and subscription activity"
     blast_radius :site
     availability_scope :all
-
-    link :commands, text: "View financial commands", url: ->(context) { context.admin_screen_path("billing_financial") }
   end
 
   class BillingOperationsSection < RecordingStudioAdmin::Section
@@ -32,10 +29,6 @@ module RecordingStudioBilling
     subtitle "Products, providers, tax, usage, and reconciliation"
     blast_radius :site
     availability_scope :all
-
-    link :operations, text: "View billing operations", url: lambda { |context|
-      context.admin_screen_path("billing_operations")
-    }
   end
 
   class BillingAccountOperationsSection < RecordingStudioAdmin::Section
@@ -45,6 +38,10 @@ module RecordingStudioBilling
     subtitle "Account-scoped feature overrides"
     blast_radius :root
     availability_scope :all
+    visible_if lambda { |context|
+      recordable = context.access_recording&.recordable
+      recordable && RecordingStudio.capability_enabled?(:billing, for: recordable.class)
+    }
 
     link :operations, text: "View account billing operations", url: lambda { |context|
       context.admin_screen_path("billing_feature_overrides")
@@ -84,9 +81,9 @@ module RecordingStudioBilling
     billing_markets: { section: "billing_commercial", title: "Markets", model: "Market", scope: :current,
                        filters: %i[key default_currency_code], columns: %i[key default_currency_code priority global_fallback] },
     billing_products: { section: "billing_commercial", title: "Products", model: "Product", scope: :current,
-                        filters: %i[key kind state], columns: %i[key kind state] },
+                        filters: %i[key kind state], columns: %i[name key kind state] },
     billing_options: { section: "billing_commercial", title: "Billing options", model: "BillingOption",
-                       scope: :current, filters: %i[key recurrence pricing_model], columns: %i[key recurrence pricing_model checkout_policy] },
+                       scope: :current, filters: %i[key recurrence pricing_model], columns: %i[name key recurrence pricing_model checkout_policy] },
     billing_prices: { section: "billing_commercial", title: "Prices and publication", model: "Price", scope: :current,
                       filters: %i[key currency_code state], columns: %i[key amount_minor currency_code state] },
     billing_overage_prices: { section: "billing_commercial", title: "Overage prices", model: "OveragePrice",
@@ -114,9 +111,9 @@ module RecordingStudioBilling
     billing_financial_commands: { section: "billing_financial", title: "Financial commands", model: "FinancialCommand",
                                   filters: %i[command_type state], columns: %i[command_type state provider_adapter_key created_at] },
     billing_financial_attempts: { section: "billing_financial", title: "Financial command attempts",
-                                  model: "FinancialCommandAttempt", filters: %i[state provider_adapter_key], columns: %i[state provider_adapter_key created_at] },
+                                  model: "FinancialCommandAttempt", filters: %i[state], columns: %i[state attempt_number provider_idempotency_key started_at] },
     billing_checkout_intents: { section: "billing_financial", title: "Checkout intents", model: "CheckoutIntent",
-                                filters: %i[state currency_code], columns: %i[state currency_code created_at] },
+                                filters: %i[state advisory_currency_code], columns: %i[state advisory_currency_code presentation_preference created_at] },
     billing_subscriptions: { section: "billing_operations", title: "Subscriptions", model: "Subscription",
                              scope: :current, filters: %i[state currency_code], columns: %i[identifier state currency_code] },
     billing_purchases: { section: "billing_operations", title: "Purchases", model: "Purchase", scope: :current,
@@ -185,7 +182,16 @@ module RecordingStudioBilling
         relation = definition[:scope] == :current ? model.with_current_recording : model.all
         relation.order(created_at: :desc)
       end
-      definition.fetch(:filters).each { |filter_key| filter filter_key, label: filter_key.to_s.humanize }
+      definition.fetch(:filters).each do |filter_key|
+        filter filter_key, **BillingAdminHubs.inventory_filter_options(filter_key)
+      end
+      if key.to_s == "billing_products"
+        button :new_product,
+               text: "New",
+               style: :primary,
+               url: ->(context) { BillingAdminProductNew.new_screen_path(context) },
+               visible_if: ->(context) { BillingAdminProductNew.create_allowed?(context) }
+      end
       table do
         title definition.fetch(:title)
         definition.fetch(:columns).each { |column| column column }
@@ -255,7 +261,7 @@ module RecordingStudioBilling
       if (operation_name = ADMIN_COMMERCIAL_OPERATION_NAMES[key.to_s])
         action :create,
                text: "Create draft", method: :post, required_role: :admin, blast_radius: :site,
-               visible_if: ->(_record, context) { context.params["parent_recording_id"].present? },
+               visible_if: ->(record, context) { BillingAdminProductNew.create_action_visible?(record, context) },
                url: lambda { |_record, context|
                  parent_recording_id = context.params.fetch("parent_recording_id")
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(
@@ -356,4 +362,6 @@ module RecordingStudioBilling
     title "Billing operations"
     blast_radius :site
   end
+
+  BillingAdminHubs.install!
 end

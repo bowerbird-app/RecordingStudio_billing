@@ -270,11 +270,12 @@ class UsageRatingTest < ActiveSupport::TestCase
                                          country_groups: {}, regional_country_codes: [], global_fallback: false, allowed_currency_codes: ["USD"], default_currency_code: "USD", priority: 1, specificity: 1, ppa_policy: "standard", rounding_policy: "half_up", tax_presentation_policy: "exclusive", verification_policy: "none"), catalogue_root, billing_admin.recording
     )
     product = record_catalogue(
-      RecordingStudioBilling::Product.new(provider_account_recording: provider, key: "usage", kind: "service",
-                                          feature_values: {}), catalogue_root, billing_admin.recording
+      RecordingStudioBilling::Product.new(provider_account_recording: provider, key: "usage", name: "Usage product",
+                                          kind: "service", feature_values: {}), catalogue_root, billing_admin.recording
     )
     option = record_catalogue(
-      RecordingStudioBilling::BillingOption.new(product_recording: product, key: "usage", recurrence: "one_time",
+      RecordingStudioBilling::BillingOption.new(product_recording: product, key: "usage", name: "Usage",
+                                                recurrence: "one_time",
                                                 quantity_mode: "fixed", default_quantity: 1, pricing_model: "per_unit", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"), catalogue_root, product
     )
     price = record_catalogue(

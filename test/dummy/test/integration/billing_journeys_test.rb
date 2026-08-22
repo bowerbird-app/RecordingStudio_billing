@@ -34,7 +34,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "$49"
     assert_includes response.body, "View plans"
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
-    assert_includes response.body, 'data-theme="rounded"'
+    assert_select "html[data-theme=rounded]"
     assert_includes response.body, "flat-pack-page-nav"
     refute_includes response.body, "flat-pack--sidebar-layout"
     refute_includes response.body, "data-billing-layout"

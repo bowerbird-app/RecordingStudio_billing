@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.7.0", RecordingStudioBilling::VERSION
+    assert_equal "0.9.0", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_uses_default_layout_entry_buttons
@@ -32,8 +32,13 @@ class RecordingStudioBillingTest < Minitest::Test
     dummy_layouts = File.expand_path("dummy/app/views/layouts", __dir__)
 
     refute File.exist?(File.join(dummy_layouts, "flat_pack_sidebar.html.erb"))
-    refute File.exist?(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
     refute File.exist?(File.join(dummy_layouts, "flat_pack/_sidebar.html.erb"))
+
+    default_layout = File.read(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
+    assert_includes default_layout, '<html data-theme="'
+    refute_includes default_layout, "flat_pack_sidebar"
+    refute_includes default_layout, "Sign out"
+    refute_includes default_layout, "recording_studio_root_switch_dropdown"
 
     application = File.read(File.join(dummy_layouts, "application.html.erb"))
     assert_includes application, '<html data-theme="rounded">'
@@ -46,6 +51,18 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes helper, "recording_studio_root_switch_dropdown"
     refute_includes helper, "Sign out"
     refute_includes helper, "Sign in"
+  end
+
+  def test_dummy_runs_flatpack_rounded_button_rebinds
+    spec = Bundler.definition.specs["flat_pack"].first
+    assert_operator Gem::Version.new(spec.version.to_s), :>=, Gem::Version.new("0.1.135")
+
+    css = File.read(File.join(spec.full_gem_path, "app/assets/stylesheets/flat_pack/variables.css"))
+    assert_includes css, "--color-primary: oklch(0.3211 0 0)"
+    assert_includes css, "--button-primary-background-color: var(--color-primary)"
+    assert_includes css, "--button-border-radius: var(--radius-md)"
+    assert_operator css.scan('[data-theme="rounded"]').size, :>=, 2
+    assert_match(/\[data-theme="rounded"\][^{]*\{[^}]*--button-border-radius: var\(--radius-md\)/m, css)
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects
@@ -66,6 +83,10 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes structure, "('20260810000000')"
     assert_includes structure, "('20260816000001')"
     assert_includes structure, "('20260817000001')"
+    assert_includes structure, "('20260822000001')"
+    assert_includes structure, "recording_studio_billing_products"
+    assert_match(/CREATE TABLE public\.recording_studio_billing_products[\s\S]*name character varying NOT NULL/, structure)
+    assert_match(/CREATE TABLE public\.recording_studio_billing_billing_options[\s\S]*name character varying NOT NULL/, structure)
     assert_includes structure, "CREATE TABLE public.recording_studio_accesses"
   end
 end

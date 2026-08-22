@@ -1,0 +1,59 @@
+<% recording_studio_page_nav(
+     title: @screen.title,
+     page_nav_back_url: billing_admin_product_new_cancel_url,
+     page_nav_back_label: "Products",
+     page_nav_anchor_url: page_nav_anchor_url(default: RecordingStudioAdmin.configuration.default_mount_path)
+   ) %>
+<% access_recording = recording_studio_admin_context.root_recording || recording_studio_admin_context.access_recording %>
+<% if access_recording.present? %>
+  <% recording_studio_page_nav_right do %>
+    <%= recording_studio_accessible_avatars(access_recording, button_style: :ghost, button_size: :md) %>
+  <% end %>
+<% end %>
+<%= render "recording_studio_admin/shared/page_nav" unless recording_studio_admin_default_layout? %>
+
+<%= render FlatPack::PageTitle::Component.new(title: @screen.title) %>
+
+<%= form_with url: billing_admin_product_new_create_url, method: :post do %>
+  <%= hidden_field_tag :parent_recording_id, billing_admin_product_new_parent_recording_id %>
+  <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md, class: "mt-6") do %>
+    <div class="space-y-4">
+      <%= render FlatPack::TextInput::Component.new(
+        name: "attributes[name]",
+        label: "Name",
+        required: true
+      ) %>
+      <%= render FlatPack::TextInput::Component.new(
+        name: "attributes[key]",
+        label: "Key",
+        required: true
+      ) %>
+      <%= render FlatPack::Select::Component.new(
+        name: "attributes[kind]",
+        label: "Kind",
+        required: true,
+        options: billing_admin_product_kind_options,
+        placeholder: false
+      ) %>
+      <%= render FlatPack::Select::Component.new(
+        name: "attributes[provider_account_recording_id]",
+        label: "Provider",
+        required: true,
+        options: billing_admin_product_provider_options,
+        placeholder: false
+      ) %>
+      <div class="flex flex-wrap items-center gap-3">
+        <%= render FlatPack::Button::Component.new(
+          text: "Cancel",
+          href: billing_admin_product_new_cancel_url,
+          style: :secondary
+        ) %>
+        <%= render FlatPack::Button::Component.new(
+          text: "Save",
+          type: :submit,
+          style: :primary
+        ) %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

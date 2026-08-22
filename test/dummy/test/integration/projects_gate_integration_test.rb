@@ -105,12 +105,14 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
     product = admin_root.record(RecordingStudioBilling::Product, parent_recording: admin.recording) do |row|
       row.provider_account_recording = provider
       row.key = @free_plan_key
+      row.name = "Free plan"
       row.kind = "plan"
       row.feature_values = { "demo_projects" => 2 }
     end
     option = admin_root.record(RecordingStudioBilling::BillingOption, parent_recording: product) do |row|
       row.product_recording = product
       row.key = "#{@free_plan_key}_option"
+      row.name = "Monthly"
       row.recurrence = "recurring"
       row.interval = "month"
       row.interval_count = 1

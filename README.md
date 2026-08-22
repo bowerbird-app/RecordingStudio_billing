@@ -158,6 +158,25 @@ billing-admin-enabled root.
 
 ### Administrative workflows
 
+The three site-scoped Admin hubs are dashboards, not empty titles. Products
+and pricing shows Products, Prices, and Published manifests. Financial records
+shows Invoices, Payments, and Financial commands. Billing operations shows
+Subscriptions, Plan updates, and Reconciliation issues. Each widget lists
+current rows and links through to that inventory screen. The matching hub
+screens (`billing_commercial`, `billing_financial`, `billing_operations`) query
+the same relations and render a table so their filters have rows.
+
+`BillingAdminSupport` still enables only those three sections on the Admin
+root. Recording Studio Admin treats a section link as the child that enables a
+screen, so each hub also links the rest of its site-scoped inventory. Those
+screens stay out of the hub widget set and appear in `/admin/sections` search.
+They must not 404. Catalogue `key` filters use the `catalogue_key` query param
+because Admin screen routes already occupy `params[:key]`. Account billing
+operations is root-scoped feature overrides:
+it is hidden on the site Admin root until the current access recording is a
+`:billing` workspace that can render that list. Dummy does not invent a second
+override UI.
+
 The registered RecordingStudioAdmin resources provide the V1 site-scoped
 inventory screens, filters, capability and tax diagnostics, and audit-backed
 POST actions for price publication, plan-update preview/confirmation/apply, and
@@ -175,6 +194,20 @@ or historical recordables in place. Publication remains exclusively with
 `FeatureOverrideReviser`. The admin inventory label is **Products and pricing**;
 the section key remains `billing_commercial`.
 
+Products inventory (`/admin/screens/billing_products`) has a primary New
+button. That opens the Admin create screen (`billing_product_new`) on the same
+section. The form asks for Name, Key, Kind, and Provider. Save posts to the
+existing `create_draft_product` operation, which writes a draft with
+`RecordingStudio.record!`. The button and screen authorize
+`billing_products` `create` (`required_role :admin`, site blast radius,
+Accessible grant on the Admin root) the same way other billing admin_actions
+do. View-only actors do not see New and receive 403 on the create screen.
+
+`key` stays the stable catalogue id (`demo_monthly_plan`). `name` is the
+required label people read (`Monthly plan`). Product and BillingOption both
+require it, the same way ProviderAccount already did. Inventory shows Name
+and still shows Key.
+
 ## V1 products and pricing contract
 
 This engine publishes validated, versioned commercial manifests and uses them to
@@ -184,6 +217,7 @@ create durable provider commands. `ProviderAccount`, `Market`,
 (for example, a product's provider account) remain stable
 `*_recording_id` references rather than recording-tree parents.
 
+- Product and BillingOption require `name` as well as `key`.
 - Product kinds are `plan`, `addon`, `credit_pack`, and `service`.
 - Feature types are `boolean`, `limit`, `allowance`, and `variant`.
 - Meter aggregations are `sum`, `count`, `maximum`, and `latest`.
@@ -492,8 +526,10 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Signed-in dummy and billing pages use
-Recording Studio's `recording_studio/default_layout` only (`data-theme` rounded,
-PageNav back/close, no Sign out or Root Switchable control in that slot). Devise
+Recording Studio's `recording_studio/default_layout` only (`data-theme` rounded
+on `html` and `body`, PageNav back/close, no Sign out or Root Switchable control
+in that slot). Dummy/dev Gemfiles pin Flatpack #159 so rounded buttons inherit
+charcoal primary and `--button-border-radius`; do not fork that CSS here. Devise
 sign-in stays on `layouts/application`. Dummy
 seeds bootstrap the first owner on the workspace and Admin root with
 `bootstrap_owner_access!`, then mount staff admin at `/admin`. Its credential-free
@@ -513,11 +549,20 @@ installs a credential resolver from `stripe_test_secret_key` /
 `stripe_test_publishable_key` (or `STRIPE_TEST_*` aliases) so `bin/rails
 stripe:ping` can call the Stripe test account.
 
+Dummy `/admin` on the Billing Administration root is those three hubs plus the
+linked inventory. After `db:setup`, widget and table rows come from the same
+catalogue fixtures customer `/billing` already shows. Search
+`/admin/sections?q=billing` lists the hubs and inventory screens, not a 404
+Account billing operations item. The default-layout slot uses
+`recording_studio_accessible_avatars` for the seeded Admin root owner; + Access
+is only the empty-grant fallback. Workspace roots still 403 `/admin`.
+
 The dummy suite exercises seeded hierarchy and product assertions, root
-switching, permitted customer billing, restricted customer/admin access, and
-provider-projected hybrid subscription, invoice, payment, refund, adjustment,
-plan-change, restricted portal, and FeatureOverride journeys. These fixtures use the same command,
-reconciliation, projection, and revision services as production code.
+switching, permitted customer billing, restricted customer/admin access, staff
+admin hubs and inventory, and provider-projected hybrid subscription, invoice,
+payment, refund, adjustment, plan-change, restricted portal, and FeatureOverride
+journeys. These fixtures use the same command, reconciliation, projection, and
+revision services as production code.
 
 The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage,
 Invoices, Payments, Billing settings, and Checkout. Copy on those pages talks

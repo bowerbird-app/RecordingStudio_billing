@@ -1238,6 +1238,7 @@ CREATE TABLE public.recording_studio_billing_billing_options (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     product_recording_id uuid NOT NULL,
     key character varying NOT NULL,
+    name character varying NOT NULL,
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
@@ -1970,6 +1971,7 @@ CREATE TABLE public.recording_studio_billing_products (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     provider_account_recording_id uuid NOT NULL,
     key character varying NOT NULL,
+    name character varying NOT NULL,
     kind character varying NOT NULL,
     state character varying DEFAULT 'draft'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
@@ -6825,6 +6827,7 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260822000001'),
 ('20260820010001'),
 ('20260820000001'),
 ('20260817000002'),

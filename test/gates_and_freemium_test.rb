@@ -312,10 +312,12 @@ class GatesAndFreemiumTest < ActiveSupport::TestCase
                        amount: 1_000, option_feature_values: {}, price_feature_values: {}, checkout_policy: "allowed")
     product_recording ||= record_child(
       RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording],
-                                          key: product_key || "product_#{SecureRandom.hex(4)}", kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording
+                                          key: product_key || "product_#{SecureRandom.hex(4)}", name: "Catalogue product",
+                                          kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording
     )
     option_recording = record_child(
       RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}",
+                                                name: "Catalogue option",
                                                 recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy:, tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording
     )
     RecordingStudioBilling.configuration.feature_definitions.each do |key, definition|

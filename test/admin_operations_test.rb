@@ -183,9 +183,11 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
       post "/billing/admin/operations/create_draft_product", params: {
         parent_recording_id: billing_admin.id,
-        attributes: { key: product_key, kind: "service", provider_account_recording_id: provider_recording.id }
+        attributes: { key: product_key, name: "Draft service", kind: "service",
+                      provider_account_recording_id: provider_recording.id }
       }
       product = RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key)
+      assert_equal "Draft service", product.name
       post "/billing/admin/operations/revise_product/#{product.id}", params: { attributes: { kind: "addon" } }
       product = RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key)
       assert_equal "addon", product.kind
@@ -244,6 +246,21 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     }
     assert_response :forbidden
     assert_equal foreign_admin.root_recording, foreign_price.recording.root_recording
+  end
+
+  test "product create screen authorizes billing_products create like other admin actions" do
+    context = product_create_admin_context
+
+    refute RecordingStudioBilling::BillingAdminProductNew.create_allowed?(context)
+
+    grant_view_access!(site_admin_recording)
+    refute RecordingStudioBilling::BillingAdminProductNew.create_allowed?(context)
+  end
+
+  test "a site admin can use the product create screen action" do
+    with_site_admin do
+      assert RecordingStudioBilling::BillingAdminProductNew.create_allowed?(product_create_admin_context)
+    end
   end
 
   test "Account-root feature override administration uses FeatureOverrideReviser with audit attribution" do
@@ -423,10 +440,11 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
                           ), root, admin.recording)
     product = record_child(
       RecordingStudioBilling::Product.new(provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}",
-                                          kind: "service", feature_values: {}), root, admin.recording
+                                          name: "Draft service", kind: "service", feature_values: {}), root, admin.recording
     )
     option = record_child(RecordingStudioBilling::BillingOption.new(
-                            product_recording: product, key: "option_#{SecureRandom.hex(4)}", recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1,
+                            product_recording: product, key: "option_#{SecureRandom.hex(4)}", name: "One-time",
+                            recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1,
                             pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none",
                             lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"
                           ), root, product)
@@ -500,7 +518,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
   end
 
   def billing_option_attributes(key:, product_recording:)
-    { key:, product_recording_id: product_recording.id, recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1,
+    { key:, name: "One-time", product_recording_id: product_recording.id, recurrence: "one_time", quantity_mode: "fixed", default_quantity: 1,
       pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none",
       lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive" }
   end
@@ -567,6 +585,16 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   def site_admin_recording
     @billing_admin_recording.root_recording
+  end
+
+  def product_create_admin_context
+    recording = site_admin_recording
+    actor = @user
+    controller = Object.new
+    controller.define_singleton_method(:current_root_recording) { recording }
+    context = RecordingStudioAdmin::Context.new(current_actor: actor, controller: controller)
+    context.define_singleton_method(:access_recording) { recording }
+    context
   end
 
   def grant_admin_access!(recording, actor: @user)
