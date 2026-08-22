@@ -52,7 +52,7 @@ class BillingUiConfigurationTest < Minitest::Test
     root = Struct.new(:id).new("root-1")
     presenter = RecordingStudioBilling::UsagePresenter.new(
       root_recording: root,
-      entitlements: { "credits" => { "minutes" => 12 } }
+      entitlements: { "minutes" => 12 }
     )
 
     html = RecordingStudioBilling::ApplicationController.render(
