@@ -9,23 +9,24 @@ child routes sit on the engine root instead of a nested `resource :billing`.
 
 ### Breaking
 
-- Gemspec floor is now `flat_pack ~> 0.1.134` (Billing family: Plan Summary,
-  Plan Picker, Usage Meter, Status Alert).
+- Gemspec floor is now `flat_pack ~> 0.1.135` (Billing family: Plan Summary,
+  Plan Picker, Usage Meter, Status Alert). Pin the Flatpack branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version is on main.
 - Customer screens that were `/billing/billing/:page` are now `/billing/:page`
   (`usage`, `plan`, `plan_requests`, `addons`, `invoices`, `payments`,
   `settings`, `checkout`, `portal`). Helper names are unchanged
   (`usage_billing_path`, `checkout_billing_path`, …).
 - Plan tiles use `FlatPack::Billing::PlanPicker`. Choosing a plan is a GET to
   `/billing/checkout/new`, then the existing POST checkout. The current plan
-  keeps a "Current plan" footer button so tiles stay one height. Flatpack does
-  not yet support a no-CTA footer.
+  passes `cta: false` so there is no choose button; PlanPicker still renders a
+  button-height footer spacer.
 
 ### Changed
 
 - Overview current plan is `FlatPack::Billing::PlanSummary` (no green status bar).
-  View plans stays the primary action. Cancel / resume sit beside it as quieter
-  buttons (`ghost` / `secondary`). PlanSummary's `footer` slot is captured but
-  the Card footer stays empty — a Flatpack follow-up should render that slot.
+  View plans stays the primary action. Cancel / resume use the quieter
+  PlanSummary footer (`secondary`). Installed PlanSummary still paints an empty
+  Card footer (`card.footer { footer }` does not output the slot).
 - Dummy catalogue display names: Free plan, Pro ($49), Pro yearly, and Starter
   ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
 - Usage uses Usage Meter for the period, List rows for prepaid credits and
@@ -36,8 +37,8 @@ child routes sit on the engine root instead of a nested `resource :billing`.
 
 ### Upgrade notes
 
-- Bump the host Flatpack pin to `0.1.134` (GitHub `main` / commit
-  `c4e7581` until a `v0.1.134` tag exists).
+- Bump the host Flatpack pin to `0.1.135` (GitHub branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version lands on main).
 - Update any hardcoded `/billing/billing/...` links to `/billing/...`. Named
   helpers do not change.
 - Set `config.product_display_names` when two plans would otherwise share an

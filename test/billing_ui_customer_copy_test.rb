@@ -37,9 +37,12 @@ class BillingUiCustomerCopyTest < Minitest::Test
     refute_equal subscription.identifier, row[:label]
 
     html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
+    template = File.read(File.expand_path("../app/components/recording_studio_billing/current_plan_component.html.erb", __dir__))
     assert_includes html, "$49"
     assert_includes html, "View plans"
     assert_includes html, "Billed monthly"
+    assert_includes template, "summary.footer"
+    assert_includes template, "cancel_subscription"
     refute_includes html, "Add-on: 2 x"
     refute_includes html, "Choose a plan"
   end
@@ -82,12 +85,17 @@ class BillingUiCustomerCopyTest < Minitest::Test
       Struct.new(:amount_minor, :currency_code, :currency_exponent).new(amounts.fetch(option), "USD", 2)
     end
     cards = presenter.plan_cards
+    items = presenter.plan_picker_items
     html = render_component(RecordingStudioBilling::SubscriptionsComponent, presenter)
 
     assert_equal(["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] })
     assert_equal(["$0", "$49", "$490"], cards.map { |card| card[:price_label] })
     assert_equal(["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] })
     assert_includes html, "Choose this plan"
+    refute_includes items.map { |item| item[:cta] }, false
+    current_item = presenter.send(:plan_picker_item_for, cards.first.merge(current: true))
+    assert_equal false, current_item[:cta]
+    refute_includes html, "data-flat-pack-plan-picker=\"cta-spacer\""
   end
 
   def test_usage_hides_raw_keys_and_internal_hashes

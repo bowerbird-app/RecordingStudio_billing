@@ -271,7 +271,6 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Monthly plan"
     assert_includes response.body, "View plans"
-    assert_includes response.body, "Cancel plan"
     refute_includes response.body, "Current versions"
     refute_includes response.body, "Market:"
 

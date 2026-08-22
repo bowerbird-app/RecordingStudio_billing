@@ -247,9 +247,9 @@ plan, Pro, and Pro yearly in the dummy). Tiles show the resolved
 customer-market price. Set `config.product_display_names` when two catalogue
 products would otherwise share an interval label such as "Monthly plan". Dummy
 uses `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES` (Free plan, Pro, Pro yearly,
-Starter). The current plan is a badge plus a "Current plan" footer button so
-height stays even; choosing another plan is the action. Cancel lives on
-Overview. Dummy seeds keep one live Pro plan after a cancelled hybrid
+Starter). The current plan is a badge plus `cta: false` so PlanPicker keeps a
+footer spacer and no choose button; choosing another plan is the action. Cancel
+lives on Overview in the Plan Summary footer. Dummy seeds keep one live Pro plan after a cancelled hybrid
 checkout: recurring checkouts share an execution group, so the applied
 cancellation is recorded first, then the live monthly checkout reactivates that
 same plan.

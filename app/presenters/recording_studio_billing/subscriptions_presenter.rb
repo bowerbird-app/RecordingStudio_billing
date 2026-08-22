@@ -119,15 +119,20 @@ module RecordingStudioBilling
     end
 
     def plan_picker_item_for(plan)
-      {
+      item = {
         name: plan[:name],
         price_text: "#{plan[:price_label]}#{plan[:price_suffix]}",
         features: plan[:features],
         href: plan_picker_href(plan),
-        cta_text: plan_picker_cta_text(plan),
         current: plan[:current],
         highlighted: plan[:highlighted]
       }
+      if plan[:current]
+        item[:cta] = false
+      else
+        item[:cta_text] = plan_picker_cta_text(plan)
+      end
+      item
     end
 
     def plan_picker_href(plan)
@@ -139,7 +144,6 @@ module RecordingStudioBilling
     end
 
     def plan_picker_cta_text(plan)
-      return copy("plan_card_current_cta", "Current plan") if plan[:current]
       return copy("plans_sign_in_to_choose", "Sign in to choose this plan") unless checkout_available_for?(plan)
 
       copy("choose_plan_continue", "Choose this plan")

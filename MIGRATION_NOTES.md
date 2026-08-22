@@ -4,7 +4,8 @@ RecordingStudio Billing is a **clean-install** engine. Hosts apply the current e
 
 ## 0.8.0 — Flatpack Billing composition
 
-No schema change. Hosts bump Flatpack to `~> 0.1.134` and replace hardcoded
+No schema change. Hosts bump Flatpack to `~> 0.1.135` (branch
+`cursor/plan-picker-current-no-cta-6ba6` until it is on main) and replace hardcoded
 `/billing/billing/...` paths with `/billing/...`. Named route helpers stay the
 same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
 Usage Meter, and Status Alert. Set `config.product_display_names` if two

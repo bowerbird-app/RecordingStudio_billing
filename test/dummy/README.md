@@ -109,9 +109,9 @@ keeping the cheaper quote. Browser return does not complete a purchase.
 Customer **Plan** is `/plans` (host route; gem-owned controller and Plan Picker).
 After seed, Studio Workspace shows a title, subtitle, and three Flatpack Plan
 Picker tiles for the US Free plan ($0), Pro ($49), and Pro yearly ($490). The
-live Pro plan is marked current and keeps a "Current plan" footer so tiles stay
-one height. Choose this plan is the action on the other tiles. Cancel is on
-Overview. Change-request examples live on **Plan requests**
+live Pro plan is marked current with no choose button; PlanPicker keeps a
+footer spacer so tiles stay one height. Choose this plan is the action on the
+other tiles. Cancel is on Overview. Change-request examples live on **Plan requests**
 (`/billing/plan_requests`). `/billing/plan` redirects to `/plans` when the host
 route is configured. Those screens sit in Recording Studio's default layout
 (PageNav back, no sidebar, no Sign out or Root Switchable control in that slot).

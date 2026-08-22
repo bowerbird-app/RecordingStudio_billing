@@ -241,7 +241,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_response :success, response.body
     assert_includes response.body, "Pro"
     assert_includes response.body, "Current"
-    assert_includes response.body, "Current plan"
+    assert_includes response.body, "data-flat-pack-plan-picker=\"cta-spacer\""
+    refute_includes response.body, "Current plan"
     assert_includes response.body, "$0"
     assert_includes response.body, "$49"
     assert_includes response.body, "$490"

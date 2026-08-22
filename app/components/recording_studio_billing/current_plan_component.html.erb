@@ -10,16 +10,20 @@
       style: :primary,
       href: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
     ) %>
-    <% if row && row[:subscription].state == "paused" %>
+  <% end %>
+  <% if row && row[:subscription].state == "paused" %>
+    <% summary.footer do %>
       <%= render FlatPack::Button::Component.new(
         text: @presenter.copy("resume_subscription", "Resume plan"),
         style: :secondary,
         href: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
       ) %>
-    <% elsif row %>
+    <% end %>
+  <% elsif row %>
+    <% summary.footer do %>
       <%= render FlatPack::Button::Component.new(
         text: @presenter.copy("cancel_subscription", "Cancel plan"),
-        style: :ghost,
+        style: :secondary,
         href: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
       ) %>
     <% end %>
