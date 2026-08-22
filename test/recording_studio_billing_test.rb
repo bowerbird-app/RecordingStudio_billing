@@ -40,6 +40,12 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes application, "Sign in"
     refute_includes application, "Login"
     refute_includes application, "FlatPack::SidebarLayout::Component"
+
+    helper = File.read(File.expand_path("dummy/app/helpers/application_helper.rb", __dir__))
+    refute_includes helper, "recording_studio_page_nav_right"
+    refute_includes helper, "recording_studio_root_switch_dropdown"
+    refute_includes helper, "Sign out"
+    refute_includes helper, "Sign in"
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects

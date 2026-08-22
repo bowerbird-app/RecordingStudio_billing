@@ -10,7 +10,7 @@ test keys are present, the dummy can also call the Stripe test account.
 - Devise authentication with a seeded admin user who is the first Accessible owner of Studio Workspace and Billing Administration
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
-- FlatPack UI: sign-in uses the gem-template `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use Recording Studio's `recording_studio/default_layout` only (PageNav back/close, no left sidebar)
+- FlatPack UI: sign-in uses the gem-template `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use Recording Studio's `recording_studio/default_layout` only (PageNav back/close, no left sidebar, no Sign out or Root Switchable control in that slot)
 - Tailwind source scanning for dummy views, billing views/components, and bundled FlatPack/Recording Studio gems (`bin/rails tailwindcss:build` writes those gem paths first)
 - Mounted customer billing at `/billing` and staff admin at `/admin`. RecordingStudioAdmin **Products and pricing** is registered on the Admin root
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
@@ -35,8 +35,11 @@ Sign in with:
 - Email: `admin@admin.com`
 - Password: `Password`
 
-The root switcher moves between the Studio Workspace (customer billing) and
-Billing Administration (products and pricing).
+Switch roots on the dedicated Root Switchable page at
+`/recording_studio_root_switchable/v1/root_switch?scope=all_workspaces`. That
+moves between Studio Workspace (customer billing) and Billing Administration
+(products and pricing). The default-layout slot does not render the switcher
+or Sign out.
 
 If published dummy records were created by an older seed (for example the
 metered API-call product stored as a credit pack), reset from `test/dummy`:

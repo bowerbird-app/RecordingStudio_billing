@@ -38,7 +38,8 @@ Customer billing views use Recording Studio's default layout
 (`recording_studio/default_layout`) only. Include
 `RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Devise
 sign-in stays on the host `application` layout. Do not add a second sidebar
-shell.
+shell, and do not put Sign out or a Root Switchable control in the
+default-layout slot.
 
 The customer area is a set of gem-owned screens the host mounts. Each screen
 is one job: Overview, Plan, Plan requests, Add-ons, Usage, Invoices, Payments,
@@ -145,7 +146,9 @@ class. Hooks run only during rendering; they must not make billing state changes
 - The admin support concern uses the public
   `RecordingStudioAdmin::AllowsAdminSections` API to register the site-scoped
   `:billing_commercial`, `:billing_financial`, and `:billing_operations`
-  sections. Hosts enable `:accessible` on the Admin root themselves.
+  sections. Hosts enable `:accessible` on the Admin root themselves and grant
+  Accessible access on that root. Admin 2.0 `authorize_resource!` and
+  `site_admin_recording_resolver` use that grant; do not stub `authorized?`.
 
 The capability metadata uses Recording Studio's public
 `register_capability`, `enable_capability`, and `recording_studio_recordable`
@@ -490,7 +493,8 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Signed-in dummy and billing pages use
 Recording Studio's `recording_studio/default_layout` only (`data-theme` rounded,
-PageNav back/close). Devise sign-in stays on `layouts/application`. Dummy
+PageNav back/close, no Sign out or Root Switchable control in that slot). Devise
+sign-in stays on `layouts/application`. Dummy
 seeds bootstrap the first owner on the workspace and Admin root with
 `bootstrap_owner_access!`, then mount staff admin at `/admin`. Its credential-free
 demonstration products include

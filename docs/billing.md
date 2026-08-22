@@ -270,4 +270,4 @@ Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, g
 
 ## Host layouts
 
-Customer billing controllers render inside Recording Studio's default layout (`recording_studio/default_layout`) only. Include `RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Sign-in stays on the host `application` layout. Billing screens set PageNav back/close. Hosts that want a sidebar can still render `RecordingStudioBilling::CustomerSidebarComponent`; dummy does not. Rebuild Tailwind after install so FlatPack component classes are present.
+Customer billing controllers render inside Recording Studio's default layout (`recording_studio/default_layout`) only. Include `RecordingStudio::UsesDefaultLayout` on authenticated host controllers. Sign-in stays on the host `application` layout. Billing screens set PageNav back/close. Do not put Sign out or a Root Switchable control in the default-layout slot. Hosts that want a sidebar can still render `RecordingStudioBilling::CustomerSidebarComponent`; dummy does not. Rebuild Tailwind after install so FlatPack component classes are present.

@@ -40,6 +40,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "data-billing-layout"
     refute_includes response.body, "Current versions"
     refute_includes response.body, "Market:"
+    refute_includes response.body, "Sign out"
+    refute_includes response.body, "root_switch"
   end
 
   test "customer billing routes reject an actor without billing access" do

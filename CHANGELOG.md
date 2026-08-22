@@ -21,11 +21,15 @@ change only.
   `RecordingStudio.enable_capability(:accessible, on: Type)` (already done for
   workspace roots by `Billable`).
 - Dummy authenticated pages drop the gem-template left sidebar. Sign-in stays on
-  `layouts/application`. Staff admin is mounted at `/admin` on the Admin root
+  `layouts/application`. The default-layout slot has no Sign in, Sign out, or
+  Root Switchable control. Staff admin is mounted at `/admin` on the Admin root
   with Accessible grants.
 - Flatpack 0.1.133 buttons use `href:` (not `url:`). Host sidebar helpers that
   still render `CustomerSidebarComponent` must pass item `text:` and group
   `title:`.
+- Site billing operations authorize through Admin 2.0 `authorize_resource!`
+  against a real Accessible grant on the Admin root resolved by
+  `site_admin_recording_resolver`. Tests no longer stub `authorized?`.
 
 ### Added
 
@@ -39,14 +43,21 @@ change only.
   `v4.2.0`, `v0.7.0`, `2.0.1`, `v0.2.0`, `v0.5.0`, and `v0.1.133`.
 - Include `RecordingStudio::UsesDefaultLayout` on authenticated controllers.
   Do not copy a second sidebar shell. Set `html data-theme="rounded"` on Devise
-  `application`; authenticated pages use the engine default layout.
+  `application`; authenticated pages use the engine default layout. Do not put
+  Sign out or the Root Switchable control in the default-layout slot.
 - Configure `RecordingStudioAccessible` `access_actor_types` (for example
   `["User"]`). Enable `:accessible` on the Admin root. First owner: 
   `bootstrap_owner_access!`. Later invites stay `grant_access`.
 - Mount admin with `recording_studio_admin_for` against the Admin root. Do not
-  use `user.admin?` or `AllowsAccessibleChildren`.
+  use `user.admin?` or `AllowsAccessibleChildren`. Site operations need an
+  Accessible grant on that Admin root; `authorize_resource!` and
+  `site_admin_recording_resolver` are the Admin 2.0 gate. Do not stub
+  `authorized?`.
 - Replace Flatpack Button `url:` with `href:` on any host overrides of billing
   screens.
+- Recording Studio 4.2.0 default layout still passes Flatpack PageNav
+  `back_url:` / `anchor_url:`. Flatpack 0.1.133 close reads `anchor_href:`.
+  Do not fork the core layout from Billing.
 
 ## 0.6.1
 
