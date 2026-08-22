@@ -36,6 +36,11 @@ empty section titles and filter-only screens.
 - Dummy Accessible now resolves avatars from the owner grant. Admin hubs use
   `recording_studio_accessible_avatars` and only show + Access when that
   grant list is empty.
+- Dummy and the development Gemfile pin Flatpack
+  `cursor/plan-picker-current-no-cta-6ba6` (PR #159, 0.1.135) so the rounded
+  theme rebinds `--button-border-radius` and charcoal `--button-primary-*`
+  aliases. Dummy `recording_studio/default_layout` also puts `data-theme` on
+  `html`, not only `body`. Billing does not fork button CSS.
 
 ### Upgrade notes
 
@@ -54,6 +59,11 @@ empty section titles and filter-only screens.
 - Hosts that want avatars in the Admin default-layout slot must set
   `RecordingStudioAccessible` `avatar_resolver`. Without it, granted actors
   still fall back to + Access. Dummy now ships that resolver.
+- Dummy/dev only: the Gemfiles pin Flatpack #159 until that branch is tagged.
+  Published `flat_pack ~> 0.1.133` is unchanged. Do not copy button CSS into
+  Billing. After #159 merges, switch the pin back to a released tag. Hosts that
+  set `data-theme` only on `body` should also set it on `html` so the rounded
+  rebinds inherit from the document root.
 
 ## 0.7.0
 

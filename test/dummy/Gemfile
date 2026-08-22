@@ -36,7 +36,9 @@ gem "jbuilder"
 gem "tailwindcss-rails"
 
 # FlatPack UI component library [https://github.com/bowerbird-app/flatpack]
-gem "flat_pack", github: "bowerbird-app/flatpack", tag: "v0.1.133"
+# Dummy pin: Flatpack #159 so rounded theme rebinds button radius + charcoal
+# primary. Revert to a released tag once that lands. Do not fork button CSS here.
+gem "flat_pack", github: "bowerbird-app/flatpack", branch: "cursor/plan-picker-current-no-cta-6ba6"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

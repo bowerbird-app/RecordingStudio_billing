@@ -32,8 +32,13 @@ class RecordingStudioBillingTest < Minitest::Test
     dummy_layouts = File.expand_path("dummy/app/views/layouts", __dir__)
 
     refute File.exist?(File.join(dummy_layouts, "flat_pack_sidebar.html.erb"))
-    refute File.exist?(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
     refute File.exist?(File.join(dummy_layouts, "flat_pack/_sidebar.html.erb"))
+
+    default_layout = File.read(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
+    assert_includes default_layout, '<html data-theme="'
+    refute_includes default_layout, "flat_pack_sidebar"
+    refute_includes default_layout, "Sign out"
+    refute_includes default_layout, "recording_studio_root_switch_dropdown"
 
     application = File.read(File.join(dummy_layouts, "application.html.erb"))
     assert_includes application, '<html data-theme="rounded">'
@@ -46,6 +51,17 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes helper, "recording_studio_root_switch_dropdown"
     refute_includes helper, "Sign out"
     refute_includes helper, "Sign in"
+  end
+
+  def test_dummy_runs_flatpack_rounded_button_rebinds
+    assert_operator Gem::Version.new(FlatPack::VERSION), :>=, Gem::Version.new("0.1.135")
+
+    css = File.read(FlatPack::Engine.root.join("app/assets/stylesheets/flat_pack/variables.css"))
+    assert_includes css, '--color-primary: oklch(0.3211 0 0)'
+    assert_includes css, "--button-primary-background-color: var(--color-primary)"
+    assert_includes css, "--button-border-radius: var(--radius-md)"
+    assert_operator css.scan('[data-theme="rounded"]').size, :>=, 2
+    assert_match(/\[data-theme="rounded"\][^{]*\{[^}]*--button-border-radius: var\(--radius-md\)/m, css)
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects
