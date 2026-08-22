@@ -23,10 +23,10 @@ child routes sit on the engine root instead of a nested `resource :billing`.
 
 ### Changed
 
-- Overview current plan is `FlatPack::Billing::PlanSummary` (no green status bar).
-  View plans stays the primary action. Cancel / resume use the quieter
-  PlanSummary footer (`secondary`). Installed PlanSummary still paints an empty
-  Card footer (`card.footer { footer }` does not output the slot).
+- Overview current plan is `FlatPack::Billing::PlanSummary` in a
+  `Grid` (`cols: 3`). Primary action is Change plan (to `/plans`). Status is
+  omitted (`status: nil`, no badge). Cancel / resume sit in the actions row
+  as secondary buttons. The footer slot is not set.
 - Dummy catalogue display names: Free plan, Pro ($49), Pro yearly, and Starter
   ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
 - Usage uses Usage Meter for the period, List rows for prepaid credits and

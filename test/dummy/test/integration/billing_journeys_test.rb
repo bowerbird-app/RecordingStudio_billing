@@ -32,7 +32,12 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Billing"
     assert_includes response.body, "Pro"
     assert_includes response.body, "$49"
-    assert_includes response.body, "View plans"
+    assert_includes response.body, "Change plan"
+    assert_includes response.body, "Cancel plan"
+    refute_includes response.body, "View plans"
+    refute_includes response.body, "Active"
+    assert_operator response.body.index("Change plan"), :<, response.body.index("Cancel plan")
+    refute_includes response.body[response.body.index("Change plan")..response.body.index("Cancel plan")], "border-t"
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
     assert_includes response.body, 'data-theme="rounded"'
     assert_includes response.body, "flat-pack-page-nav"

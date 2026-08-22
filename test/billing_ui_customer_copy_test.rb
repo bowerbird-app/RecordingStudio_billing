@@ -39,12 +39,43 @@ class BillingUiCustomerCopyTest < Minitest::Test
     html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
     template = File.read(File.expand_path("../app/components/recording_studio_billing/current_plan_component.html.erb", __dir__))
     assert_includes html, "$49"
-    assert_includes html, "View plans"
+    assert_includes html, "Change plan"
+    assert_includes html, "Cancel plan"
     assert_includes html, "Billed monthly"
-    assert_includes template, "summary.footer"
+    assert_includes html, "lg:grid-cols-3"
+    assert_includes html, "flex flex-wrap gap-2"
+    assert_includes html, "--button-primary-background-color"
+    assert_includes html, "--button-secondary-background-color"
     assert_includes template, "cancel_subscription"
+    assert_includes template, "status: nil"
+    refute_includes template, "summary.footer"
+    refute_includes template, "ButtonGroup"
+    refute_includes html, "View plans"
+    refute_includes html, "Active"
     refute_includes html, "Add-on: 2 x"
     refute_includes html, "Choose a plan"
+    assert_operator html.index("Change plan"), :<, html.index("Cancel plan")
+    refute_includes html[html.index("Change plan")..html.index("Cancel plan")], "border-t"
+  end
+
+  def test_overview_resume_sits_in_the_actions_row_when_paused
+    paused = subscription
+    paused.state = "paused"
+    presenter = RecordingStudioBilling::OverviewPresenter.new(
+      root_recording: root, subscriptions: [paused], checkout_intents: []
+    )
+    html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
+    template = File.read(File.expand_path("../app/components/recording_studio_billing/current_plan_component.html.erb", __dir__))
+
+    assert_includes html, "Change plan"
+    assert_includes html, "Resume plan"
+    refute_includes html, "Cancel plan"
+    refute_includes html, "View plans"
+    refute_includes html, "Paused"
+    refute_includes html, "Active"
+    refute_includes template, "summary.footer"
+    assert_operator html.index("Change plan"), :<, html.index("Resume plan")
+    refute_includes html[html.index("Change plan")..html.index("Resume plan")], "border-t"
   end
 
   def test_plan_and_addon_offers_use_customer_labels

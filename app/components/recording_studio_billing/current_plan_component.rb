@@ -23,18 +23,6 @@ module RecordingStudioBilling
       "#{row[:price_label]}#{row[:price_suffix]}"
     end
 
-    def plan_status
-      return :incomplete unless row
-
-      case row[:subscription].state.to_s
-      when "trialing" then :trialing
-      when "past_due" then :past_due
-      when "canceled", "cancelled" then :canceled
-      when "incomplete" then :incomplete
-      else :active
-      end
-    end
-
     def plan_description
       return @presenter.copy("no_subscriptions", "No active plan yet. Choose a plan to get started.") unless row
       return if row[:cadence].blank?

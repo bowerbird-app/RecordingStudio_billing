@@ -8,8 +8,10 @@ No schema change. Hosts bump Flatpack to `~> 0.1.135` (branch
 `cursor/plan-picker-current-no-cta-6ba6` until it is on main) and replace hardcoded
 `/billing/billing/...` paths with `/billing/...`. Named route helpers stay the
 same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
-Usage Meter, and Status Alert. Set `config.product_display_names` if two
-catalogue products would otherwise share an interval label.
+Usage Meter, and Status Alert. Overview puts Change plan and Cancel / Resume in
+the Plan Summary actions row and omits the status badge (`status: nil`). Set
+`config.product_display_names` if two catalogue products would otherwise share
+an interval label.
 
 ## 0.6.0 — app-owned gates and freemium bootstrap
 
