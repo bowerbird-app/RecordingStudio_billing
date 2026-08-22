@@ -10,22 +10,18 @@
       style: :primary,
       href: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
     ) %>
-  <% end %>
-  <% if row %>
-    <% summary.footer do %>
-      <% if row[:subscription].state == "paused" %>
-        <%= render FlatPack::Button::Component.new(
-          text: @presenter.copy("resume_subscription", "Resume plan"),
-          style: :secondary,
-          href: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
-        ) %>
-      <% else %>
-        <%= render FlatPack::Button::Component.new(
-          text: @presenter.copy("cancel_subscription", "Cancel plan"),
-          style: :ghost,
-          href: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
-        ) %>
-      <% end %>
+    <% if row && row[:subscription].state == "paused" %>
+      <%= render FlatPack::Button::Component.new(
+        text: @presenter.copy("resume_subscription", "Resume plan"),
+        style: :secondary,
+        href: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
+      ) %>
+    <% elsif row %>
+      <%= render FlatPack::Button::Component.new(
+        text: @presenter.copy("cancel_subscription", "Cancel plan"),
+        style: :ghost,
+        href: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
+      ) %>
     <% end %>
   <% end %>
 <% end %>

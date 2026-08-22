@@ -23,11 +23,13 @@ child routes sit on the engine root instead of a nested `resource :billing`.
 ### Changed
 
 - Overview current plan is `FlatPack::Billing::PlanSummary` (no green status bar).
-  View plans stays the primary action; Cancel plan stays quieter in the footer.
+  View plans stays the primary action. Cancel / resume sit beside it as quieter
+  buttons (`ghost` / `secondary`). PlanSummary's `footer` slot is captured but
+  the Card footer stays empty — a Flatpack follow-up should render that slot.
 - Dummy catalogue display names: Free plan, Pro ($49), Pro yearly, and Starter
   ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
 - Usage uses Usage Meter for the period, List rows for prepaid credits and
-  charges, a named "What's included" list instead of a hash dump, and
+  charges, a named "On this plan" list instead of a hash dump, and
   `Billing::StatusAlert` for the read-only notice.
 
 ### Upgrade notes

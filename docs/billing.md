@@ -238,11 +238,18 @@ added by `draw_recording_studio_billing_plans` during install. The gem provides
 
 The billing mount still exposes `GET /billing/plan`, which redirects to the host
 plans route when configured. **Plan requests** stays under billing
-(`/billing/plan_requests`). The page shows a title, subtitle, and a three-column
-Plan Picker (Free plan, Pro, and Pro yearly in the dummy). Tiles show the
-resolved customer-market price. The current plan is a badge plus a "Current plan"
-footer button so height stays even; choosing another plan is the action. Cancel
-lives on Overview. Dummy seeds keep one live Pro plan after a cancelled hybrid
+(`/billing/plan_requests`). **Usage** is `/billing/usage` on the engine root
+(not `/billing/billing/usage`). Period usage is a Usage Meter; prepaid credits
+and charges are List rows; plan features are a named "On this plan" list.
+
+The Plan page shows a title, subtitle, and a three-column Plan Picker (Free
+plan, Pro, and Pro yearly in the dummy). Tiles show the resolved
+customer-market price. Set `config.product_display_names` when two catalogue
+products would otherwise share an interval label such as "Monthly plan". Dummy
+uses `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES` (Free plan, Pro, Pro yearly,
+Starter). The current plan is a badge plus a "Current plan" footer button so
+height stays even; choosing another plan is the action. Cancel lives on
+Overview. Dummy seeds keep one live Pro plan after a cancelled hybrid
 checkout: recurring checkouts share an execution group, so the applied
 cancellation is recorded first, then the live monthly checkout reactivates that
 same plan.

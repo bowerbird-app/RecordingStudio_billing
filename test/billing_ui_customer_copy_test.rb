@@ -48,7 +48,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
     option = offer_option(kind: "plan", interval: "month", recurrence: "recurring")
     plan_html = render_component(
       RecordingStudioBilling::SubscriptionsComponent,
-      RecordingStudioBilling::SubscriptionsPresenter.new(root_recording: root, subscriptions: [], eligible_options: [option])
+      RecordingStudioBilling::SubscriptionsPresenter.new(
+        root_recording: root, subscriptions: [], eligible_options: [option], plan_options: [option]
+      )
     )
     addon_html = render_component(
       RecordingStudioBilling::AddonsComponent,
@@ -72,7 +74,8 @@ class BillingUiCustomerCopyTest < Minitest::Test
     monthly = offer_option(kind: "plan", interval: "month", recurrence: "recurring", key: "monthly_option")
     annual = offer_option(kind: "plan", interval: "year", recurrence: "recurring", key: "annual_option")
     presenter = RecordingStudioBilling::SubscriptionsPresenter.new(
-      root_recording: root, subscriptions: [], eligible_options: [annual, monthly, free]
+      root_recording: root, subscriptions: [], eligible_options: [annual, monthly, free],
+      plan_options: [annual, monthly, free]
     )
     amounts = { free => 0, monthly => 4_900, annual => 49_000 }
     presenter.define_singleton_method(:live_price_for) do |option|
@@ -106,7 +109,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes html, "5 of 10"
     assert_includes html, "5 of 5 available"
     assert_includes html, "No expiry"
-    assert_includes html, "What's included"
+    assert_includes html, "On this plan"
     assert_includes html, "Priority support"
     assert_includes html, "Yes"
     refute_includes html, "demo_api_calls"

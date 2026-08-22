@@ -51,8 +51,9 @@ bin/rails db:reset
 ## Useful routes
 
 - `/` — dummy home
-- `/billing` — customer billing
-- `/plans` — plan picker
+- `/billing` — customer billing (Plan Summary)
+- `/billing/usage` — usage meters and prepaid credits
+- `/plans` — plan picker (Free plan, Pro, Pro yearly)
 - `/admin` — staff admin (Admin root)
 - `/dummy_portal` — demonstration payment portal (payment methods, address, tax IDs, invoice history)
 - `/users/sign_in` — Devise sign-in
