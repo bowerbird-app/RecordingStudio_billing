@@ -122,10 +122,19 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_equal(["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] })
     assert_equal(["$0", "$49", "$490"], cards.map { |card| card[:price_label] })
     assert_equal(["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] })
-    assert_includes html, "Choose this plan"
+    assert_includes html, "Choose plan"
+    refute_includes html, "Choose this plan"
     refute_includes items.map { |item| item[:cta] }, false
     current_item = presenter.send(:plan_picker_item_for, cards.first.merge(current: true))
-    assert_equal false, current_item[:cta]
+    refute current_item.key?(:cta)
+    assert current_item[:current]
+    current_html = RecordingStudioBilling::ApplicationController.render(
+      inline: "<%= render component %>",
+      locals: { component: FlatPack::Billing::PlanPicker::Component.new(items: [current_item]) }
+    )
+    assert_includes current_html, "Current"
+    assert_includes current_html, "disabled"
+    refute_includes current_html, "data-flat-pack-plan-picker=\"cta-spacer\""
     refute_includes html, "data-flat-pack-plan-picker=\"cta-spacer\""
   end
 

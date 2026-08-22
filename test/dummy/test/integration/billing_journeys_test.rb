@@ -246,7 +246,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_response :success, response.body
     assert_includes response.body, "Pro"
     assert_includes response.body, "Current"
-    assert_includes response.body, "data-flat-pack-plan-picker=\"cta-spacer\""
+    assert_includes response.body, "disabled"
+    refute_includes response.body, "data-flat-pack-plan-picker=\"cta-spacer\""
     refute_includes response.body, "Current plan"
     assert_includes response.body, "$0"
     assert_includes response.body, "$49"
@@ -256,7 +257,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Annual plan"
     assert_includes response.body, "Choose a plan"
     assert_includes response.body, "Pick the plan that fits this workspace"
-    assert_includes response.body, "Choose this plan"
+    assert_includes response.body, "Choose plan"
+    refute_includes response.body, "Choose this plan"
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
     assert_includes response.body, "flat-pack-page-nav"
     refute_includes response.body, "$51"

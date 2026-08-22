@@ -17,9 +17,9 @@ child routes sit on the engine root instead of a nested `resource :billing`.
   `settings`, `checkout`, `portal`). Helper names are unchanged
   (`usage_billing_path`, `checkout_billing_path`, …).
 - Plan tiles use `FlatPack::Billing::PlanPicker`. Choosing a plan is a GET to
-  `/billing/checkout/new`, then the existing POST checkout. The current plan
-  passes `cta: false` so there is no choose button; PlanPicker still renders a
-  button-height footer spacer.
+  `/billing/checkout/new`, then the existing POST checkout. Choosable tiles use
+  **Choose plan**. The current tile is a disabled **Current** button in the
+  card body (not a badge, not `cta: false`).
 
 ### Changed
 
@@ -45,6 +45,9 @@ child routes sit on the engine root instead of a nested `resource :billing`.
   interval label such as "Monthly plan". Dummy uses
   `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES`.
 - Rebuild Tailwind so Flatpack Billing classes are present.
+- Plan picker copy default is **Choose plan** (was "Choose this plan").
+  Sign-in CTA default is **Sign in to choose a plan**. Current tiles no
+  longer pass `cta: false`.
 
 ## 0.7.0
 

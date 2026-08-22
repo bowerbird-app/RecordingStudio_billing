@@ -127,11 +127,7 @@ module RecordingStudioBilling
         current: plan[:current],
         highlighted: plan[:highlighted]
       }
-      if plan[:current]
-        item[:cta] = false
-      else
-        item[:cta_text] = plan_picker_cta_text(plan)
-      end
+      item[:cta_text] = plan_picker_cta_text(plan) unless plan[:current]
       item
     end
 
@@ -144,9 +140,9 @@ module RecordingStudioBilling
     end
 
     def plan_picker_cta_text(plan)
-      return copy("plans_sign_in_to_choose", "Sign in to choose this plan") unless checkout_available_for?(plan)
+      return copy("plans_sign_in_to_choose", "Sign in to choose a plan") unless checkout_available_for?(plan)
 
-      copy("choose_plan_continue", "Choose this plan")
+      copy("choose_plan_continue", "Choose plan")
     end
 
     def checkout_available_for?(_plan)

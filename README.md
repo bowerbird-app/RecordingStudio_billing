@@ -47,7 +47,8 @@ and Billing settings. The **Plan** picker also mounts at a host-nominated route
 (default `/plans`) via `draw_recording_studio_billing_plans`; the gem owns the
 controller and ViewComponents. Billing pages render inside Recording Studio's
 `recording_studio/default_layout` and set PageNav back/close. The Plan page is a
-title, subtitle, and a Flatpack Plan Picker (up to three tiles). Overview shows
+title, subtitle, and a Flatpack Plan Picker (up to three tiles; Choose plan or
+a disabled Current button in the card body). Overview shows
 the current plan in a Plan Summary card (Change plan and Cancel or Resume in
 the actions row, no status badge). Hosts that still want a sidebar
 can render `RecordingStudioBilling::CustomerSidebarComponent` themselves; dummy

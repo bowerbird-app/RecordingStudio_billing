@@ -48,7 +48,7 @@ GIT
 
 GIT
   remote: https://github.com/bowerbird-app/flatpack.git
-  revision: 61abfb4ca9cf727db0d8deaf0c8023e5ae26c1f3
+  revision: 6050a348c1c661c15dcdfe7bd92169e2eb1c299a
   branch: cursor/plan-picker-current-no-cta-6ba6
   specs:
     flat_pack (0.1.135)

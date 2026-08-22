@@ -1,6 +1,6 @@
 <% billing_page_nav(title: "Checkout", back_url: plans_path_for(@root_recording)) %>
 <%= render FlatPack::PageTitle::Component.new(
-  title: @plan_name.presence || "Choose this plan",
+  title: @plan_name.presence || "Choose plan",
   subtitle: "Continue to confirm price and tax.",
   variant: :h1
 ) %>
