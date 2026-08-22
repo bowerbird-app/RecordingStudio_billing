@@ -31,7 +31,7 @@ class RootSwitchDropdownTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Sign out"
     refute_includes response.body, "Sign in"
     refute_includes response.body, "Login"
-    refute_includes response.body, "root_switch"
+    refute_includes response.body, "recording_studio_root_switch_dropdown"
     refute_includes response.body, workspace.name
     refute_includes response.body, admin_root.name
   end
