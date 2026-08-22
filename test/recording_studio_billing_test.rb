@@ -83,6 +83,10 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes structure, "('20260810000000')"
     assert_includes structure, "('20260816000001')"
     assert_includes structure, "('20260817000001')"
+    assert_includes structure, "('20260822000001')"
+    assert_includes structure, "recording_studio_billing_products"
+    assert_match(/CREATE TABLE public\.recording_studio_billing_products[\s\S]*name character varying NOT NULL/, structure)
+    assert_match(/CREATE TABLE public\.recording_studio_billing_billing_options[\s\S]*name character varying NOT NULL/, structure)
     assert_includes structure, "CREATE TABLE public.recording_studio_accesses"
   end
 end

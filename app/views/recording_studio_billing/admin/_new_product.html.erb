@@ -16,37 +16,44 @@
 
 <%= form_with url: billing_admin_product_new_create_url, method: :post do %>
   <%= hidden_field_tag :parent_recording_id, billing_admin_product_new_parent_recording_id %>
-  <div class="mt-6 space-y-4">
-    <%= render FlatPack::TextInput::Component.new(
-      name: "attributes[key]",
-      label: "Key",
-      required: true
-    ) %>
-    <%= render FlatPack::Select::Component.new(
-      name: "attributes[kind]",
-      label: "Kind",
-      required: true,
-      options: billing_admin_product_kind_options,
-      placeholder: false
-    ) %>
-    <%= render FlatPack::Select::Component.new(
-      name: "attributes[provider_account_recording_id]",
-      label: "Provider",
-      required: true,
-      options: billing_admin_product_provider_options,
-      placeholder: false
-    ) %>
-    <div class="flex flex-wrap items-center gap-3">
-      <%= render FlatPack::Button::Component.new(
-        text: "Cancel",
-        href: billing_admin_product_new_cancel_url,
-        style: :secondary
+  <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md, class: "mt-6") do %>
+    <div class="space-y-4">
+      <%= render FlatPack::TextInput::Component.new(
+        name: "attributes[name]",
+        label: "Name",
+        required: true
       ) %>
-      <%= render FlatPack::Button::Component.new(
-        text: "Save",
-        type: :submit,
-        style: :primary
+      <%= render FlatPack::TextInput::Component.new(
+        name: "attributes[key]",
+        label: "Key",
+        required: true
       ) %>
+      <%= render FlatPack::Select::Component.new(
+        name: "attributes[kind]",
+        label: "Kind",
+        required: true,
+        options: billing_admin_product_kind_options,
+        placeholder: false
+      ) %>
+      <%= render FlatPack::Select::Component.new(
+        name: "attributes[provider_account_recording_id]",
+        label: "Provider",
+        required: true,
+        options: billing_admin_product_provider_options,
+        placeholder: false
+      ) %>
+      <div class="flex flex-wrap items-center gap-3">
+        <%= render FlatPack::Button::Component.new(
+          text: "Cancel",
+          href: billing_admin_product_new_cancel_url,
+          style: :secondary
+        ) %>
+        <%= render FlatPack::Button::Component.new(
+          text: "Save",
+          type: :submit,
+          style: :primary
+        ) %>
+      </div>
     </div>
-  </div>
+  <% end %>
 <% end %>

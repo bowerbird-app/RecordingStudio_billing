@@ -19,6 +19,7 @@ module RecordingStudioBilling
     belongs_to :product_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     commercial_reference :product_recording, type: "RecordingStudioBilling::Product"
 
+    validates :name, presence: true
     validates :recurrence, inclusion: { in: RECURRENCES }
     validates :interval, inclusion: { in: INTERVALS }, allow_nil: true
     validates :interval_count, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true

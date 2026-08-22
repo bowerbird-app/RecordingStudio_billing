@@ -2,6 +2,17 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.8.0 — product and billing option names
+
+Adds required `name` on `recording_studio_billing_products` and
+`recording_studio_billing_billing_options`. Fresh installs pick it up from
+install SQL. Existing hosts run
+`20260822000001_add_name_to_products_and_billing_options`.
+
+There is no production data and no backfill. Create, revise, and seed paths
+must send `name` explicitly. Do not copy `key` into `name`. Dummy seeds use
+human labels such as Monthly plan and Annual plan.
+
 ## 0.6.0 — app-owned gates and freemium bootstrap
 
 Adds `recording_studio_billing_default_entitlement_bootstraps` and extends

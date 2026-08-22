@@ -196,11 +196,17 @@ the section key remains `billing_commercial`.
 
 Products inventory (`/admin/screens/billing_products`) has a primary New
 button. That opens the Admin create screen (`billing_product_new`) on the same
-section. Save posts to the existing `create_draft_product` operation, which
-writes a draft with `RecordingStudio.record!`. The button and screen authorize
+section. The form asks for Name, Key, Kind, and Provider. Save posts to the
+existing `create_draft_product` operation, which writes a draft with
+`RecordingStudio.record!`. The button and screen authorize
 `billing_products` `create` (`required_role :admin`, site blast radius,
 Accessible grant on the Admin root) the same way other billing admin_actions
 do. View-only actors do not see New and receive 403 on the create screen.
+
+`key` stays the stable catalogue id (`demo_monthly_plan`). `name` is the
+required label people read (`Monthly plan`). Product and BillingOption both
+require it, the same way ProviderAccount already did. Inventory shows Name
+and still shows Key.
 
 ## V1 products and pricing contract
 
@@ -211,6 +217,7 @@ create durable provider commands. `ProviderAccount`, `Market`,
 (for example, a product's provider account) remain stable
 `*_recording_id` references rather than recording-tree parents.
 
+- Product and BillingOption require `name` as well as `key`.
 - Product kinds are `plan`, `addon`, `credit_pack`, and `service`.
 - Feature types are `boolean`, `limit`, `allowance`, and `variant`.
 - Meter aggregations are `sum`, `count`, `maximum`, and `latest`.

@@ -47,6 +47,10 @@ empty section titles and filter-only screens.
   which writes a draft with `RecordingStudio.record!`. The button and screen
   authorize `billing_products` `create` the same way other billing admin_actions
   do. View-only actors do not see New and receive 403 on the create screen.
+- Product and BillingOption now require `name` next to the stable catalogue
+  `key`, matching ProviderAccount. Dummy seeds use human labels such as
+  Monthly plan and Annual plan. The New product form asks for Name first. The
+  Products inventory shows Name and still shows Key.
 
 ### Upgrade notes
 
@@ -74,6 +78,14 @@ empty section titles and filter-only screens.
   Billing CRUD controller. Hosts that already registered `create_draft_product`
   keep that POST. Do not add a generic Admin form that writes published product
   rows. Revise stays `revise`. Publish stays `CommercialPublisher`.
+- Product and BillingOption now require `name`. Run the new engine migration
+  (`20260822000001_add_name_to_products_and_billing_options`). Fresh installs
+  pick it up from install SQL. There is no production data and no backfill:
+  create and seed paths must send `name` explicitly. Do not default name from
+  key. `create_draft_product` and `create_draft_billing_option` already accept
+  column attributes, so hosts only need to include `name` in `attributes`.
+  Commercial manifests still publish product `key` and `kind`; name is for
+  Admin inventory and create forms.
 
 ## 0.7.0
 

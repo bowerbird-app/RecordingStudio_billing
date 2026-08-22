@@ -69,6 +69,8 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     def context.admin_screen_path(key) = "/admin/screens/#{key}"
     assert_equal "/admin/screens/billing_product_new", button.url.call(context)
     assert RecordingStudioAdmin.screen_for("billing_product_new")
+    assert_equal %i[name key kind state],
+                 RecordingStudioBilling::ADMIN_OPERATION_AREAS.fetch(:billing_products).fetch(:columns)
   end
 
   test "product create stays on the BillingAdmin parent and existing draft operation" do

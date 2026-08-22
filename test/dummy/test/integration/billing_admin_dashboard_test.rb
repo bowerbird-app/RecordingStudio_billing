@@ -137,12 +137,18 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     assert_admin_shell
     assert_select "a[href='/admin/screens/billing_product_new']", text: "New"
     refute_includes response.body, "[&>*]:rounded-none"
+    get "/admin/screens/billing_products/table"
+    assert_response :success
+    product = RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first
+    assert_includes response.body, product.name
+    assert_includes response.body, product.key
 
     get "/admin/screens/billing_product_new"
     assert_response :success
     assert_admin_shell
     assert_includes response.body, "New product"
     assert_select "form[action^='/billing/admin/operations/create_draft_product']"
+    assert_select "input[name='attributes[name]']"
     assert_select "input[name='attributes[key]']"
     assert_select "select[name='attributes[kind]']"
     assert_select "select[name='attributes[provider_account_recording_id]']"

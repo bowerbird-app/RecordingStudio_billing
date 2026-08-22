@@ -703,6 +703,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       RecordingStudioBilling::Product.new(
         provider_account_recording: graph[:provider].recording,
         key: unique_name("target").tr(" ", "_"),
+        name: "Target add-on",
         kind: "addon"
       ),
       graph[:root],
@@ -712,6 +713,7 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
       RecordingStudioBilling::BillingOption.new(
         product_recording: target,
         key: unique_name("target_monthly").tr(" ", "_"),
+        name: "Target monthly",
         recurrence: "recurring",
         interval: "month",
         interval_count: 1,
@@ -1353,13 +1355,15 @@ class CommercialDeliveryTest < ActiveSupport::TestCase
     germany_market = market("germany", "DE", provider, root, admin_recording)
     product = record_child(
       RecordingStudioBilling::Product.new(
-        provider_account_recording: provider, key: unique_name("product").tr(" ", "_"), kind: "plan",
+        provider_account_recording: provider, key: unique_name("product").tr(" ", "_"),
+        name: "Catalogue plan", kind: "plan",
         feature_values: { "projects" => 3 }
       ), root, admin_recording
     )
     option = record_child(
       RecordingStudioBilling::BillingOption.new(
-        product_recording: product, key: unique_name("monthly").tr(" ", "_"), recurrence: "recurring",
+        product_recording: product, key: unique_name("monthly").tr(" ", "_"), name: "Monthly",
+        recurrence: "recurring",
         interval: "month", interval_count: 1, quantity_mode: "fixed", default_quantity: 1,
         pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0,
         proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive"
