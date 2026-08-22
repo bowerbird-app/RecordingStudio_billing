@@ -30,7 +30,9 @@ child routes sit on the engine root instead of a nested `resource :billing`.
   ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
 - Usage uses Usage Meter for the period, List rows for prepaid credits and
   charges, a named "On this plan" list instead of a hash dump, and
-  `Billing::StatusAlert` for the read-only notice.
+  `Billing::StatusAlert` for the read-only notice. Card titles use the same
+  Card header heading as Invoices — SectionTitle's baked-in `my-8` is for
+  page sections, not card chrome.
 
 ### Upgrade notes
 

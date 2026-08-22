@@ -7,7 +7,7 @@
 <div class="flex flex-col gap-6">
   <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
     <% card.header do %>
-      <%= render FlatPack::SectionTitle::Component.new(title: @presenter.copy("usage_periods_title", "Usage this period"), class: "my-0") %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_periods_title", "Usage this period") %></h3>
     <% end %>
     <% card.body do %>
       <% if @presenter.period_rows.any? %>
@@ -29,7 +29,7 @@
   <% end %>
   <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
     <% card.header do %>
-      <%= render FlatPack::SectionTitle::Component.new(title: @presenter.copy("usage_credits_title", "Prepaid credits"), class: "my-0") %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_credits_title", "Prepaid credits") %></h3>
     <% end %>
     <% card.body do %>
       <% if @presenter.grant_rows.any? %>
@@ -47,7 +47,7 @@
   <% end %>
   <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
     <% card.header do %>
-      <%= render FlatPack::SectionTitle::Component.new(title: @presenter.copy("usage_charges_title", "Usage charges"), class: "my-0") %>
+      <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_charges_title", "Usage charges") %></h3>
     <% end %>
     <% card.body do %>
       <% if @presenter.allocation_rows.any? %>
@@ -77,7 +77,7 @@
   <% if @presenter.included_rows.any? %>
     <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
       <% card.header do %>
-        <%= render FlatPack::SectionTitle::Component.new(title: @presenter.copy("usage_included_title", "On this plan"), class: "my-0") %>
+        <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_included_title", "On this plan") %></h3>
       <% end %>
       <% card.body do %>
         <%= render FlatPack::List::Component.new(divider: true) do %>

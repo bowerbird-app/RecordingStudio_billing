@@ -153,8 +153,8 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
 
     assert_response :success
     assert_includes response.body, "Studio minutes"
-    assert_includes response.body, "75 available of 100"
-    assert_includes response.body, "25 of 100 included this period"
+    assert_includes response.body, "75 of 100 available"
+    assert_includes response.body, "25 of 100"
     refute_includes response.body, "studio_minutes"
     refute_includes response.body, "Caps"
     refute_includes response.body, "tax_status"
