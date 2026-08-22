@@ -240,17 +240,17 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     disabled_root, disabled_option = published_checkout_option(checkout_policy: "disabled")
     switch_root(disabled_root)
     post "/billing/checkout", params: selection_params(items: {
-                                                                 "0" => { billing_option_recording_id: disabled_option.recording.id, quantity: 1 }
-                                                               })
+                                                         "0" => { billing_option_recording_id: disabled_option.recording.id, quantity: 1 }
+                                                       })
 
     assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(disabled_root).count
 
     switch_root(@root)
     post "/billing/checkout", params: selection_params(items: {
-                                                                 "0" => { billing_option_recording_id: @option.recording.id, quantity: 1 },
-                                                                 "1" => { billing_option_recording_id: @option.recording.id, quantity: 1 }
-                                                               })
+                                                         "0" => { billing_option_recording_id: @option.recording.id, quantity: 1 },
+                                                         "1" => { billing_option_recording_id: @option.recording.id, quantity: 1 }
+                                                       })
 
     assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(@root).count

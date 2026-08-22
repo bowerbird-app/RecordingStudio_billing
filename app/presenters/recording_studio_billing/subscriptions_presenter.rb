@@ -132,7 +132,7 @@ module RecordingStudioBilling
 
     def plan_picker_href(plan)
       return if plan[:current]
-      return sign_in_href unless checkout_available_for(plan)
+      return sign_in_href unless checkout_available_for?(plan)
       return unless plan[:checkoutable]
 
       checkout_start_href(plan)
@@ -140,12 +140,12 @@ module RecordingStudioBilling
 
     def plan_picker_cta_text(plan)
       return copy("plan_card_current_cta", "Current plan") if plan[:current]
-      return copy("plans_sign_in_to_choose", "Sign in to choose this plan") unless checkout_available_for(plan)
+      return copy("plans_sign_in_to_choose", "Sign in to choose this plan") unless checkout_available_for?(plan)
 
       copy("choose_plan_continue", "Choose this plan")
     end
 
-    def checkout_available_for(_plan)
+    def checkout_available_for?(_plan)
       !respond_to?(:checkout_available?) || checkout_available?
     end
 
