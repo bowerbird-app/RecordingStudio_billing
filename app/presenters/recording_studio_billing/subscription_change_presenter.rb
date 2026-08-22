@@ -37,6 +37,7 @@ module RecordingStudioBilling
             interval: line.interval,
             recurrence: snapshot_value(terms, "billing_option", "recurrence"),
             name: snapshot_value(terms, "product", "name"),
+            key: snapshot_value(terms, "product", "key"),
             amount_minor: line.amount_minor
           ),
           quantity: line.quantity,
@@ -59,6 +60,7 @@ module RecordingStudioBilling
           interval: snapshot_value(terms, "billing_option", "interval"),
           recurrence: snapshot_value(terms, "billing_option", "recurrence"),
           name: snapshot_value(terms, "product", "name"),
+          key: snapshot_value(terms, "product", "key"),
           amount_minor: snapshot_value(terms, "price", "amount_minor")
         ),
         quantity: snapshot_value(terms, "price", "quantity"),

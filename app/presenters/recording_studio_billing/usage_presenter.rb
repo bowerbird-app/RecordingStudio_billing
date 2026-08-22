@@ -18,14 +18,28 @@ module RecordingStudioBilling
       entitlements.except("credits").map { |key, value| [usage_label(key), simple_usage_value(value)] }
     end
 
+    def included_rows
+      entitlements.except("credits").filter_map do |key, value|
+        display = included_usage_value(value)
+        next if display.blank?
+
+        { label: usage_label(key), value: display }
+      end
+    end
+
     def period_rows
       Array(periods).map do |period|
+        policy = Array(period.usage_allowance_policies).first
+        limit = policy&.limit_quantity
         {
           usage_key: usage_label(period.usage_key),
           window: "#{period.starts_at.to_fs(:long)} - #{period.ends_at.to_fs(:long)}",
           state: money_state(period.state),
-          included: period.usage_allowance_policies.map do |policy|
-            "#{policy.consumed_quantity} of #{policy.limit_quantity} included this period"
+          used: policy&.consumed_quantity.to_i,
+          limit: limit.to_i.positive? ? limit.to_i : nil,
+          unit: nil,
+          included: period.usage_allowance_policies.map do |item|
+            "#{item.consumed_quantity} of #{item.limit_quantity} included this period"
           end.join("; ")
         }
       end
@@ -61,6 +75,16 @@ module RecordingStudioBilling
 
     def simple_usage_value(value)
       value.is_a?(Hash) || value.is_a?(Array) ? nil : value.to_s
+    end
+
+    def included_usage_value(value)
+      case value
+      when true then copy("usage_included_yes", "Yes")
+      when false then copy("usage_included_no", "No")
+      when Hash, Array then nil
+      else
+        value.to_s.presence
+      end
     end
   end
 end

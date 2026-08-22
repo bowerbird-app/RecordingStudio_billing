@@ -81,7 +81,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
                                             recorded_at: Time.current)
     other_invoice = invoice_for(root: @other_root, account: @other_account)
 
-    with_authorization(true) { get "/billing/billing/invoices", params: { root_recording_id: @root.id } }
+    with_authorization(true) { get "/billing/invoices", params: { root_recording_id: @root.id } }
     assert_response :success
     assert_includes response.body, invoice.id
     refute_includes response.body, other_invoice.id
@@ -91,7 +91,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     assert_includes response.body, "Overage minutes"
     refute_includes response.body, "Tax/Overage"
 
-    with_authorization(true) { get "/billing/billing/payments", params: { root_recording_id: @root.id } }
+    with_authorization(true) { get "/billing/payments", params: { root_recording_id: @root.id } }
     assert_response :success
     assert_includes response.body, "1000 USD"
     assert_includes response.body, "Waiting for confirmation"
@@ -122,7 +122,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
                                                         kind: "credit", amount_minor: 100, currency_code: "USD",
                                                         recorded_at: Time.current, safe_snapshot: {})
 
-    with_authorization(true) { get "/billing/billing/invoices", params: { root_recording_id: @root.id } }
+    with_authorization(true) { get "/billing/invoices", params: { root_recording_id: @root.id } }
 
     assert_response :success
     assert_includes response.body, "Credit: 100 USD"
@@ -149,7 +149,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
       starts_at: 1.day.ago, ends_at: 1.day.from_now, state: "open", safe_metadata: {}
     )
 
-    with_authorization(true) { get "/billing/billing/usage", params: { root_recording_id: @root.id } }
+    with_authorization(true) { get "/billing/usage", params: { root_recording_id: @root.id } }
 
     assert_response :success
     assert_includes response.body, "Studio minutes"
@@ -181,7 +181,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
                                                                          origins: ["https://billing.stripe.com"]))
 
     with_authorization(true) do
-      post "/billing/billing/portal", params: { customer_reference: "cus_forged", adapter_key: "forged", return_url: "https://evil.example" }
+      post "/billing/portal", params: { customer_reference: "cus_forged", adapter_key: "forged", return_url: "https://evil.example" }
     end
 
     assert_redirected_to "https://billing.stripe.com/session/test"
@@ -189,7 +189,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     assert_equal @account.recording, resolver_calls.sole.fetch(:account_recording)
     assert_equal "cus_server", adapter_calls.sole.fetch(:customer_reference)
     assert_equal "bpc_server", adapter_calls.sole.fetch(:configuration_id)
-    assert_equal "http://www.example.com/billing/billing/settings", adapter_calls.sole.fetch(:return_url)
+    assert_equal "http://www.example.com/billing/settings", adapter_calls.sole.fetch(:return_url)
   end
 
   test "Stripe portal URLs are accepted separately from trusted host return URLs" do
@@ -204,10 +204,10 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     }
     RecordingStudioBilling.register_provider("stripe_portal", adapter)
 
-    with_authorization(true) { post "/billing/billing/portal" }
+    with_authorization(true) { post "/billing/portal" }
 
     assert_redirected_to "https://billing.stripe.com/session/test"
-    assert_equal "http://www.example.com/billing/billing/settings", calls.sole.fetch(:return_url)
+    assert_equal "http://www.example.com/billing/settings", calls.sole.fetch(:return_url)
   end
 
   test "ungranted users cannot create portals or invoke portal dependencies" do
@@ -222,7 +222,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     sign_in @unauthorized_user
     select_root(@root, actor: @unauthorized_user)
 
-    with_authorization(false) { post "/billing/billing/portal" }
+    with_authorization(false) { post "/billing/portal" }
 
     assert_response :not_found
     assert_empty resolver_calls
@@ -238,7 +238,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
       }
       RecordingStudioBilling.register_provider(adapter_key, PortalAdapter.new(url:, calls: [], origins: ["https://billing.stripe.com"]))
 
-      with_authorization(true) { post "/billing/billing/portal" }
+      with_authorization(true) { post "/billing/portal" }
 
       assert_response :not_found, url
     end
@@ -252,7 +252,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
       }
       RecordingStudioBilling.register_provider(adapter_key, RawPortalAdapter.new(response))
 
-      with_authorization(true) { post "/billing/billing/portal" }
+      with_authorization(true) { post "/billing/portal" }
 
       assert_response :not_found, response.inspect
     end
@@ -265,13 +265,13 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     RecordingStudioBilling.register_provider("portal", PortalAdapter.new(url: "https://billing.stripe.com/session/test", calls: [],
                                                                          origins: ["https://billing.stripe.com"]))
 
-    with_authorization(true) { post "/billing/billing/portal" }
+    with_authorization(true) { post "/billing/portal" }
 
     assert_response :not_found
   end
 
   test "portal GET is not a billing action" do
-    with_authorization(true) { get "/billing/billing/portal" }
+    with_authorization(true) { get "/billing/portal" }
 
     assert_response :not_found
   end

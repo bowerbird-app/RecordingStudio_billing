@@ -73,8 +73,9 @@ module RecordingStudioBilling
       nested.is_a?(Hash) ? nested : snapshot
     end
 
-    def offer_label(kind:, interval: nil, name: nil, amount_minor: nil, **)
-      return name if name.present?
+    def offer_label(kind:, interval: nil, name: nil, amount_minor: nil, key: nil, **)
+      resolved_name = name.presence || product_display_name(key)
+      return resolved_name if resolved_name.present?
 
       case kind.to_s
       when "addon"
@@ -99,7 +100,13 @@ module RecordingStudioBilling
     def catalog_offer_label(option)
       product = option.product_recording.recordable
       offer_label(kind: product.kind, interval: option.interval, recurrence: option.recurrence,
-                  name: product.try(:name))
+                  name: product.try(:name), key: product.try(:key))
+    end
+
+    def product_display_name(key)
+      return if key.blank?
+
+      RecordingStudioBilling.configuration.product_display_names[key.to_s].presence
     end
 
     def cadence_label(recurrence, interval = nil)

@@ -10,6 +10,10 @@ module RecordingStudioBilling
       displayed_plan_options.filter_map { |option| plan_card_for(option) }
     end
 
+    def plan_picker_items
+      plan_cards.map { |plan| plan_picker_item_for(plan) }
+    end
+
     def current_subscription
       Array(subscriptions).find { |subscription| subscription.state.to_s.in?(%w[trialing active past_due paused]) }
     end
@@ -29,6 +33,7 @@ module RecordingStudioBilling
             interval: line.interval,
             recurrence: snapshot_value(terms, "billing_option", "recurrence"),
             name: snapshot_value(terms, "product", "name"),
+            key: snapshot_value(terms, "product", "key"),
             amount_minor: line.amount_minor
           ),
           quantity: line.quantity,
@@ -98,12 +103,12 @@ module RecordingStudioBilling
       {
         option:,
         name: offer_label(kind: product.try(:kind) || "plan", interval: option.interval, amount_minor: amount,
-                          name: product.try(:name)),
+                          name: product.try(:name), key: product.try(:key)),
         price_label: amount.nil? ? copy("plan_price_placeholder", "—") : customer_price(amount, currency, exponent:),
         price_suffix: price_interval_suffix(option.interval),
         features: plan_feature_labels(option, amount),
         current:,
-        highlighted: current || popular_plan?(option, amount),
+        highlighted: !current && popular_plan?(option, amount),
         badge: plan_card_badge(option, amount, current),
         checkoutable: !current && option.try(:recording).try(:id).present? && checkout_allowed?,
         quantity_mode: option.quantity_mode,
@@ -111,6 +116,55 @@ module RecordingStudioBilling
         minimum_quantity: option.minimum_quantity,
         maximum_quantity: option.maximum_quantity
       }
+    end
+
+    def plan_picker_item_for(plan)
+      {
+        name: plan[:name],
+        price_text: "#{plan[:price_label]}#{plan[:price_suffix]}",
+        features: plan[:features],
+        href: plan_picker_href(plan),
+        cta_text: plan_picker_cta_text(plan),
+        current: plan[:current],
+        highlighted: plan[:highlighted]
+      }
+    end
+
+    def plan_picker_href(plan)
+      return if plan[:current]
+      return sign_in_href unless checkout_available_for(plan)
+      return unless plan[:checkoutable]
+
+      checkout_start_href(plan)
+    end
+
+    def plan_picker_cta_text(plan)
+      return copy("plan_card_current_cta", "Current plan") if plan[:current]
+      return copy("plans_sign_in_to_choose", "Sign in to choose this plan") unless checkout_available_for(plan)
+
+      copy("choose_plan_continue", "Choose this plan")
+    end
+
+    def checkout_available_for(_plan)
+      !respond_to?(:checkout_available?) || checkout_available?
+    end
+
+    def sign_in_href
+      return unless defined?(Rails) && Rails.application.respond_to?(:routes)
+
+      Rails.application.routes.url_helpers.user_session_path
+    rescue NoMethodError
+      nil
+    end
+
+    def checkout_start_href(plan)
+      option_id = plan[:option].try(:recording).try(:id)
+      return if option_id.blank? || root_recording.blank?
+
+      RecordingStudioBilling::Engine.routes.url_helpers.new_checkout_billing_path(
+        root_recording_id: root_recording.id,
+        billing_option_recording_id: option_id
+      )
     end
 
     def current_plan_option?(option)

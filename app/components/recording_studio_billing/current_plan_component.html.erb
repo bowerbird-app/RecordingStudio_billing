@@ -1,40 +1,31 @@
-<%= render FlatPack::Card::Component.new(style: :default) do |card| %>
-  <% card.body do %>
-    <% if row %>
-      <div class="flex flex-col gap-3">
-        <%= render FlatPack::Badge::Component.new(text: row[:state], style: :success, size: :sm) %>
-        <h3 class="text-xl font-bold"><%= row[:label] %></h3>
-        <% if row[:price_label].present? %>
-          <div class="text-3xl font-bold"><%= row[:price_label] %><span class="text-sm text-[var(--surface-muted-content-color)]"><%= row[:price_suffix] %></span></div>
-        <% end %>
-        <% if row[:cadence].present? %>
-          <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("plan_feature_billed_prefix", "Billed") %> <%= row[:cadence] %></p>
-        <% end %>
-      </div>
-    <% else %>
-      <p class="text-sm text-[var(--surface-muted-content-color)]"><%= @presenter.copy("no_subscriptions", "No active plan yet. Choose a plan to get started.") %></p>
-    <% end %>
+<%= render FlatPack::Billing::PlanSummary::Component.new(
+  plan_name: plan_name,
+  price_text: price_text,
+  status: plan_status,
+  description: plan_description
+) do |summary| %>
+  <% summary.actions do %>
+    <%= render FlatPack::Button::Component.new(
+      text: @presenter.copy("view_plans", "View plans"),
+      style: :primary,
+      href: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
+    ) %>
   <% end %>
-  <% card.footer do %>
-    <div class="flex flex-wrap gap-2">
-      <%= render FlatPack::Button::Component.new(
-        text: @presenter.copy("view_plans", "View plans"),
-        style: :primary,
-        href: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
-      ) %>
-      <% if row && row[:subscription].state == "paused" %>
+  <% if row %>
+    <% summary.footer do %>
+      <% if row[:subscription].state == "paused" %>
         <%= render FlatPack::Button::Component.new(
           text: @presenter.copy("resume_subscription", "Resume plan"),
           style: :secondary,
           href: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
         ) %>
-      <% elsif row %>
+      <% else %>
         <%= render FlatPack::Button::Component.new(
           text: @presenter.copy("cancel_subscription", "Cancel plan"),
           style: :ghost,
           href: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
         ) %>
       <% end %>
-    </div>
+    <% end %>
   <% end %>
 <% end %>

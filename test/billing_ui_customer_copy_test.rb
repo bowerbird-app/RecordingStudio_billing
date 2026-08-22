@@ -15,6 +15,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
   Subscription = Struct.new(:id, :identifier, :state, :currency_code, :active_lines, keyword_init: true)
   Period = Struct.new(:usage_key, :starts_at, :ends_at, :state, :usage_allowance_policies, keyword_init: true)
   Policy = Struct.new(:consumed_quantity, :limit_quantity, keyword_init: true)
+  Grant = Struct.new(:credit_key, :remaining_quantity, :quantity, :expires_at, keyword_init: true)
   Invoice = Struct.new(:id, :total_minor, :currency_code, :state, :issued_at, keyword_init: true)
   Payment = Struct.new(:amount_minor, :currency_code, :state, :financial_command, :safe_snapshot, keyword_init: true)
   Command = Struct.new(:state)
@@ -57,7 +58,6 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes plan_html, "Monthly plan"
     assert_includes plan_html, "Choose a plan"
     assert_includes plan_html, "Pick the plan that fits this workspace"
-    assert_includes plan_html, "text-3xl font-bold"
     refute_includes plan_html, "Cancel plan"
     refute_includes plan_html, "Plan requests"
     refute_includes plan_html, "Scheduled"
@@ -92,19 +92,28 @@ class BillingUiCustomerCopyTest < Minitest::Test
       usage_key: "demo_api_calls", starts_at: Time.utc(2026, 8, 1), ends_at: Time.utc(2026, 8, 31),
       state: "open", usage_allowance_policies: [Policy.new(consumed_quantity: 5, limit_quantity: 10)]
     )
+    grant = Grant.new(credit_key: "demo_api_calls", remaining_quantity: 5, quantity: 5, expires_at: nil)
     html = render_component(
       RecordingStudioBilling::UsageComponent,
       RecordingStudioBilling::UsagePresenter.new(
-        root_recording: root, entitlements: { "credits" => { "demo_api_calls" => 3 } },
-        periods: [period], credit_grants: [], allocations: []
+        root_recording: root,
+        entitlements: { "credits" => { "demo_api_calls" => 3 }, "demo_priority_support" => true, "demo_projects" => 10 },
+        periods: [period], credit_grants: [grant], allocations: []
       )
     )
 
     assert_includes html, "API calls"
-    assert_includes html, "5 of 10 included this period"
+    assert_includes html, "5 of 10"
+    assert_includes html, "5 of 5 available"
+    assert_includes html, "No expiry"
+    assert_includes html, "What's included"
+    assert_includes html, "Priority support"
+    assert_includes html, "Yes"
     refute_includes html, "demo_api_calls"
     refute_includes html, "Caps"
     refute_includes html, "Grant allocation"
+    refute_includes html, "API calls: 5 available of 5; No expiry"
+    refute_includes html, "Priority support: true"
   end
 
   def test_invoice_and_payment_copy_avoids_ids_and_snapshot_dumps

@@ -2,6 +2,14 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.8.0 — Flatpack Billing composition
+
+No schema change. Hosts bump Flatpack to `~> 0.1.134` and replace hardcoded
+`/billing/billing/...` paths with `/billing/...`. Named route helpers stay the
+same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
+Usage Meter, and Status Alert. Set `config.product_display_names` if two
+catalogue products would otherwise share an interval label.
+
 ## 0.6.0 — app-owned gates and freemium bootstrap
 
 Adds `recording_studio_billing_default_entitlement_bootstraps` and extends

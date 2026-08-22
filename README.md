@@ -47,7 +47,7 @@ and Billing settings. The **Plan** picker also mounts at a host-nominated route
 (default `/plans`) via `draw_recording_studio_billing_plans`; the gem owns the
 controller and ViewComponents. Billing pages render inside Recording Studio's
 `recording_studio/default_layout` and set PageNav back/close. The Plan page is a
-title, subtitle, and up to three pricing cards. Hosts that still want a sidebar
+title, subtitle, and a Flatpack Plan Picker (up to three tiles). Hosts that still want a sidebar
 can render `RecordingStudioBilling::CustomerSidebarComponent` themselves; dummy
 does not. Every request uses the selected root;
 an explicit mismatched root ID and an inaccessible root both return `404`.
@@ -67,7 +67,9 @@ provider operation, and final terms on the server. A client must never set or
 be trusted for prices or other money values, tax, provider references or URLs,
 Markets, discounts, or totals.
 
-The mounted checkout-selection endpoint is `POST /billing/billing/checkout`.
+The mounted checkout-selection endpoint is `POST /billing/checkout`.
+Plan Picker tiles start at `GET /billing/checkout/new`, which posts to that
+endpoint.
 It accepts an opaque `checkout_request_key`, optional `country_code`,
 `currency_code`, and `presentation`, plus one or more items containing only
 `billing_option_recording_id` and optional `quantity`. Invalid or
@@ -392,7 +394,7 @@ or resumption changes.
 
 ### Provider portal integration
 
-The engine's `POST /billing/billing/portal` route uses the host's
+The engine's `POST /billing/portal` route uses the host's
 `billing_portal_context_resolver`. Configure it to return only provider-
 authoritative adapter and customer context. The resolver is called with
 `root_recording:`, `account_recording:`, and the account's `subscriptions:`;
