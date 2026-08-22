@@ -226,23 +226,39 @@ The dummy seed grants `edit` on Studio Workspace to `admin@admin.com`. Do not st
 
 Customer screens use plan, price, invoice, and usage language. They do not show recording identifiers, option keys, or Market as primary labels. Display prices use the same trusted location evidence as checkout, so a US host sees US plan prices rather than the global fallback.
 
-Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation. Those screens, plus Add-ons, Usage, Settings, checkout, and invoice detail, use FlatPack cards, lists, badges, and buttons rather than custom page chrome.
+Overview composes Plan Summary in a three-column Grid. The primary action is
+Change plan (to `/plans`). Status is omitted (`status: nil`) so there is no
+badge. Cancel / resume sit in the same actions row as secondary buttons. The
+footer slot is not used, so the card has no empty footer strip.
+
+Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation. Those screens, plus Add-ons, Usage, Settings, checkout, and invoice detail, use
+Flatpack Billing and family parts (Plan Summary, Plan Picker, Usage Meter,
+Status Alert, cards, lists, badges, and buttons) rather than custom page chrome.
 
 The customer **Plan** page lives at a host-nominated route (default `/plans`)
 added by `draw_recording_studio_billing_plans` during install. The gem provides
-`RecordingStudioBilling::PlansController`, `PlansPageComponent`, and reuses
-`PlanCardsComponent`. It renders in Recording Studio core's
+`RecordingStudioBilling::PlansController`, `PlansPageComponent`, and
+`PlanCardsComponent` (a Plan Picker). It renders in Recording Studio core's
 `recording_studio/default_layout` only — not the billing-engine sidebar shell.
 
 The billing mount still exposes `GET /billing/plan`, which redirects to the host
 plans route when configured. **Plan requests** stays under billing
-(`/billing/billing/plan_requests`). The page shows a title, subtitle, and up to
-three Flatpack pricing cards (free, monthly, and annual in the dummy). Cards show
-the resolved customer-market price. The current plan is a badge on its card;
-choosing another plan is the only action. Cancel lives on Overview. Dummy seeds
-keep one live monthly plan after a cancelled hybrid checkout: recurring checkouts
-share an execution group, so the applied cancellation is recorded first, then the
-live monthly checkout reactivates that same plan.
+(`/billing/plan_requests`). **Usage** is `/billing/usage` on the engine root
+(not `/billing/billing/usage`). Period usage is a Usage Meter; prepaid credits
+and charges are List rows; plan features are a named "On this plan" list.
+
+The Plan page shows a title, subtitle, and a three-column Plan Picker (Free
+plan, Pro, and Pro yearly in the dummy). Tiles show the resolved
+customer-market price. Set `config.product_display_names` when two catalogue
+products would otherwise share an interval label such as "Monthly plan". Dummy
+uses `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES` (Free plan, Pro, Pro yearly,
+Starter). Choosable tiles use **Choose plan**. The current tile is a disabled
+**Current** button in the Plan Picker card body, not a badge. Cancel
+and Resume sit on Overview in the Plan Summary actions row, next to Change plan.
+Dummy seeds keep one live Pro plan after a cancelled hybrid
+checkout: recurring checkouts share an execution group, so the applied
+cancellation is recorded first, then the live monthly checkout reactivates that
+same plan.
 
 ## Restricted payment portal
 

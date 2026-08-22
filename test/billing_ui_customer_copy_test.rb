@@ -15,6 +15,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
   Subscription = Struct.new(:id, :identifier, :state, :currency_code, :active_lines, keyword_init: true)
   Period = Struct.new(:usage_key, :starts_at, :ends_at, :state, :usage_allowance_policies, keyword_init: true)
   Policy = Struct.new(:consumed_quantity, :limit_quantity, keyword_init: true)
+  Grant = Struct.new(:credit_key, :remaining_quantity, :quantity, :expires_at, keyword_init: true)
   Invoice = Struct.new(:id, :total_minor, :currency_code, :state, :issued_at, keyword_init: true)
   Payment = Struct.new(:amount_minor, :currency_code, :state, :financial_command, :safe_snapshot, keyword_init: true)
   Command = Struct.new(:state)
@@ -36,18 +37,54 @@ class BillingUiCustomerCopyTest < Minitest::Test
     refute_equal subscription.identifier, row[:label]
 
     html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
+    template = File.read(File.expand_path("../app/components/recording_studio_billing/current_plan_component.html.erb", __dir__))
     assert_includes html, "$49"
-    assert_includes html, "View plans"
+    assert_includes html, "Change plan"
+    assert_includes html, "Cancel plan"
     assert_includes html, "Billed monthly"
+    assert_includes html, "lg:grid-cols-3"
+    assert_includes html, "flex flex-wrap gap-2"
+    assert_includes html, "--button-primary-background-color"
+    assert_includes html, "--button-secondary-background-color"
+    assert_includes template, "cancel_subscription"
+    assert_includes template, "status: nil"
+    refute_includes template, "summary.footer"
+    refute_includes template, "ButtonGroup"
+    refute_includes html, "View plans"
+    refute_includes html, "Active"
     refute_includes html, "Add-on: 2 x"
     refute_includes html, "Choose a plan"
+    assert_operator html.index("Change plan"), :<, html.index("Cancel plan")
+    refute_includes html[html.index("Change plan")..html.index("Cancel plan")], "border-t"
+  end
+
+  def test_overview_resume_sits_in_the_actions_row_when_paused
+    paused = subscription
+    paused.state = "paused"
+    presenter = RecordingStudioBilling::OverviewPresenter.new(
+      root_recording: root, subscriptions: [paused], checkout_intents: []
+    )
+    html = render_component(RecordingStudioBilling::BillingOverviewComponent, presenter)
+    template = File.read(File.expand_path("../app/components/recording_studio_billing/current_plan_component.html.erb", __dir__))
+
+    assert_includes html, "Change plan"
+    assert_includes html, "Resume plan"
+    refute_includes html, "Cancel plan"
+    refute_includes html, "View plans"
+    refute_includes html, "Paused"
+    refute_includes html, "Active"
+    refute_includes template, "summary.footer"
+    assert_operator html.index("Change plan"), :<, html.index("Resume plan")
+    refute_includes html[html.index("Change plan")..html.index("Resume plan")], "border-t"
   end
 
   def test_plan_and_addon_offers_use_customer_labels
     option = offer_option(kind: "plan", interval: "month", recurrence: "recurring")
     plan_html = render_component(
       RecordingStudioBilling::SubscriptionsComponent,
-      RecordingStudioBilling::SubscriptionsPresenter.new(root_recording: root, subscriptions: [], eligible_options: [option])
+      RecordingStudioBilling::SubscriptionsPresenter.new(
+        root_recording: root, subscriptions: [], eligible_options: [option], plan_options: [option]
+      )
     )
     addon_html = render_component(
       RecordingStudioBilling::AddonsComponent,
@@ -57,7 +94,6 @@ class BillingUiCustomerCopyTest < Minitest::Test
     assert_includes plan_html, "Monthly plan"
     assert_includes plan_html, "Choose a plan"
     assert_includes plan_html, "Pick the plan that fits this workspace"
-    assert_includes plan_html, "text-3xl font-bold"
     refute_includes plan_html, "Cancel plan"
     refute_includes plan_html, "Plan requests"
     refute_includes plan_html, "Scheduled"
@@ -72,19 +108,34 @@ class BillingUiCustomerCopyTest < Minitest::Test
     monthly = offer_option(kind: "plan", interval: "month", recurrence: "recurring", key: "monthly_option")
     annual = offer_option(kind: "plan", interval: "year", recurrence: "recurring", key: "annual_option")
     presenter = RecordingStudioBilling::SubscriptionsPresenter.new(
-      root_recording: root, subscriptions: [], eligible_options: [annual, monthly, free]
+      root_recording: root, subscriptions: [], eligible_options: [annual, monthly, free],
+      plan_options: [annual, monthly, free]
     )
     amounts = { free => 0, monthly => 4_900, annual => 49_000 }
     presenter.define_singleton_method(:live_price_for) do |option|
       Struct.new(:amount_minor, :currency_code, :currency_exponent).new(amounts.fetch(option), "USD", 2)
     end
     cards = presenter.plan_cards
+    items = presenter.plan_picker_items
     html = render_component(RecordingStudioBilling::SubscriptionsComponent, presenter)
 
     assert_equal(["Free plan", "Monthly plan", "Annual plan"], cards.map { |card| card[:name] })
     assert_equal(["$0", "$49", "$490"], cards.map { |card| card[:price_label] })
     assert_equal(["/mo", "/mo", "/yr"], cards.map { |card| card[:price_suffix] })
-    assert_includes html, "Choose this plan"
+    assert_includes html, "Choose plan"
+    refute_includes html, "Choose this plan"
+    refute_includes items.map { |item| item[:cta] }, false
+    current_item = presenter.send(:plan_picker_item_for, cards.first.merge(current: true))
+    refute current_item.key?(:cta)
+    assert current_item[:current]
+    current_html = RecordingStudioBilling::ApplicationController.render(
+      inline: "<%= render component %>",
+      locals: { component: FlatPack::Billing::PlanPicker::Component.new(items: [current_item]) }
+    )
+    assert_includes current_html, "Current"
+    assert_includes current_html, "disabled"
+    refute_includes current_html, "data-flat-pack-plan-picker=\"cta-spacer\""
+    refute_includes html, "data-flat-pack-plan-picker=\"cta-spacer\""
   end
 
   def test_usage_hides_raw_keys_and_internal_hashes
@@ -92,19 +143,28 @@ class BillingUiCustomerCopyTest < Minitest::Test
       usage_key: "demo_api_calls", starts_at: Time.utc(2026, 8, 1), ends_at: Time.utc(2026, 8, 31),
       state: "open", usage_allowance_policies: [Policy.new(consumed_quantity: 5, limit_quantity: 10)]
     )
+    grant = Grant.new(credit_key: "demo_api_calls", remaining_quantity: 5, quantity: 5, expires_at: nil)
     html = render_component(
       RecordingStudioBilling::UsageComponent,
       RecordingStudioBilling::UsagePresenter.new(
-        root_recording: root, entitlements: { "credits" => { "demo_api_calls" => 3 } },
-        periods: [period], credit_grants: [], allocations: []
+        root_recording: root,
+        entitlements: { "credits" => { "demo_api_calls" => 3 }, "demo_priority_support" => true, "demo_projects" => 10 },
+        periods: [period], credit_grants: [grant], allocations: []
       )
     )
 
     assert_includes html, "API calls"
-    assert_includes html, "5 of 10 included this period"
+    assert_includes html, "5 of 10"
+    assert_includes html, "5 of 5 available"
+    assert_includes html, "No expiry"
+    assert_includes html, "On this plan"
+    assert_includes html, "Priority support"
+    assert_includes html, "Yes"
     refute_includes html, "demo_api_calls"
     refute_includes html, "Caps"
     refute_includes html, "Grant allocation"
+    refute_includes html, "API calls: 5 available of 5; No expiry"
+    refute_includes html, "Priority support: true"
   end
 
   def test_invoice_and_payment_copy_avoids_ids_and_snapshot_dumps

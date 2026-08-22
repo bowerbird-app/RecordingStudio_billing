@@ -6,18 +6,17 @@ RecordingStudioBilling::Engine.routes.draw do
   post "admin/operations/:operation", to: "admin_operations#perform", as: :admin_operations_create
   post "admin/operations/:operation/:id", to: "admin_operations#perform", as: :admin_operation
 
-  resource :billing, only: :show, controller: "billing" do
-    get :plan
-    get :plan_requests
-    get :addons
-    get :usage
-    get :invoices
-    get :payments
-    get :settings
-    patch :update_settings
-    post :checkout, controller: "checkout_selections", action: :create
-    post :portal, controller: "portals"
-  end
+  get "plan", to: "billing#plan", as: :plan_billing
+  get "plan_requests", to: "billing#plan_requests", as: :plan_requests_billing
+  get "addons", to: "billing#addons", as: :addons_billing
+  get "usage", to: "billing#usage", as: :usage_billing
+  get "invoices", to: "billing#invoices", as: :invoices_billing
+  get "payments", to: "billing#payments", as: :payments_billing
+  get "settings", to: "billing#settings", as: :settings_billing
+  patch "settings", to: "billing#update_settings", as: :update_settings_billing
+  get "checkout/new", to: "checkout_selections#new", as: :new_checkout_billing
+  post "checkout", to: "checkout_selections#create", as: :checkout_billing
+  post "portal", to: "portals#portal", as: :portal_billing
 
   resources :subscriptions, only: [] do
     get :cancel_confirmation, on: :member

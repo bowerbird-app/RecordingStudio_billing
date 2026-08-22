@@ -1,0 +1,15 @@
+<% billing_page_nav(title: "Checkout", back_url: plans_path_for(@root_recording)) %>
+<%= render FlatPack::PageTitle::Component.new(
+  title: @plan_name.presence || "Choose plan",
+  subtitle: "Continue to confirm price and tax.",
+  variant: :h1
+) %>
+<%= form_with url: checkout_billing_path(root_recording_id: @root_recording.id), method: :post do %>
+  <%= hidden_field_tag :checkout_request_key, SecureRandom.hex(16) %>
+  <%= hidden_field_tag "items[0][billing_option_recording_id]", @billing_option_recording_id %>
+  <%= render FlatPack::Button::Component.new(
+    text: "Continue",
+    style: :primary,
+    type: :submit
+  ) %>
+<% end %>

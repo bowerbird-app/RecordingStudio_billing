@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+## 0.8.0
+
+Compose customer Overview, Plan, and Usage on Flatpack Billing parts. Customer
+child routes sit on the engine root instead of a nested `resource :billing`.
+
+### Breaking
+
+- Gemspec floor is now `flat_pack ~> 0.1.135` (Billing family: Plan Summary,
+  Plan Picker, Usage Meter, Status Alert). Pin the Flatpack branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version is on main.
+- Customer screens that were `/billing/billing/:page` are now `/billing/:page`
+  (`usage`, `plan`, `plan_requests`, `addons`, `invoices`, `payments`,
+  `settings`, `checkout`, `portal`). Helper names are unchanged
+  (`usage_billing_path`, `checkout_billing_path`, …).
+- Plan tiles use `FlatPack::Billing::PlanPicker`. Choosing a plan is a GET to
+  `/billing/checkout/new`, then the existing POST checkout. Choosable tiles use
+  **Choose plan**. The current tile is a disabled **Current** button in the
+  card body (not a badge, not `cta: false`).
+
+### Changed
+
+- Overview current plan is `FlatPack::Billing::PlanSummary` in a
+  `Grid` (`cols: 3`). Primary action is Change plan (to `/plans`). Status is
+  omitted (`status: nil`, no badge). Cancel / resume sit in the actions row
+  as secondary buttons. The footer slot is not set.
+- Dummy catalogue display names: Free plan, Pro ($49), Pro yearly, and Starter
+  ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
+- Usage uses Usage Meter for the period, List rows for prepaid credits and
+  charges, a named "On this plan" list instead of a hash dump, and
+  `Billing::StatusAlert` for the read-only notice. Card titles use the same
+  Card header heading as Invoices — SectionTitle's baked-in `my-8` is for
+  page sections, not card chrome.
+
+### Upgrade notes
+
+- Bump the host Flatpack pin to `0.1.135` (GitHub branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version lands on main).
+- Update any hardcoded `/billing/billing/...` links to `/billing/...`. Named
+  helpers do not change.
+- Set `config.product_display_names` when two plans would otherwise share an
+  interval label such as "Monthly plan". Dummy uses
+  `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES`.
+- Rebuild Tailwind so Flatpack Billing classes are present.
+- Plan picker copy default is **Choose plan** (was "Choose this plan").
+  Sign-in CTA default is **Sign in to choose a plan**. Current tiles no
+  longer pass `cta: false`.
+
 ## 0.7.0
 
 Lift onto Recording Studio 4.2 and the matching Accessible / Admin / Webhooks /
