@@ -54,9 +54,10 @@ class RecordingStudioBillingTest < Minitest::Test
   end
 
   def test_dummy_runs_flatpack_rounded_button_rebinds
-    assert_operator Gem::Version.new(FlatPack::VERSION), :>=, Gem::Version.new("0.1.135")
+    spec = Bundler.definition.specs["flat_pack"].first
+    assert_operator Gem::Version.new(spec.version.to_s), :>=, Gem::Version.new("0.1.135")
 
-    css = File.read(FlatPack::Engine.root.join("app/assets/stylesheets/flat_pack/variables.css"))
+    css = File.read(File.join(spec.full_gem_path, "app/assets/stylesheets/flat_pack/variables.css"))
     assert_includes css, '--color-primary: oklch(0.3211 0 0)'
     assert_includes css, "--button-primary-background-color: var(--color-primary)"
     assert_includes css, "--button-border-radius: var(--radius-md)"

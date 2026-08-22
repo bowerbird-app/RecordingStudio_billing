@@ -1,7 +1,7 @@
 <%# Dummy host override: Recording Studio still puts data-theme on body only.
     Flatpack #159 rebinds button radius and charcoal primary on [data-theme=rounded].
     Put the same theme on html so those tokens inherit from the document root.
-    Keep this a thin delta — do not add a sidebar or Sign out here. %>
+    Keep this a thin delta — do not add a sidebar or session chrome here. %>
 <!DOCTYPE html>
 <html data-theme="<%= content_for(:body_theme).presence || 'rounded' %>">
   <head>
