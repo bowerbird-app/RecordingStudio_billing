@@ -261,11 +261,7 @@ module RecordingStudioBilling
       if (operation_name = ADMIN_COMMERCIAL_OPERATION_NAMES[key.to_s])
         action :create,
                text: "Create draft", method: :post, required_role: :admin, blast_radius: :site,
-               visible_if: lambda { |record, context|
-                 context.params["parent_recording_id"].present? ||
-                   (record.is_a?(RecordingStudio::Recording) &&
-                    record.recordable_type == "RecordingStudioBilling::BillingAdmin")
-               },
+               visible_if: ->(record, context) { BillingAdminProductNew.create_action_visible?(record, context) },
                url: lambda { |_record, context|
                  parent_recording_id = context.params.fetch("parent_recording_id")
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(

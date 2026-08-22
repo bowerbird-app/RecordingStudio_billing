@@ -92,6 +92,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
       def routes.recording_studio_billing_path = "/billing"
       Object.new.tap { |controller| controller.define_singleton_method(:main_app) { routes } }
     end
+
     def create_context.params = { "parent_recording_id" => "parent-1" }
     assert_includes action.url.call(billing_admin, create_context), "create_draft_product"
   end

@@ -145,9 +145,8 @@ module RecordingStudioBilling
         views = RecordingStudioBilling::Engine.root.join("app/views")
         RecordingStudioAdmin::ApplicationController.prepend_view_path(views)
         RecordingStudioAdmin::ApplicationController.helper(RecordingStudioBilling::AdminProductNewHelper)
-        unless RecordingStudioAdmin::ScreensController.include?(RecordingStudioBilling::AdminProductNewAuthorization)
-          RecordingStudioAdmin::ScreensController.include(RecordingStudioBilling::AdminProductNewAuthorization)
-        end
+        screens = RecordingStudioAdmin::ScreensController
+        screens.include(RecordingStudioBilling::AdminProductNewAuthorization) unless screens.include?(RecordingStudioBilling::AdminProductNewAuthorization)
       end
     end
 

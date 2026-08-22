@@ -92,6 +92,12 @@ module RecordingStudioBilling
     rescue RecordingStudioAdmin::AuthorizationFailed, RecordingStudioAdmin::DefinitionNotFound
       false
     end
+
+    def create_action_visible?(record, context)
+      context.params["parent_recording_id"].present? ||
+        (record.is_a?(RecordingStudio::Recording) &&
+         record.recordable_type == "RecordingStudioBilling::BillingAdmin")
+    end
   end
 
   class BillingProductNewScreen < RecordingStudioAdmin::Screen
