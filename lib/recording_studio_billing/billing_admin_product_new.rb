@@ -35,7 +35,14 @@ module RecordingStudioBilling
         operation: "create_draft_product",
         parent_recording_id:
       )
-      "#{billing_mount_path(context)}#{engine_path}"
+      mounted_operation_url(context, engine_path)
+    end
+
+    def mounted_operation_url(context, engine_path)
+      mount = billing_mount_path(context)
+      return engine_path if mount.blank? || engine_path.start_with?(mount)
+
+      "#{mount}#{engine_path}"
     end
 
     def products_screen_path(context)

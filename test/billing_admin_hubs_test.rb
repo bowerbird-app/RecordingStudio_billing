@@ -96,6 +96,27 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     assert_includes action.url.call(billing_admin, create_context), "create_draft_product"
   end
 
+  test "product create form posts to the mounted draft operation once" do
+    context = Object.new
+    def context.controller
+      routes = Object.new
+      def routes.recording_studio_billing_path = "/billing"
+      Object.new.tap { |controller| controller.define_singleton_method(:main_app) { routes } }
+    end
+
+    url = RecordingStudioBilling::BillingAdminProductNew.mounted_operation_url(
+      context,
+      "/billing/admin/operations/create_draft_product?parent_recording_id=parent-1"
+    )
+    assert_equal "/billing/admin/operations/create_draft_product?parent_recording_id=parent-1", url
+
+    relative = RecordingStudioBilling::BillingAdminProductNew.mounted_operation_url(
+      context,
+      "/admin/operations/create_draft_product?parent_recording_id=parent-1"
+    )
+    assert_equal "/billing/admin/operations/create_draft_product?parent_recording_id=parent-1", relative
+  end
+
   test "catalogue key filters do not occupy the Admin screen route param" do
     RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
       next unless definition.fetch(:filters).include?(:key)

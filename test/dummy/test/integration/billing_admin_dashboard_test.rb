@@ -142,7 +142,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_admin_shell
     assert_includes response.body, "New product"
-    assert_select "form[action*='/billing/admin/operations/create_draft_product']"
+    assert_select "form[action^='/billing/admin/operations/create_draft_product']"
     assert_select "input[name='attributes[key]']"
     assert_select "select[name='attributes[kind]']"
     assert_select "select[name='attributes[provider_account_recording_id]']"
