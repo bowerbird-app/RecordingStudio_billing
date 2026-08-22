@@ -13,6 +13,7 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_includes AdminRoot.ancestors, RecordingStudioBilling::BillingAdminSupport
     assert_equal %w[billing_commercial billing_financial billing_operations],
                  AdminRoot.recording_studio_admin_section_keys_for(nil, nil, nil)
+    assert RecordingStudioAccessible.configuration.avatar_for(User.new(email: "admin@admin.com"))
   end
 
   test "billing admin definitions are registered at site scope" do

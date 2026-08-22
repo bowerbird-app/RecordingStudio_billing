@@ -25,6 +25,26 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
+  test "financial command widget rows keep type and state in the wrapping label" do
+    spec = RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.find do |entry|
+      entry.fetch(:screen) == "billing_financial_commands"
+    end
+    context = Object.new
+    def context.admin_screen_path(key) = "/admin/screens/#{key}"
+    row = Struct.new(:command_type, :state).new("subscription_change", "requires_reconciliation")
+    relation = [row]
+    def relation.limit(*) = self
+
+    items = RecordingStudioBilling::BillingAdminHubs.stub(:widget_scope, ->(*) { relation }) do
+      RecordingStudioBilling::BillingAdminHubs.widget_items(spec, context)
+    end
+
+    assert_equal 1, items.size
+    assert_equal "subscription_change · requires_reconciliation", items.first[:text]
+    refute items.first.key?(:trailing)
+    assert_equal "/admin/screens/billing_financial_commands", items.first[:href]
+  end
+
   test "inventory table columns and filters exist on their models" do
     RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
       model = "RecordingStudioBilling::#{definition.fetch(:model)}".constantize

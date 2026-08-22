@@ -536,7 +536,9 @@ Dummy `/admin` on the Billing Administration root is those three hubs plus the
 linked inventory. After `db:setup`, widget and table rows come from the same
 catalogue fixtures customer `/billing` already shows. Search
 `/admin/sections?q=billing` lists the hubs and inventory screens, not a 404
-Account billing operations item. Workspace roots still 403 `/admin`.
+Account billing operations item. The default-layout slot uses
+`recording_studio_accessible_avatars` for the seeded Admin root owner; + Access
+is only the empty-grant fallback. Workspace roots still 403 `/admin`.
 
 The dummy suite exercises seeded hierarchy and product assertions, root
 switching, permitted customer billing, restricted customer/admin access, staff

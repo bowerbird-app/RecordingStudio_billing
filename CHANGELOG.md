@@ -30,6 +30,12 @@ empty section titles and filter-only screens.
 - Account billing operations stays registered for hosts that administer a
   `:billing` workspace root, but it is hidden on the site Admin root. Dummy
   `/admin` no longer lists a section that 404s.
+- Financial commands hub rows keep command type and state in the wrapping
+  label, so `subscription_change` and `requires_reconciliation` no longer
+  collide.
+- Dummy Accessible now resolves avatars from the owner grant. Admin hubs use
+  `recording_studio_accessible_avatars` and only show + Access when that
+  grant list is empty.
 
 ### Upgrade notes
 
@@ -45,6 +51,9 @@ empty section titles and filter-only screens.
   Plan updates and reconciliation stay the existing POST domain actions.
 - Bookmark or automation URLs that filtered inventory with `?key=` must switch
   to `?catalogue_key=`. The on-screen filter label is still Key.
+- Hosts that want avatars in the Admin default-layout slot must set
+  `RecordingStudioAccessible` `avatar_resolver`. Without it, granted actors
+  still fall back to + Access. Dummy now ships that resolver.
 
 ## 0.7.0
 

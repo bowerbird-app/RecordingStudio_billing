@@ -39,7 +39,9 @@ Switch roots on the dedicated Root Switchable page at
 `/recording_studio_root_switchable/v1/root_switch?scope=all_workspaces`. That
 moves between Studio Workspace (customer billing) and Billing Administration
 (products and pricing). The default-layout slot does not render the switcher
-or Sign out.
+or Sign out. It uses `recording_studio_accessible_avatars` for the seeded
+owner grant on Billing Administration. + Access is only the empty-grant
+fallback.
 
 If published dummy records were created by an older seed (for example the
 metered API-call product stored as a credit pack), reset from `test/dummy`:

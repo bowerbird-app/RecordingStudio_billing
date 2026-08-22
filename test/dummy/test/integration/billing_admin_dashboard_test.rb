@@ -60,6 +60,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "View products and pricing"
     refute_includes response.body, "Table data"
     refute_includes response.body, "Sign out"
+    assert_admin_access_avatars
 
     HIGH_SIGNAL_SCREENS.first(3).each do |screen_key|
       widget_key = RecordingStudioBilling::BillingAdminHubs.widget_key_for(screen_key)
@@ -77,6 +78,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       get "/admin/sections/#{section_key}"
       assert_response :success, section_key
       assert_admin_shell
+      assert_admin_access_avatars
       section_body = response.body
       screen_keys.each do |screen_key|
         widget_key = RecordingStudioBilling::BillingAdminHubs.widget_key_for(screen_key)
@@ -84,6 +86,10 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
         get "/admin/sections/#{section_key}/widgets/#{widget_key}"
         assert_response :success, widget_key
         assert_includes response.body, seeded_row_label_for(screen_key)
+        next unless screen_key == "billing_financial_commands"
+
+        assert_includes response.body, "subscription_change · "
+        refute_includes response.body, 'flex-shrink-0 ml-2">requires_reconciliation'
       end
     end
   end
@@ -132,6 +138,13 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'data-theme="rounded"'
     refute_includes response.body, "recording_studio_root_switch_dropdown"
     refute_includes response.body, "Sign out"
+  end
+
+  def assert_admin_access_avatars
+    refute_includes response.body, "+ Access"
+    assert_includes response.body, "Manage access"
+    assert_includes response.body, ">Ad<"
+    assert_includes response.body, "/accesses"
   end
 
   def expected_table_title(key)

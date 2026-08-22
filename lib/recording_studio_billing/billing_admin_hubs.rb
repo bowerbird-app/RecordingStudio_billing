@@ -42,7 +42,7 @@ module RecordingStudioBilling
       { key: "widgets.billing.financial_commands", title: "Financial commands",
         screen: "billing_financial_commands",
         description: "Provider commands waiting on or finished with reconciliation.",
-        model: "FinancialCommand", text: :command_type, trailing: :state },
+        model: "FinancialCommand", text: :command_and_state },
       { key: "widgets.billing.subscriptions", title: "Subscriptions", screen: "billing_subscriptions",
         description: "Current customer subscriptions.",
         model: "Subscription", scope: :current, text: :identifier, trailing: :state },
@@ -127,11 +127,12 @@ module RecordingStudioBilling
         text = widget_text(row, spec.fetch(:text))
         next if text.blank?
 
-        {
+        item = {
           text: text,
-          trailing: widget_trailing(row, spec.fetch(:trailing)),
           href: context.admin_screen_path(spec.fetch(:screen))
-        }.compact
+        }
+        item[:trailing] = widget_trailing(row, spec.fetch(:trailing)) if spec.key?(:trailing)
+        item.compact
       end
     end
 
@@ -190,6 +191,8 @@ module RecordingStudioBilling
       when :manifest then row.manifest_digest.to_s.first(12)
       when :invoice then money_label(row.total_minor, row.currency_code)
       when :payment then money_label(row.amount_minor, row.currency_code)
+      when :command_and_state
+        [row.command_type, row.state].compact_blank.join(" · ")
       when Symbol then row.public_send(key).to_s
       else key.to_s
       end

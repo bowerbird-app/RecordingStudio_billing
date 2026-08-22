@@ -278,6 +278,9 @@ string. Admin routes already use `params[:key]` for the screen id, so reusing
 `key` as a filter hid every row.
 Account billing operations (feature overrides) is hidden on the site Admin
 root. It becomes visible only when admin access is a `:billing` workspace root.
+Dummy Admin hubs render `recording_studio_accessible_avatars` in the
+default-layout slot. Configure `avatar_resolver` so granted actors become
+avatars; + Access is only the empty-grant fallback.
 
 Commercial publication still writes `rs_v3_commercial_configurations`. Capability checks use `commercial_configuration`, not a catalogue capability.
 
