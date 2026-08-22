@@ -56,8 +56,15 @@ module RecordingStudioBilling
     ].freeze
 
     PREVIEW_LIMIT = 5
+    CATALOGUE_KEY_FILTER_PARAM = :catalogue_key
 
     module_function
+
+    def inventory_filter_options(filter_key)
+      options = { label: filter_key.to_s.humanize }
+      options[:param] = CATALOGUE_KEY_FILTER_PARAM if filter_key.to_sym == :key
+      options
+    end
 
     def widgets
       @widgets ||= WIDGET_SPECS.map { |spec| build_list_widget(spec) }.freeze

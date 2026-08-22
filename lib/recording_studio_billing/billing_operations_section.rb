@@ -111,9 +111,9 @@ module RecordingStudioBilling
     billing_financial_commands: { section: "billing_financial", title: "Financial commands", model: "FinancialCommand",
                                   filters: %i[command_type state], columns: %i[command_type state provider_adapter_key created_at] },
     billing_financial_attempts: { section: "billing_financial", title: "Financial command attempts",
-                                  model: "FinancialCommandAttempt", filters: %i[state provider_adapter_key], columns: %i[state provider_adapter_key created_at] },
+                                  model: "FinancialCommandAttempt", filters: %i[state], columns: %i[state attempt_number provider_idempotency_key started_at] },
     billing_checkout_intents: { section: "billing_financial", title: "Checkout intents", model: "CheckoutIntent",
-                                filters: %i[state currency_code], columns: %i[state currency_code created_at] },
+                                filters: %i[state advisory_currency_code], columns: %i[state advisory_currency_code presentation_preference created_at] },
     billing_subscriptions: { section: "billing_operations", title: "Subscriptions", model: "Subscription",
                              scope: :current, filters: %i[state currency_code], columns: %i[identifier state currency_code] },
     billing_purchases: { section: "billing_operations", title: "Purchases", model: "Purchase", scope: :current,
@@ -182,7 +182,9 @@ module RecordingStudioBilling
         relation = definition[:scope] == :current ? model.with_current_recording : model.all
         relation.order(created_at: :desc)
       end
-      definition.fetch(:filters).each { |filter_key| filter filter_key, label: filter_key.to_s.humanize }
+      definition.fetch(:filters).each do |filter_key|
+        filter filter_key, **BillingAdminHubs.inventory_filter_options(filter_key)
+      end
       table do
         title definition.fetch(:title)
         definition.fetch(:columns).each { |column| column column }

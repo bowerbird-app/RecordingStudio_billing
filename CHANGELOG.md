@@ -17,6 +17,12 @@ empty section titles and filter-only screens.
   `billing_reconciliation_issues`).
 - The three hub screens now render a table for the relation they already
   queried (published manifests, financial commands, reconciliation issues).
+- Inventory screens that filter on catalogue `key` use the `catalogue_key`
+  query param. Recording Studio Admin routes already occupy `params[:key]`
+  as the screen id, so a filter named `key` hid every row.
+- Financial command attempts and checkout intents tables now use columns that
+  exist on those models (`attempt_number` / `provider_idempotency_key`, and
+  `advisory_currency_code` / `presentation_preference`).
 - Each hub also links every other site-scoped inventory screen in its area so
   Recording Studio Admin `screen_enabled?` returns those screens. They appear
   in `/admin/sections` search and return 200. Hubs still only surface the
@@ -37,6 +43,8 @@ empty section titles and filter-only screens.
   invent a second feature-override UI.
 - Create/revise stay `record!` / `revise`. Publish stays `CommercialPublisher`.
   Plan updates and reconciliation stay the existing POST domain actions.
+- Bookmark or automation URLs that filtered inventory with `?key=` must switch
+  to `?catalogue_key=`. The on-screen filter label is still Key.
 
 ## 0.7.0
 

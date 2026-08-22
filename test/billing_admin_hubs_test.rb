@@ -25,6 +25,27 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
+  test "inventory table columns and filters exist on their models" do
+    RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
+      model = "RecordingStudioBilling::#{definition.fetch(:model)}".constantize
+      record = model.new
+      (definition.fetch(:columns) + definition.fetch(:filters)).uniq.each do |field|
+        assert record.respond_to?(field), "#{screen_key} #{field}"
+      end
+    end
+  end
+
+  test "catalogue key filters do not occupy the Admin screen route param" do
+    RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
+      next unless definition.fetch(:filters).include?(:key)
+
+      filter = RecordingStudioAdmin.screen_for(screen_key).filters.find { |entry| entry.key == :key }
+      assert filter, screen_key
+      assert_equal :catalogue_key, filter.param_key, screen_key
+      refute_equal :key, filter.param_key, screen_key
+    end
+  end
+
   test "account billing operations is hidden on a site admin root" do
     section = RecordingStudioAdmin.section_for("billing_account_operations")
 

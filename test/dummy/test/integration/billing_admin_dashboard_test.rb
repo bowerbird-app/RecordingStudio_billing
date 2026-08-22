@@ -25,6 +25,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     Current.actor = nil
     RecordingStudio::RootSwitchable::Current.device_key = nil
     sign_in @user
+    select_admin_root
   end
 
   teardown { release_database_lock! }
@@ -76,9 +77,10 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       get "/admin/sections/#{section_key}"
       assert_response :success, section_key
       assert_admin_shell
+      section_body = response.body
       screen_keys.each do |screen_key|
         widget_key = RecordingStudioBilling::BillingAdminHubs.widget_key_for(screen_key)
-        assert_includes response.body, RecordingStudioAdmin.widget_for(widget_key).title
+        assert_includes section_body, RecordingStudioAdmin.widget_for(widget_key).title
         get "/admin/sections/#{section_key}/widgets/#{widget_key}"
         assert_response :success, widget_key
         assert_includes response.body, seeded_row_label_for(screen_key)
@@ -146,9 +148,9 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     when "billing_operations", "billing_reconciliation_issues"
       RecordingStudioBilling::ReconciliationIssue.order(created_at: :desc).first.kind
     when "billing_products"
-      "demo_monthly_plan"
+      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.key
     when "billing_prices"
-      "demo_monthly_plan_us_price"
+      RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first.key
     when "billing_invoices"
       RecordingStudioBilling::Invoice.order(created_at: :desc).first.currency_code
     when "billing_payments"
@@ -156,7 +158,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     when "billing_subscriptions"
       RecordingStudioBilling::Subscription.with_current_recording.order(created_at: :desc).first.identifier
     when "billing_plan_updates"
-      "demo_monthly_plan_review"
+      RecordingStudioBilling::PlanUpdate.with_current_recording.order(created_at: :desc).first.key
     else
       raise "no seeded label for #{key}"
     end
@@ -165,6 +167,13 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
   def seeded_row_count_for(key)
     spec = RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.find { |entry| entry.fetch(:screen) == key }
     RecordingStudioBilling::BillingAdminHubs.widget_scope(spec).count
+  end
+
+  def select_admin_root
+    patch "/recording_studio_root_switchable/v1/root_switch", params: {
+      scope: "all_workspaces", root_switch: { root_recording_id: @admin_root.id, return_to: "/" }
+    }
+    assert_response :redirect
   end
 
   def acquire_database_lock!

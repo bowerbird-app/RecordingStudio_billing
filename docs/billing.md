@@ -273,6 +273,9 @@ The site Admin root (`BillingAdminSupport`) enables three hubs:
 A widget with a child screen links through to that inventory. Recording Studio
 Admin only enables a screen when an enabled section links it, so each hub also
 links the rest of its site-scoped inventory for discovery and direct URLs.
+Screens that filter on a catalogue `key` read `catalogue_key` from the query
+string. Admin routes already use `params[:key]` for the screen id, so reusing
+`key` as a filter hid every row.
 Account billing operations (feature overrides) is hidden on the site Admin
 root. It becomes visible only when admin access is a `:billing` workspace root.
 

@@ -170,7 +170,9 @@ the same relations and render a table so their filters have rows.
 root. Recording Studio Admin treats a section link as the child that enables a
 screen, so each hub also links the rest of its site-scoped inventory. Those
 screens stay out of the hub widget set and appear in `/admin/sections` search.
-They must not 404. Account billing operations is root-scoped feature overrides:
+They must not 404. Catalogue `key` filters use the `catalogue_key` query param
+because Admin screen routes already occupy `params[:key]`. Account billing
+operations is root-scoped feature overrides:
 it is hidden on the site Admin root until the current access recording is a
 `:billing` workspace that can render that list. Dummy does not invent a second
 override UI.
