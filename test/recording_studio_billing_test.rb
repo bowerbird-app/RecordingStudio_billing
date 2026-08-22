@@ -58,7 +58,7 @@ class RecordingStudioBillingTest < Minitest::Test
     assert_operator Gem::Version.new(spec.version.to_s), :>=, Gem::Version.new("0.1.135")
 
     css = File.read(File.join(spec.full_gem_path, "app/assets/stylesheets/flat_pack/variables.css"))
-    assert_includes css, '--color-primary: oklch(0.3211 0 0)'
+    assert_includes css, "--color-primary: oklch(0.3211 0 0)"
     assert_includes css, "--button-primary-background-color: var(--color-primary)"
     assert_includes css, "--button-border-radius: var(--radius-md)"
     assert_operator css.scan('[data-theme="rounded"]').size, :>=, 2
