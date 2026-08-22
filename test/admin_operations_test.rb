@@ -246,6 +246,21 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     assert_equal foreign_admin.root_recording, foreign_price.recording.root_recording
   end
 
+  test "product create screen authorizes billing_products create like other admin actions" do
+    context = product_create_admin_context
+
+    refute RecordingStudioBilling::BillingAdminProductNew.create_allowed?(context)
+
+    grant_view_access!(site_admin_recording)
+    refute RecordingStudioBilling::BillingAdminProductNew.create_allowed?(context)
+  end
+
+  test "a site admin can use the product create screen action" do
+    with_site_admin do
+      assert RecordingStudioBilling::BillingAdminProductNew.create_allowed?(product_create_admin_context)
+    end
+  end
+
   test "Account-root feature override administration uses FeatureOverrideReviser with audit attribution" do
     override, account_root = feature_override_fixture
     audit_events = []
@@ -567,6 +582,16 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   def site_admin_recording
     @billing_admin_recording.root_recording
+  end
+
+  def product_create_admin_context
+    recording = site_admin_recording
+    actor = @user
+    controller = Object.new
+    controller.define_singleton_method(:current_root_recording) { recording }
+    context = RecordingStudioAdmin::Context.new(current_actor: actor, controller: controller)
+    context.define_singleton_method(:access_recording) { recording }
+    context
   end
 
   def grant_admin_access!(recording, actor: @user)

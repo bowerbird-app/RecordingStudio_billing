@@ -185,6 +185,13 @@ module RecordingStudioBilling
       definition.fetch(:filters).each do |filter_key|
         filter filter_key, **BillingAdminHubs.inventory_filter_options(filter_key)
       end
+      if key.to_s == "billing_products"
+        button :new_product,
+               text: "New",
+               style: :primary,
+               url: ->(context) { BillingAdminProductNew.new_screen_path(context) },
+               visible_if: ->(context) { BillingAdminProductNew.create_allowed?(context) }
+      end
       table do
         title definition.fetch(:title)
         definition.fetch(:columns).each { |column| column column }
@@ -254,7 +261,11 @@ module RecordingStudioBilling
       if (operation_name = ADMIN_COMMERCIAL_OPERATION_NAMES[key.to_s])
         action :create,
                text: "Create draft", method: :post, required_role: :admin, blast_radius: :site,
-               visible_if: ->(_record, context) { context.params["parent_recording_id"].present? },
+               visible_if: lambda { |record, context|
+                 context.params["parent_recording_id"].present? ||
+                   (record.is_a?(RecordingStudio::Recording) &&
+                    record.recordable_type == "RecordingStudioBilling::BillingAdmin")
+               },
                url: lambda { |_record, context|
                  parent_recording_id = context.params.fetch("parent_recording_id")
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(

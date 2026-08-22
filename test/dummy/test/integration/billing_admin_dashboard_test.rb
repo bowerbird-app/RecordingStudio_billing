@@ -41,7 +41,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     )
 
     site_screens = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) - %w[billing_feature_overrides]
-    (HUB_SECTIONS + site_screens).each do |key|
+    (HUB_SECTIONS + site_screens + [RecordingStudioBilling::BillingAdminProductNew::SCREEN_KEY]).each do |key|
       assert RecordingStudioAdmin.screen_enabled?(key:, recording: @admin_root, context:), key
     end
     refute RecordingStudioAdmin.screen_enabled?(
@@ -129,6 +129,26 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     HIGH_SIGNAL_SCREENS.each do |key|
       assert_includes response.body, "/admin/screens/#{key}"
     end
+  end
+
+  test "products inventory New opens the Admin create-draft screen" do
+    get "/admin/screens/billing_products"
+    assert_response :success
+    assert_admin_shell
+    assert_select "a[href='/admin/screens/billing_product_new']", text: "New"
+    refute_includes response.body, "[&>*]:rounded-none"
+
+    get "/admin/screens/billing_product_new"
+    assert_response :success
+    assert_admin_shell
+    assert_includes response.body, "New product"
+    assert_select "form[action*='/billing/admin/operations/create_draft_product']"
+    assert_select "input[name='attributes[key]']"
+    assert_select "select[name='attributes[kind]']"
+    assert_select "select[name='attributes[provider_account_recording_id]']"
+    refute_includes response.body, "Select an option"
+    refute_includes response.body, "Sign out"
+    refute_includes response.body, "recording_studio_root_switch_dropdown"
   end
 
   private

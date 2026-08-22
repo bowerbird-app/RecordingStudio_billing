@@ -194,6 +194,14 @@ or historical recordables in place. Publication remains exclusively with
 `FeatureOverrideReviser`. The admin inventory label is **Products and pricing**;
 the section key remains `billing_commercial`.
 
+Products inventory (`/admin/screens/billing_products`) has a primary New
+button. That opens the Admin create screen (`billing_product_new`) on the same
+section. Save posts to the existing `create_draft_product` operation, which
+writes a draft with `RecordingStudio.record!`. The button and screen authorize
+`billing_products` `create` (`required_role :admin`, site blast radius,
+Accessible grant on the Admin root) the same way other billing admin_actions
+do. View-only actors do not see New and receive 403 on the create screen.
+
 ## V1 products and pricing contract
 
 This engine publishes validated, versioned commercial manifests and uses them to

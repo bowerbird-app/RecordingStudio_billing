@@ -1,0 +1,63 @@
+<% if @screen.key == RecordingStudioBilling::BillingAdminProductNew::SCREEN_KEY %>
+  <%= render "recording_studio_billing/admin/new_product" %>
+<% else %>
+  <% recording_studio_page_nav(
+     title: @screen.title,
+     page_nav_anchor_url: page_nav_anchor_url(default: RecordingStudioAdmin.configuration.default_mount_path)
+   ) %>
+<% if @screen.buttons.any? %>
+  <% recording_studio_page_nav_right do %>
+    <div class="flex items-center gap-2">
+      <% @screen.buttons.each do |button| %>
+        <%= render FlatPack::Button::Component.new(text: button.text, href: button.url, style: button.style) %>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>
+<%= render "recording_studio_admin/shared/page_nav" unless recording_studio_admin_default_layout? %>
+
+<%= render FlatPack::PageTitle::Component.new(title: @screen.title, subtitle: @screen.subtitle) %>
+
+<% if @screen.widgets.any? %>
+  <% if RecordingStudioAdmin.configuration.async_widgets.enabled %>
+    <div data-controller="recording-studio-admin--async-widgets"
+         data-recording-studio-admin--async-widgets-max-concurrent-value="<%= RecordingStudioAdmin.configuration.async_widgets.max_concurrent_requests %>"
+         data-recording-studio-admin--async-widgets-retry-count-value="<%= RecordingStudioAdmin.configuration.async_widgets.retry_count %>">
+  <% end %>
+
+    <%= render FlatPack::Grid::Component.new(cols: 3, gap: :md, class: "mb-6") do %>
+      <% @screen.widgets.each do |widget| %>
+        <% if RecordingStudioAdmin.configuration.async_widgets.enabled %>
+          <%= render_recording_studio_async_widget_frame(widget, parent: :screen, parent_key: @screen.key, variant: :compact) %>
+        <% else %>
+          <%= render_recording_studio_widget(widget, variant: :compact) %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+  <% if RecordingStudioAdmin.configuration.async_widgets.enabled %>
+    </div>
+  <% end %>
+<% end %>
+
+<%= render "filters", screen: @screen if @screen.filters.any? %>
+
+<% if @screen.has_chart %>
+  <%= turbo_frame_tag "screen-chart", src: recording_studio_admin_screen_region_path(@screen.key, :chart) do %>
+    <%= render FlatPack::Card::Component.new(style: :outlined, class: "mb-6") do |card| %>
+      <% card.body do %>
+        <div class="space-y-4">
+          <%= render FlatPack::Skeleton::Component.new(variant: :text, width: "12rem", shimmer: true) %>
+          <%= render FlatPack::Skeleton::Component.new(variant: :rectangle, height: "18rem", shimmer: true) %>
+        </div>
+      <% end %>
+    <% end %>
+  <% end %>
+<% end %>
+
+<% if @screen.has_table %>
+  <%= turbo_frame_tag "screen-table", src: recording_studio_admin_screen_region_path(@screen.key, :table) do %>
+    <%= render "table_placeholder", screen: @screen %>
+  <% end %>
+<% end %>
+<% end %>

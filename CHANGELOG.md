@@ -41,6 +41,12 @@ empty section titles and filter-only screens.
   theme rebinds `--button-border-radius` and charcoal `--button-primary-*`
   aliases. Dummy `recording_studio/default_layout` also puts `data-theme` on
   `html`, not only `body`. Billing does not fork button CSS.
+- Products inventory (`billing_products`) shows a primary New button. It opens
+  the Admin create screen (`billing_product_new`) on the same Products and
+  pricing section. Save posts to the existing `create_draft_product` operation,
+  which writes a draft with `RecordingStudio.record!`. The button and screen
+  authorize `billing_products` `create` the same way other billing admin_actions
+  do. View-only actors do not see New and receive 403 on the create screen.
 
 ### Upgrade notes
 
@@ -64,6 +70,10 @@ empty section titles and filter-only screens.
   Billing. After #159 merges, switch the pin back to a released tag. Hosts that
   set `data-theme` only on `body` should also set it on `html` so the rounded
   rebinds inherit from the document root.
+- Products inventory New is an Admin screen button, not a second admin or a
+  Billing CRUD controller. Hosts that already registered `create_draft_product`
+  keep that POST. Do not add a generic Admin form that writes published product
+  rows. Revise stays `revise`. Publish stays `CommercialPublisher`.
 
 ## 0.7.0
 

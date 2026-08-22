@@ -122,7 +122,8 @@ module RecordingStudioBilling
         RecordingStudioBilling::BillingCommercialScreen,
         RecordingStudioBilling::BillingFinancialScreen,
         RecordingStudioBilling::BillingOperationsScreen,
-        *RecordingStudioBilling::ADMIN_OPERATION_SCREEN_CLASSES
+        *RecordingStudioBilling::ADMIN_OPERATION_SCREEN_CLASSES,
+        RecordingStudioBilling::BillingProductNewScreen
       ].each { |screen| RecordingStudioAdmin.register_screen(screen) }
 
       [
@@ -140,6 +141,14 @@ module RecordingStudioBilling
     config.to_prepare do
       RecordingStudioBilling.register_builtin_providers!
       RecordingStudioBilling.register_webhook_actions!
+      if defined?(RecordingStudioAdmin::ApplicationController)
+        views = RecordingStudioBilling::Engine.root.join("app/views")
+        RecordingStudioAdmin::ApplicationController.prepend_view_path(views)
+        RecordingStudioAdmin::ApplicationController.helper(RecordingStudioBilling::AdminProductNewHelper)
+        unless RecordingStudioAdmin::ScreensController.include?(RecordingStudioBilling::AdminProductNewAuthorization)
+          RecordingStudioAdmin::ScreensController.include(RecordingStudioBilling::AdminProductNewAuthorization)
+        end
+      end
     end
 
     initializer "recording_studio_billing.view_helpers" do

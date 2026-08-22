@@ -12,8 +12,10 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
       widget_keys = screen_keys.map { |key| RecordingStudioBilling::BillingAdminHubs.widget_key_for(key) }
 
       assert_equal widget_keys, section.widget_keys
-      assert_equal RecordingStudioBilling::BillingAdminHubs.inventory_screen_keys_for(section_key) + [section_key],
-                   linked_screen_keys_for(section)
+      expected_links = RecordingStudioBilling::BillingAdminHubs.inventory_screen_keys_for(section_key)
+      expected_links += [RecordingStudioBilling::BillingAdminProductNew::SCREEN_KEY] if section_key == "billing_commercial"
+      expected_links += [section_key]
+      assert_equal expected_links, linked_screen_keys_for(section)
       assert_equal RecordingStudioBilling::BillingAdminHubs::HUB_TABLES.fetch(section_key).fetch(:title),
                    hub_screen.table_value.title_value
       refute_equal "Table data", hub_screen.table_value.title_value
@@ -53,6 +55,45 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
         assert record.respond_to?(field), "#{screen_key} #{field}"
       end
     end
+  end
+
+  test "products inventory registers a primary New button to the Admin create screen" do
+    screen = RecordingStudioAdmin.screen_for("billing_products")
+    button = screen.buttons_value.find { |entry| entry.name == :new_product }
+
+    assert button
+    assert_equal "New", button.text
+    assert_equal :primary, button.style
+
+    context = Object.new
+    def context.admin_screen_path(key) = "/admin/screens/#{key}"
+    assert_equal "/admin/screens/billing_product_new", button.url.call(context)
+    assert RecordingStudioAdmin.screen_for("billing_product_new")
+  end
+
+  test "product create stays on the BillingAdmin parent and existing draft operation" do
+    action = RecordingStudioAdmin.resource_for("billing_products").action_for(:create)
+    context = Object.new
+    def context.params = {}
+
+    refute action.visible?(RecordingStudioBilling::Product.new, context)
+
+    billing_admin = RecordingStudio::Recording.new
+    billing_admin.recordable_type = "RecordingStudioBilling::BillingAdmin"
+    assert action.visible?(billing_admin, context)
+
+    parent_context = Object.new
+    def parent_context.params = { "parent_recording_id" => "parent-1" }
+    assert action.visible?(RecordingStudioBilling::Product.new, parent_context)
+
+    create_context = Object.new
+    def create_context.controller
+      routes = Object.new
+      def routes.recording_studio_billing_path = "/billing"
+      Object.new.tap { |controller| controller.define_singleton_method(:main_app) { routes } }
+    end
+    def create_context.params = { "parent_recording_id" => "parent-1" }
+    assert_includes action.url.call(billing_admin, create_context), "create_draft_product"
   end
 
   test "catalogue key filters do not occupy the Admin screen route param" do

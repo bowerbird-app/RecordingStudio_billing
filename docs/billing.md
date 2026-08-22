@@ -282,6 +282,13 @@ Dummy Admin hubs render `recording_studio_accessible_avatars` in the
 default-layout slot. Configure `avatar_resolver` so granted actors become
 avatars; + Access is only the empty-grant fallback.
 
+Products inventory has a primary New button. It opens the Admin create screen
+on the same Products and pricing section. Save posts to
+`create_draft_product`, which writes a draft with `RecordingStudio.record!`.
+That path authorizes the registered `billing_products` `create` action
+(`required_role :admin`). It does not use a generic Admin form that writes
+published rows. Revise stays `revise`. Publish stays `CommercialPublisher`.
+
 Commercial publication still writes `rs_v3_commercial_configurations`. Capability checks use `commercial_configuration`, not a catalogue capability.
 
 ## What V1 does not include
