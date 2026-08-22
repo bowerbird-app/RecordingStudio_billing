@@ -25,6 +25,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_equal section_keys, RecordingStudioAdmin.sections.keys.grep(/^billing_/).sort
     assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.screens.keys.grep(/^billing_/).sort
     assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.resources.keys.grep(/^billing_/).sort
+    assert_equal RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.map { |spec| spec.fetch(:key) }.sort,
+                 RecordingStudioAdmin.registry.widgets.keys.grep(/^widgets\.billing\./).sort
 
     assert_equal :root, RecordingStudioAdmin.section_for("billing_account_operations").blast_radius
     screen_section_keys.each do |key|
@@ -47,6 +49,25 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
       assert_equal expected_model, screen.query.call(nil).klass
       assert_equal definition.fetch(:section), RecordingStudioAdmin.resource_for(key).section_key
     end
+
+    RecordingStudioBilling::BillingAdminHubs::HIGH_SIGNAL_SCREEN_KEYS.each do |section_key, screen_keys|
+      section = RecordingStudioAdmin.section_for(section_key)
+      hub_screen = RecordingStudioAdmin.screen_for(section_key)
+      widget_keys = screen_keys.map { |key| RecordingStudioBilling::BillingAdminHubs.widget_key_for(key) }
+      linked_screens = RecordingStudioBilling::BillingAdminHubs.inventory_screen_keys_for(section_key)
+
+      assert_equal widget_keys, section.widget_keys
+      assert_equal (linked_screens + [section_key]).uniq, linked_screen_keys_for(section)
+      refute_includes linked_screen_keys_for(section), "billing_feature_overrides"
+      assert_equal RecordingStudioBilling::BillingAdminHubs::HUB_TABLES.fetch(section_key).fetch(:title),
+                   hub_screen.table_value.title_value
+      assert_equal RecordingStudioBilling::BillingAdminHubs::HUB_TABLES.fetch(section_key).fetch(:columns),
+                   hub_screen.table_value.columns.map(&:key)
+    end
+
+    account_section = RecordingStudioAdmin.section_for("billing_account_operations")
+    refute account_section.visible_if.call(access_context_for(AdminRoot.new(name: "Site")))
+    assert account_section.visible_if.call(access_context_for(Workspace.new(name: "Studio")))
 
     context = Class.new do
       def admin_screen_path(key) = "/admin/screens/#{key}"
@@ -176,5 +197,26 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   ensure
     Current.actor = nil
     ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(1_208_120_200)")
+  end
+
+  private
+
+  def linked_screen_keys_for(section)
+    context = Object.new
+    def context.admin_screen_path(key) = "/admin/screens/#{key}"
+
+    section.links.filter_map do |link|
+      resolved = link.resolve(context)
+      next unless resolved
+
+      resolved.url.to_s.delete_prefix("/admin/screens/")
+    end
+  end
+
+  def access_context_for(recordable)
+    recording = Struct.new(:recordable).new(recordable)
+    context = Object.new
+    context.define_singleton_method(:access_recording) { recording }
+    context
   end
 end

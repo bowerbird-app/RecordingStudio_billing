@@ -131,6 +131,10 @@ module RecordingStudioBilling
         RecordingStudioBilling::BillingOperationsResource,
         *RecordingStudioBilling::ADMIN_OPERATION_RESOURCE_CLASSES
       ].each { |resource| RecordingStudioAdmin.register_resource(resource) }
+
+      RecordingStudioBilling::BillingAdminHubs.widgets.each do |widget|
+        RecordingStudioAdmin.register_widget(widget)
+      end
     end
 
     config.to_prepare do

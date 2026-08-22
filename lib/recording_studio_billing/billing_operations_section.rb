@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "recording_studio_admin"
+require "recording_studio_billing/billing_admin_hubs"
 
 module RecordingStudioBilling
   class BillingCommercialSection < RecordingStudioAdmin::Section
@@ -10,8 +11,6 @@ module RecordingStudioBilling
     subtitle "Products, prices, markets, and providers"
     blast_radius :site
     availability_scope :all
-
-    link :products, text: "View products and pricing", url: ->(context) { context.admin_screen_path("billing_commercial") }
   end
 
   class BillingFinancialSection < RecordingStudioAdmin::Section
@@ -21,8 +20,6 @@ module RecordingStudioBilling
     subtitle "Commands, checkout, tax, and subscription activity"
     blast_radius :site
     availability_scope :all
-
-    link :commands, text: "View financial commands", url: ->(context) { context.admin_screen_path("billing_financial") }
   end
 
   class BillingOperationsSection < RecordingStudioAdmin::Section
@@ -32,10 +29,6 @@ module RecordingStudioBilling
     subtitle "Products, providers, tax, usage, and reconciliation"
     blast_radius :site
     availability_scope :all
-
-    link :operations, text: "View billing operations", url: lambda { |context|
-      context.admin_screen_path("billing_operations")
-    }
   end
 
   class BillingAccountOperationsSection < RecordingStudioAdmin::Section
@@ -45,6 +38,10 @@ module RecordingStudioBilling
     subtitle "Account-scoped feature overrides"
     blast_radius :root
     availability_scope :all
+    visible_if lambda { |context|
+      recordable = context.access_recording&.recordable
+      recordable && RecordingStudio.capability_enabled?(:billing, for: recordable.class)
+    }
 
     link :operations, text: "View account billing operations", url: lambda { |context|
       context.admin_screen_path("billing_feature_overrides")
@@ -356,4 +353,6 @@ module RecordingStudioBilling
     title "Billing operations"
     blast_radius :site
   end
+
+  BillingAdminHubs.install!
 end

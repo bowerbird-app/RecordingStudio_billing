@@ -158,6 +158,23 @@ billing-admin-enabled root.
 
 ### Administrative workflows
 
+The three site-scoped Admin hubs are dashboards, not empty titles. Products
+and pricing shows Products, Prices, and Published manifests. Financial records
+shows Invoices, Payments, and Financial commands. Billing operations shows
+Subscriptions, Plan updates, and Reconciliation issues. Each widget lists
+current rows and links through to that inventory screen. The matching hub
+screens (`billing_commercial`, `billing_financial`, `billing_operations`) query
+the same relations and render a table so their filters have rows.
+
+`BillingAdminSupport` still enables only those three sections on the Admin
+root. Recording Studio Admin treats a section link as the child that enables a
+screen, so each hub also links the rest of its site-scoped inventory. Those
+screens stay out of the hub widget set and appear in `/admin/sections` search.
+They must not 404. Account billing operations is root-scoped feature overrides:
+it is hidden on the site Admin root until the current access recording is a
+`:billing` workspace that can render that list. Dummy does not invent a second
+override UI.
+
 The registered RecordingStudioAdmin resources provide the V1 site-scoped
 inventory screens, filters, capability and tax diagnostics, and audit-backed
 POST actions for price publication, plan-update preview/confirmation/apply, and
@@ -513,11 +530,18 @@ installs a credential resolver from `stripe_test_secret_key` /
 `stripe_test_publishable_key` (or `STRIPE_TEST_*` aliases) so `bin/rails
 stripe:ping` can call the Stripe test account.
 
+Dummy `/admin` on the Billing Administration root is those three hubs plus the
+linked inventory. After `db:setup`, widget and table rows come from the same
+catalogue fixtures customer `/billing` already shows. Search
+`/admin/sections?q=billing` lists the hubs and inventory screens, not a 404
+Account billing operations item. Workspace roots still 403 `/admin`.
+
 The dummy suite exercises seeded hierarchy and product assertions, root
-switching, permitted customer billing, restricted customer/admin access, and
-provider-projected hybrid subscription, invoice, payment, refund, adjustment,
-plan-change, restricted portal, and FeatureOverride journeys. These fixtures use the same command,
-reconciliation, projection, and revision services as production code.
+switching, permitted customer billing, restricted customer/admin access, staff
+admin hubs and inventory, and provider-projected hybrid subscription, invoice,
+payment, refund, adjustment, plan-change, restricted portal, and FeatureOverride
+journeys. These fixtures use the same command, reconciliation, projection, and
+revision services as production code.
 
 The mounted `/billing` experience includes Overview, Plan, Add-ons, Usage,
 Invoices, Payments, Billing settings, and Checkout. Copy on those pages talks

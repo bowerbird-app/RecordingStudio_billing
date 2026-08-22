@@ -262,6 +262,20 @@ end
 
 Admin inventory lives under **Products and pricing**. The section key remains `billing_commercial` for hosts that already registered that navigation id.
 
+The site Admin root (`BillingAdminSupport`) enables three hubs:
+
+| Hub | Widgets | Hub screen table |
+| --- | --- | --- |
+| Products and pricing | Products, Prices, Published manifests | Published manifests |
+| Financial records | Invoices, Payments, Financial commands | Financial commands |
+| Billing operations | Subscriptions, Plan updates, Reconciliation issues | Reconciliation issues |
+
+A widget with a child screen links through to that inventory. Recording Studio
+Admin only enables a screen when an enabled section links it, so each hub also
+links the rest of its site-scoped inventory for discovery and direct URLs.
+Account billing operations (feature overrides) is hidden on the site Admin
+root. It becomes visible only when admin access is a `:billing` workspace root.
+
 Commercial publication still writes `rs_v3_commercial_configurations`. Capability checks use `commercial_configuration`, not a catalogue capability.
 
 ## What V1 does not include

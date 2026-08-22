@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.8.0
+
+Turn the three billing Admin hubs into dashboards with inventory, instead of
+empty section titles and filter-only screens.
+
+### Added
+
+- Products and pricing, Financial records, and Billing operations each show
+  three list widgets of seeded rows. Each widget links through to its inventory
+  screen (`billing_products`, `billing_prices`, `billing_manifests`,
+  `billing_invoices`, `billing_payments`, `billing_financial_commands`,
+  `billing_subscriptions`, `billing_plan_updates`,
+  `billing_reconciliation_issues`).
+- The three hub screens now render a table for the relation they already
+  queried (published manifests, financial commands, reconciliation issues).
+- Each hub also links every other site-scoped inventory screen in its area so
+  Recording Studio Admin `screen_enabled?` returns those screens. They appear
+  in `/admin/sections` search and return 200. Hubs still only surface the
+  high-signal widget set.
+- Account billing operations stays registered for hosts that administer a
+  `:billing` workspace root, but it is hidden on the site Admin root. Dummy
+  `/admin` no longer lists a section that 404s.
+
+### Upgrade notes
+
+- No host migration. Include `BillingAdminSupport` on the Admin root as before.
+  The concern still enables `:billing_commercial`, `:billing_financial`, and
+  `:billing_operations`. Inventory screens become reachable because those
+  sections now link them; do not add placeholder sections.
+- Account-scoped feature overrides remain a root-scoped screen. They appear
+  only when the current admin access recording is a `:billing` workspace root
+  that can render them. Dummy Admin stays on the site Admin root and does not
+  invent a second feature-override UI.
+- Create/revise stay `record!` / `revise`. Publish stays `CommercialPublisher`.
+  Plan updates and reconciliation stay the existing POST domain actions.
+
 ## 0.7.0
 
 Lift onto Recording Studio 4.2 and the matching Accessible / Admin / Webhooks /

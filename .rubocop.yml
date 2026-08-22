@@ -22,6 +22,10 @@ Metrics/ClassLength:
     - 'db/migrate/**/*'
     - 'lib/recording_studio_billing/hooks.rb'
 
+Metrics/ModuleLength:
+  Exclude:
+    - 'lib/recording_studio_billing/billing_operations_section.rb'
+
 Metrics/MethodLength:
   Exclude:
     - 'test/**/*'
