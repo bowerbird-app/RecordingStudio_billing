@@ -11,7 +11,7 @@ module RecordingStudioBilling
     end
 
     def billing_overview_path_for(root_recording = nil)
-      root_recording ||= @presenter&.root_recording
+      root_recording ||= @presenter.root_recording if @presenter.respond_to?(:root_recording)
       return root_path if root_recording.blank?
 
       root_path(root_recording_id: root_recording.id)
