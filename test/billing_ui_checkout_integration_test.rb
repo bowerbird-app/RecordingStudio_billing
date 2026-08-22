@@ -25,6 +25,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     @root, @option = published_checkout_option(adapter_key: stripe_embedded_checkout_test? ? "stripe" : "fake")
     bootstrap = RecordingStudioAccessible.bootstrap_owner_access!(recording: @root, actor: @user)
     raise bootstrap.error unless bootstrap.success?
+
     Current.actor = @user
     sign_in @user
     switch_root(@root)
