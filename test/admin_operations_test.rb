@@ -35,47 +35,45 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
   end
 
   test "publication endpoint rejects a signed-in actor without site-admin access" do
-    RecordingStudioAccessible.stub(:authorized?, false) do
-      post "/billing/admin/operations/publish_price/#{@price.id}"
-    end
+    post "/billing/admin/operations/publish_price/#{@price.id}"
 
     assert_response :forbidden
+    refute RecordingStudioAccessible.authorized?(
+      actor: @user, recording: site_admin_recording, role: :view
+    )
   end
 
   test "RecordingStudioAdmin denies an actor without the registered admin action role" do
-    requested_roles = []
+    grant_view_access!(site_admin_recording)
 
-    RecordingStudioAccessible.stub(:authorized?, lambda { |role:, **|
-      requested_roles << role
-      role == :view
-    }) do
-      post "/billing/admin/operations/publish_price/#{@price.id}"
-    end
+    post "/billing/admin/operations/publish_price/#{@price.id}"
 
     assert_response :forbidden
-    assert_includes requested_roles, :admin
+    assert RecordingStudioAccessible.authorized?(
+      actor: @user, recording: site_admin_recording, role: :view
+    )
+    refute RecordingStudioAccessible.authorized?(
+      actor: @user, recording: site_admin_recording, role: :admin
+    )
   end
 
   test "an AdminRoot A actor cannot operate on an AdminRoot B record" do
-    foreign_price, foreign_billing_admin = draft_price
+    grant_admin_access!(site_admin_recording)
+    foreign_price, foreign_billing_admin = draft_price(admin_name: "Foreign Admin #{SecureRandom.hex(4)}")
 
-    RecordingStudioAccessible.stub(:authorized?, lambda { |recording:, **|
-      recording == @billing_admin_recording.root_recording
-    }) do
-      post "/billing/admin/operations/publish_price/#{foreign_price.id}"
-    end
+    post "/billing/admin/operations/publish_price/#{foreign_price.id}"
 
     assert_response :forbidden
     assert_equal foreign_billing_admin.root_recording, foreign_price.recording.root_recording
+    refute_equal site_admin_recording, foreign_billing_admin.root_recording
   end
 
   test "publication endpoint authorizes the registered site action and calls CommercialPublisher" do
     calls = []
+    grant_admin_access!(site_admin_recording)
 
-    RecordingStudioAccessible.stub(:authorized?, true) do
-      RecordingStudioBilling::CommercialPublisher.stub(:publish!, ->(**attributes) { calls << attributes }) do
-        post "/billing/admin/operations/publish_price/#{@price.id}"
-      end
+    RecordingStudioBilling::CommercialPublisher.stub(:publish!, ->(**attributes) { calls << attributes }) do
+      post "/billing/admin/operations/publish_price/#{@price.id}"
     end
 
     assert_equal 1, calls.size
@@ -117,9 +115,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   test "every mutation endpoint forbids an actor without site-admin access" do
     operation_paths.each do |path|
-      RecordingStudioAccessible.stub(:authorized?, false) do
-        post path
-      end
+      post path
       assert_response :forbidden, path
     end
   end
@@ -240,13 +236,12 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal original_count, RecordingStudioBilling::Product.count
-    foreign_price, foreign_admin = draft_price
+    foreign_price, foreign_admin = draft_price(admin_name: "Foreign Admin #{SecureRandom.hex(4)}")
     sign_in @user
-    RecordingStudioAccessible.stub(:authorized?, ->(recording:, **) { recording == @billing_admin_recording.root_recording }) do
-      post "/billing/admin/operations/create_draft_provider_account", params: {
-        parent_recording_id: foreign_admin.id, attributes: provider_account_attributes.merge(key: "foreign_provider")
-      }
-    end
+    grant_admin_access!(site_admin_recording)
+    post "/billing/admin/operations/create_draft_provider_account", params: {
+      parent_recording_id: foreign_admin.id, attributes: provider_account_attributes.merge(key: "foreign_provider")
+    }
     assert_response :forbidden
     assert_equal foreign_admin.root_recording, foreign_price.recording.root_recording
   end
@@ -254,6 +249,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
   test "Account-root feature override administration uses FeatureOverrideReviser with audit attribution" do
     override, account_root = feature_override_fixture
     audit_events = []
+    grant_admin_access!(account_root)
     select_root(account_root)
 
     with_site_admin do
@@ -284,6 +280,8 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     override, account_root = feature_override_fixture
     foreign_root = RecordingStudio.root_recording_for(Workspace.create!(name: "Foreign #{SecureRandom.hex(4)}"))
     RecordingStudioBilling.ensure_account(root_recording: foreign_root, name: "Billing")
+    grant_admin_access!(account_root)
+    grant_view_access!(foreign_root)
     select_root(foreign_root)
 
     with_site_admin do
@@ -297,6 +295,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   test "feature override reviser failure creates no revision" do
     override, account_root = feature_override_fixture
+    grant_admin_access!(account_root)
     select_root(account_root)
     original_recording = recording_for(override)
     original_event_count = RecordingStudio::Event.where(recording: original_recording).count
@@ -405,8 +404,13 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
   private
 
-  def draft_price
-    root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Admin #{SecureRandom.hex(4)}"))
+  def draft_price(admin_name: "Billing Administration")
+    admin = if admin_name == "Billing Administration"
+              AdminRoot.find_or_create_by!(name: admin_name)
+            else
+              AdminRoot.create!(name: admin_name)
+            end
+    root = RecordingStudio.root_recording_for(admin)
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: root, key: "billing")
     provider = record_child(RecordingStudioBilling::ProviderAccount.new(
                               billing_admin_recording: admin.recording, key: "provider_#{SecureRandom.hex(4)}", adapter_key: "fake", name: "Fake",
@@ -556,8 +560,40 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
                                                        resolver_version: "v1", canonical_data:, recording_snapshots: snapshots, snapshot_references: references, manifest_digest: RecordingStudioBilling::CommercialManifestCanonicalizer.digest(envelope), used_at: Time.current)
   end
 
-  def with_site_admin(&)
-    RecordingStudioAccessible.stub(:authorized?, true, &)
+  def with_site_admin
+    grant_admin_access!(site_admin_recording)
+    yield
+  end
+
+  def site_admin_recording
+    @billing_admin_recording.root_recording
+  end
+
+  def grant_admin_access!(recording, actor: @user)
+    return if RecordingStudioAccessible.authorized?(actor:, recording:, role: :admin)
+
+    result = RecordingStudioAccessible.bootstrap_owner_access!(recording:, actor:)
+    return if result.success?
+
+    result = RecordingStudioAccessible.grant_access(
+      recording:, actor:, role: :admin, manager_actor: actor
+    )
+    raise result.error unless result.success?
+  end
+
+  def grant_view_access!(recording, actor: @user)
+    manager = User.create!(
+      email: "access-manager-#{SecureRandom.hex(4)}@example.test",
+      password: "Password1!",
+      password_confirmation: "Password1!"
+    )
+    owner = RecordingStudioAccessible.bootstrap_owner_access!(recording:, actor: manager)
+    raise owner.error unless owner.success?
+
+    result = RecordingStudioAccessible.grant_access(
+      recording:, actor:, role: :view, manager_actor: manager
+    )
+    raise result.error unless result.success?
   end
 
   def select_root(root)

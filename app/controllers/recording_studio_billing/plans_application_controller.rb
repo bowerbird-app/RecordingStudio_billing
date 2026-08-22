@@ -5,6 +5,7 @@ require "recording_studio_accessible"
 module RecordingStudioBilling
   class PlansApplicationController < ActionController::Base
     include RecordingStudio::RootSwitchable::ControllerSupport if defined?(RecordingStudio::RootSwitchable::ControllerSupport)
+    include RecordingStudio::UsesDefaultLayout if defined?(RecordingStudio::UsesDefaultLayout)
     include Devise::Controllers::Helpers if defined?(Devise::Controllers::Helpers)
     include BillingWorkspaceContext
     include HostLayoutSupport
@@ -32,7 +33,6 @@ module RecordingStudioBilling
 
     def plans_host_layout
       return "application" if non_html_format?
-      raise ActiveRecord::RecordNotFound unless host_layout?("recording_studio/default_layout")
 
       "recording_studio/default_layout"
     end

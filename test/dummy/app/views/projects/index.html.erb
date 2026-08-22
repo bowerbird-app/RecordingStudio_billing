@@ -1,3 +1,4 @@
+<% dummy_page_nav(title: "Projects") %>
 <%= render FlatPack::PageTitle::Component.new(
   title: "Projects",
   subtitle: "A live inventory gate — Billing holds the limit, this app counts the rows.",
@@ -32,7 +33,7 @@
         text: "See plans",
         style: :secondary,
         size: :md,
-        url: @gate_status.upgrade_path
+        href: @gate_status.upgrade_path
       ) %>
     <% end %>
   <% end %>

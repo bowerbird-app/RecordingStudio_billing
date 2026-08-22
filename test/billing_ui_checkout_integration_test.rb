@@ -20,13 +20,12 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     RecordingStudioBilling.configuration.billing_location_context_resolver = lambda do |**|
       { host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :host) }
     end
-    @access_management_authorizer = RecordingStudioAccessible.configuration.access_management_authorizer
-    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
-    @authorized = RecordingStudioAccessible.method(:authorized?)
-    RecordingStudioAccessible.define_singleton_method(:authorized?) { |**| true }
     @user = User.create!(email: "billing-ui-#{SecureRandom.hex(4)}@example.com", password: "Password1!",
                          password_confirmation: "Password1!")
     @root, @option = published_checkout_option(adapter_key: stripe_embedded_checkout_test? ? "stripe" : "fake")
+    bootstrap = RecordingStudioAccessible.bootstrap_owner_access!(recording: @root, actor: @user)
+    raise bootstrap.error unless bootstrap.success?
+
     Current.actor = @user
     sign_in @user
     switch_root(@root)
@@ -38,8 +37,6 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
 
   teardown do
     Current.actor = nil
-    RecordingStudioAccessible.define_singleton_method(:authorized?, @authorized)
-    RecordingStudioAccessible.configuration.access_management_authorizer = @access_management_authorizer
     RecordingStudioBilling.configuration.billing_location_context_resolver = @billing_location_context_resolver
     BillingTestDatabaseCleanup.clear! if @database_lock_held
   ensure
@@ -346,8 +343,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "2 x 1000 EUR"
     assert_includes response.body, "one-time"
     refute_includes response.body, "One off credit pack"
-    main = response.body[%r{<main class="p-6">.*?</main>}m]
-    assert main.present?
+    main = response.body[%r{<main class="[^"]*p-6[^"]*">.*?</main>}m]
+    assert main.present?, response.body
     refute_includes main, other_root.id
     assert_equal "one_off_credit_pack", purchase.mode
   end
@@ -403,10 +400,23 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def switch_root(root)
+    ensure_view_access!(root)
     patch "/recording_studio_root_switchable/v1/root_switch", params: {
       scope: "all_workspaces", root_switch: { root_recording_id: root.id, return_to: "/" }
     }
-    assert_response :redirect
+    assert_response :redirect, response.body
+  end
+
+  def ensure_view_access!(root, actor: @user)
+    return if RecordingStudioAccessible.authorized?(actor:, recording: root, role: :view)
+
+    result = RecordingStudioAccessible.bootstrap_owner_access!(recording: root, actor:)
+    return if result.success?
+
+    result = RecordingStudioAccessible.grant_access(
+      recording: root, actor:, role: :view, manager_actor: actor
+    )
+    raise result.error unless result.success?
   end
 
   def published_checkout_option(recurrence: "one_time", interval: nil, adapter_key: "fake", product_kind: "service", checkout_policy: "allowed", amount_minor: 1_000)

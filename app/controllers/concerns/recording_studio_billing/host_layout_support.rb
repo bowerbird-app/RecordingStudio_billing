@@ -14,13 +14,5 @@ module RecordingStudioBilling
 
       true
     end
-
-    def host_layout?(name)
-      return true if Rails.root.join("app/views/layouts/#{name}.html.erb").file?
-
-      lookup_context.exists?(name, %w[layouts], false)
-    rescue StandardError
-      false
-    end
   end
 end

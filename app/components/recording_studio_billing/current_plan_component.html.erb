@@ -20,19 +20,19 @@
       <%= render FlatPack::Button::Component.new(
         text: @presenter.copy("view_plans", "View plans"),
         style: :primary,
-        url: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
+        href: RecordingStudioBilling::PlansPage.path_for(@presenter.root_recording)
       ) %>
       <% if row && row[:subscription].state == "paused" %>
         <%= render FlatPack::Button::Component.new(
           text: @presenter.copy("resume_subscription", "Resume plan"),
           style: :secondary,
-          url: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
+          href: helpers.resume_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
         ) %>
       <% elsif row %>
         <%= render FlatPack::Button::Component.new(
           text: @presenter.copy("cancel_subscription", "Cancel plan"),
           style: :ghost,
-          url: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
+          href: helpers.cancel_confirmation_subscription_path(row[:subscription], root_recording_id: @presenter.root_recording.id)
         ) %>
       <% end %>
     </div>

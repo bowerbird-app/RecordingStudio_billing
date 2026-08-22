@@ -42,7 +42,7 @@
         text: @presenter.copy("plans_sign_in_to_choose", "Sign in to choose this plan"),
         style: @plan[:highlighted] ? :primary : :secondary,
         class: "w-full",
-        url: helpers.main_app.user_session_path
+        href: helpers.main_app.user_session_path
       ) %>
     <% end %>
   <% end %>

@@ -4,38 +4,48 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.6.1", RecordingStudioBilling::VERSION
+    assert_equal "0.7.0", RecordingStudioBilling::VERSION
   end
 
-  def test_dummy_home_keeps_only_the_billing_title_and_subtitle
+  def test_dummy_home_uses_default_layout_entry_buttons
     view = File.read(File.expand_path("dummy/app/views/home/index.html.erb", __dir__))
 
     assert_includes view, 'title: "Recording Studio Billing"'
     assert_includes view, "explicit adapter registration"
-    refute_includes view, "FlatPack::Card::Component"
+    assert_includes view, 'dummy_page_nav(title: "Billing demo")'
+    assert_includes view, 'href: "/billing"'
+    assert_includes view, 'href: "/plans"'
     refute_includes view, "Phase 1 boundary"
+    refute_includes view, "flat_pack_sidebar"
   end
 
-  def test_dummy_sidebar_mounts_the_gem_customer_sidebar
-    sidebar = File.read(File.expand_path("dummy/app/views/layouts/flat_pack/_sidebar.html.erb", __dir__))
+  def test_customer_sidebar_uses_flatpack_text_api
+    sidebar = File.read(File.expand_path("../app/components/recording_studio_billing/customer_sidebar_component.html.erb", __dir__))
 
-    assert_includes sidebar, "RecordingStudioBilling::CustomerSidebarComponent"
-    refute_includes sidebar, 'label: "Billing"'
+    assert_includes sidebar, "title: \"Billing\""
+    assert_includes sidebar, "text: item.fetch(:label)"
+    refute_includes sidebar, "label: \"Billing\""
+    refute_includes sidebar, "label: item.fetch(:label)"
   end
 
-  def test_dummy_keeps_the_flatpack_rounded_theme
-    sidebar = File.read(File.expand_path("dummy/app/views/layouts/flat_pack_sidebar.html.erb", __dir__))
-    default_layout = File.read(
-      File.expand_path("dummy/app/views/layouts/recording_studio/default_layout.html.erb", __dir__)
-    )
+  def test_dummy_does_not_ship_a_sidebar_shell
+    dummy_layouts = File.expand_path("dummy/app/views/layouts", __dir__)
 
-    [sidebar, default_layout].each do |layout|
-      assert_includes layout, '<html data-theme="rounded"'
-      assert_includes layout, "FlatPack::SidebarLayout::Component"
-      assert_includes layout, "side: :left"
-      assert_includes layout, 'stylesheet_link_tag "flat_pack/application"'
-      assert_match(/data-billing-layout="(flat-pack-sidebar|recording-studio-default)"/, layout)
-    end
+    refute File.exist?(File.join(dummy_layouts, "flat_pack_sidebar.html.erb"))
+    refute File.exist?(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
+    refute File.exist?(File.join(dummy_layouts, "flat_pack/_sidebar.html.erb"))
+
+    application = File.read(File.join(dummy_layouts, "application.html.erb"))
+    assert_includes application, '<html data-theme="rounded">'
+    refute_includes application, "Sign in"
+    refute_includes application, "Login"
+    refute_includes application, "FlatPack::SidebarLayout::Component"
+
+    helper = File.read(File.expand_path("dummy/app/helpers/application_helper.rb", __dir__))
+    refute_includes helper, "recording_studio_page_nav_right"
+    refute_includes helper, "recording_studio_root_switch_dropdown"
+    refute_includes helper, "Sign out"
+    refute_includes helper, "Sign in"
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects

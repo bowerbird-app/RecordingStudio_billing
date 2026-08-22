@@ -25,7 +25,7 @@
       <% end %>
     <% end %>
     <% card.footer do %>
-      <%= render FlatPack::Button::Component.new(text: @presenter.copy("invoice_download", "Download invoice"), style: :secondary, size: :md, url: helpers.download_invoice_path(@presenter.invoice, root_recording_id: @presenter.root_recording.id)) %>
+      <%= render FlatPack::Button::Component.new(text: @presenter.copy("invoice_download", "Download invoice"), style: :secondary, size: :md, href: helpers.download_invoice_path(@presenter.invoice, root_recording_id: @presenter.root_recording.id)) %>
     <% end %>
   <% end %>
 </div>

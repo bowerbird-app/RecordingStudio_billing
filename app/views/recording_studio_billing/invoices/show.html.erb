@@ -1,1 +1,2 @@
+<% billing_page_nav(title: "Invoice", back_url: invoices_billing_path(root_recording_id: @presenter.root_recording.id)) %>
 <%= render RecordingStudioBilling::InvoiceComponent.new(presenter: @presenter) %>

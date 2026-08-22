@@ -34,9 +34,10 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     user = User.find_by!(email: "admin@admin.com")
 
     assert RecordingStudio.capability_enabled?(:accessible, for: Workspace)
+    assert RecordingStudio.capability_enabled?(:accessible, for: AdminRoot)
     assert RecordingStudioAccessible.authorized?(actor: user, recording: @workspace_root, role: :view)
     assert RecordingStudioAccessible.authorized?(actor: user, recording: @workspace_root, role: :edit)
-    refute RecordingStudioAccessible.authorized?(actor: user, recording: @admin_root_recording, role: :admin)
+    assert RecordingStudioAccessible.authorized?(actor: user, recording: @admin_root_recording, role: :admin)
   end
 
   test "seeds the published V1 product and market price matrix" do

@@ -1,57 +1,57 @@
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio.git
-  revision: 7667687155bf05ab41b66dfccae330dc3834c39c
-  tag: recording_studio/v3.0.0
+  revision: fce33c603f8e57a2c0dd278ab901651f6d78c5d4
+  tag: v4.2.0
   specs:
-    recording_studio (3.0.0)
+    recording_studio (4.2.0)
       rails (>= 8.1.0)
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_accessible.git
-  revision: 861f3ab999831edf97314b43ddcb0dcb8abd9a06
-  tag: 0.3.1
+  revision: b76a6932918985aee56ffbc1b5230522a3820406
+  tag: v0.7.0
   specs:
-    recording_studio_accessible (0.3.1)
+    recording_studio_accessible (0.7.0)
       rails (~> 8.1.0)
-      recording_studio (~> 3.0)
+      recording_studio (~> 4.2)
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_admin.git
-  revision: 0057bb66ca6cd6bbd0ee5378c4d838d49c5e247c
-  tag: 1.1.0
+  revision: e5f0ba8acaf04b5f36e940e89e5a43709cb25e03
+  tag: 2.0.1
   specs:
-    recording_studio_admin (1.1.0)
-      flat_pack (~> 0.1.124)
+    recording_studio_admin (2.0.1)
+      flat_pack (~> 0.1.129)
       rails (~> 8.1.0)
-      recording_studio_accessible (~> 0.3)
+      recording_studio_accessible (~> 0.6)
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_root_switchable.git
-  revision: ea9a70b828420931048eb7eebbe8180228790959
-  tag: v0.3.1
+  revision: 98be393513dea19e5cd633ef83616e282c92b6ea
+  tag: v0.5.0
   specs:
-    recording_studio_root_switchable (0.3.1)
+    recording_studio_root_switchable (0.5.0)
       flat_pack
       rails (~> 8.1.0)
-      recording_studio (~> 3.0)
-      recording_studio_accessible (~> 0.3)
+      recording_studio (~> 4.1)
+      recording_studio_accessible (~> 0.6)
 
 GIT
   remote: https://github.com/bowerbird-app/RecordingStudio_webhooks.git
-  revision: 99a73c82a9078179c5a941135bdc893760890a48
-  tag: v0.1.0
+  revision: e3fe386753b22a9648897dffd2126bb230bfa993
+  tag: v0.2.0
   specs:
-    recording_studio_webhooks (0.1.0)
+    recording_studio_webhooks (0.2.0)
       rails (~> 8.1.0)
-      recording_studio (~> 3.0)
+      recording_studio (~> 4.2)
       sidekiq (~> 8.1.6)
 
 GIT
   remote: https://github.com/bowerbird-app/flatpack.git
-  revision: 10eb26508514cc529ddc6b5044769766c4dff237
-  tag: v0.1.129
+  revision: 3152dbb1d91236ebb281d2366b48fe8f29691a0e
+  tag: v0.1.133
   specs:
-    flat_pack (0.1.129)
+    flat_pack (0.1.133)
       pagy (~> 9.0)
       rails (>= 7.1, < 9)
       tailwind_merge (~> 0.13)
@@ -60,14 +60,14 @@ GIT
 PATH
   remote: .
   specs:
-    recording_studio_billing (0.6.1)
-      flat_pack (~> 0.1.129)
+    recording_studio_billing (0.7.0)
+      flat_pack (~> 0.1.133)
       rails (~> 8.1.0)
-      recording_studio (~> 3.0)
-      recording_studio_accessible (~> 0.3.1)
-      recording_studio_admin (~> 1.1.0)
-      recording_studio_root_switchable (~> 0.3.1)
-      recording_studio_webhooks (~> 0.1.0)
+      recording_studio (~> 4.2)
+      recording_studio_accessible (~> 0.7.0)
+      recording_studio_admin (~> 2.0.1)
+      recording_studio_root_switchable (~> 0.5.0)
+      recording_studio_webhooks (~> 0.2.0)
       stripe (~> 19.5)
 
 GEM
@@ -422,7 +422,7 @@ CHECKSUMS
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   erb (6.0.0) sha256=2730893f9d8c9733f16cab315a4e4b71c1afa9cabc1a1e7ad1403feba8f52579
   erubi (1.13.1) sha256=a082103b0885dbc5ecf1172fede897f9ebdb745a4b97a5e8dc63953db1ee4ad9
-  flat_pack (0.1.129)
+  flat_pack (0.1.133)
   globalid (1.3.0) sha256=05c639ad6eb4594522a0b07983022f04aa7254626ab69445a0e493aa3786ff11
   i18n (1.14.7) sha256=ceba573f8138ff2c0915427f1fc5bdf4aa3ab8ae88c8ce255eb3ecf0a11a5d0f
   io-console (0.8.1) sha256=1e15440a6b2f67b6ea496df7c474ed62c860ad11237f29b3bd187f054b925fcb
@@ -477,12 +477,12 @@ CHECKSUMS
   rainbow (3.1.1) sha256=039491aa3a89f42efa1d6dec2fc4e62ede96eb6acd95e52f1ad581182b79bc6a
   rake (13.3.1) sha256=8c9e89d09f66a26a01264e7e3480ec0607f0c497a861ef16063604b1b08eb19c
   rdoc (6.16.1) sha256=71357cc208e6da77ba0c4494e01ae870dd18b437c7c7d801dd73ee2f340b9f5c
-  recording_studio (3.0.0)
-  recording_studio_accessible (0.3.1)
-  recording_studio_admin (1.1.0)
-  recording_studio_billing (0.6.1)
-  recording_studio_root_switchable (0.3.1)
-  recording_studio_webhooks (0.1.0)
+  recording_studio (4.2.0)
+  recording_studio_accessible (0.7.0)
+  recording_studio_admin (2.0.1)
+  recording_studio_billing (0.7.0)
+  recording_studio_root_switchable (0.5.0)
+  recording_studio_webhooks (0.2.0)
   redis-client (0.30.1) sha256=5151bc5c7bbfe48623732cdae3b900d8a22dc691cc7cdfacfb351ac55116522d
   regexp_parser (2.11.3) sha256=ca13f381a173b7a93450e53459075c9b76a10433caadcb2f1180f2c741fc55a4
   reline (0.6.3) sha256=1198b04973565b36ec0f11542ab3f5cfeeec34823f4e54cebde90968092b1835

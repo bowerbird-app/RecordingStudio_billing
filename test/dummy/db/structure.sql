@@ -1496,7 +1496,7 @@ CREATE TABLE public.recording_studio_billing_entitlement_grants (
     CONSTRAINT rs_billing_entitlement_grant_digest CHECK (((manifest_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT rs_billing_entitlement_grant_feature_kind CHECK (((feature_kind)::text = ANY (ARRAY[('boolean'::character varying)::text, ('limit'::character varying)::text, ('allowance'::character varying)::text, ('variant'::character varying)::text]))),
     CONSTRAINT rs_billing_entitlement_grant_merge_rule CHECK (((merge_rule)::text = ANY (ARRAY[('replace'::character varying)::text, ('minimum'::character varying)::text, ('maximum'::character varying)::text, ('merge'::character varying)::text, ('append'::character varying)::text]))),
-    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY ((ARRAY['RecordingStudioBilling::SubscriptionLine'::character varying, 'RecordingStudioBilling::Purchase'::character varying, 'RecordingStudioBilling::DefaultEntitlementBootstrap'::character varying])::text[]))),
+    CONSTRAINT rs_billing_entitlement_grant_source_type CHECK (((source_type)::text = ANY (ARRAY[('RecordingStudioBilling::SubscriptionLine'::character varying)::text, ('RecordingStudioBilling::Purchase'::character varying)::text, ('RecordingStudioBilling::DefaultEntitlementBootstrap'::character varying)::text]))),
     CONSTRAINT rs_billing_entitlement_grant_value CHECK ((jsonb_typeof(value) IS NOT NULL))
 );
 
@@ -4864,10 +4864,52 @@ CREATE INDEX index_recording_studio_webhooks_endpoints_on_provider_name ON publi
 
 
 --
+-- Name: index_rs_events_on_action_and_occurred_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rs_events_on_action_and_occurred_at ON public.recording_studio_events USING btree (action, occurred_at);
+
+
+--
+-- Name: index_rs_events_on_actor_and_occurred_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rs_events_on_actor_and_occurred_at ON public.recording_studio_events USING btree (actor_type, actor_id, occurred_at);
+
+
+--
+-- Name: index_rs_events_on_recording_and_timeline; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rs_events_on_recording_and_timeline ON public.recording_studio_events USING btree (recording_id, occurred_at DESC, created_at DESC);
+
+
+--
+-- Name: index_rs_recordings_on_root_and_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rs_recordings_on_root_and_parent ON public.recording_studio_recordings USING btree (root_recording_id, parent_recording_id);
+
+
+--
+-- Name: index_rs_recordings_on_root_and_recordable; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rs_recordings_on_root_and_recordable ON public.recording_studio_recordings USING btree (root_recording_id, recordable_type, recordable_id);
+
+
+--
 -- Name: index_rs_recordings_on_root_recording; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_rs_recordings_on_root_recording ON public.recording_studio_recordings USING btree (root_recording_id);
+
+
+--
+-- Name: index_rs_unique_root_recording_per_recordable; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_rs_unique_root_recording_per_recordable ON public.recording_studio_recordings USING btree (recordable_type, recordable_id) WHERE (parent_recording_id IS NULL);
 
 
 --
@@ -6788,6 +6830,7 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260817000002'),
 ('20260817000001'),
 ('20260816000001'),
+('20260815120000'),
 ('20260813014124'),
 ('20260809999999'),
 ('20260612000000'),

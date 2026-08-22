@@ -154,17 +154,11 @@ class ProjectsGateIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def grant_workspace_access!
-    previous = RecordingStudioAccessible.configuration.access_management_authorizer
-    RecordingStudioAccessible.configuration.access_management_authorizer = ->(**) { true }
-    result = RecordingStudioAccessible.grant_access(
+    result = RecordingStudioAccessible.bootstrap_owner_access!(
       recording: @root,
-      actor: @user,
-      role: "edit",
-      manager_actor: @user
+      actor: @user
     )
     raise "could not grant workspace access: #{result.error}" unless result.success?
-  ensure
-    RecordingStudioAccessible.configuration.access_management_authorizer = previous if defined?(previous)
   end
 
   def cleanup_projects_fixtures!

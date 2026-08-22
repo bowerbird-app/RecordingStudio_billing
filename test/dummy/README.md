@@ -7,12 +7,12 @@ test keys are present, the dummy can also call the Stripe test account.
 
 ## What it covers
 
-- Devise authentication with a seeded admin user who has Accessible `edit` on the Studio Workspace
+- Devise authentication with a seeded admin user who is the first Accessible owner of Studio Workspace and Billing Administration
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
-- FlatPack UI: sign-in uses the gem-template `application` layout; signed-in dummy pages use the left `flat_pack_sidebar` layout; mounted billing pages use Recording Studio's `recording_studio/default_layout` (the same left sidebar shell in this host)
+- FlatPack UI: sign-in uses the gem-template `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use Recording Studio's `recording_studio/default_layout` only (PageNav back/close, no left sidebar, no Sign out or Root Switchable control in that slot)
 - Tailwind source scanning for dummy views, billing views/components, and bundled FlatPack/Recording Studio gems (`bin/rails tailwindcss:build` writes those gem paths first)
-- Mounted customer billing. RecordingStudioAdmin **Products and pricing** is registered for later host wiring
+- Mounted customer billing at `/billing` and staff admin at `/admin`. RecordingStudioAdmin **Products and pricing** is registered on the Admin root
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
 - Seeded checkout presentations, Italy vs Germany euro checkout quotes, a live monthly plan on the Plan page, usage, refund/adjustment (including an uncertain refund), plan-change states, a restricted payment portal, and a reconciliation issue. Tax calculators are registered and tax stays off
 
@@ -35,8 +35,11 @@ Sign in with:
 - Email: `admin@admin.com`
 - Password: `Password`
 
-The root switcher moves between the Studio Workspace (customer billing) and
-Billing Administration (products and pricing).
+Switch roots on the dedicated Root Switchable page at
+`/recording_studio_root_switchable/v1/root_switch?scope=all_workspaces`. That
+moves between Studio Workspace (customer billing) and Billing Administration
+(products and pricing). The default-layout slot does not render the switcher
+or Sign out.
 
 If published dummy records were created by an older seed (for example the
 metered API-call product stored as a credit pack), reset from `test/dummy`:
@@ -49,6 +52,8 @@ bin/rails db:reset
 
 - `/` — dummy home
 - `/billing` — customer billing
+- `/plans` — plan picker
+- `/admin` — staff admin (Admin root)
 - `/dummy_portal` — demonstration payment portal (payment methods, address, tax IDs, invoice history)
 - `/users/sign_in` — Devise sign-in
 - `/up` — Rails health check
@@ -106,17 +111,23 @@ free ($0), monthly ($49), and annual ($490) plans. The live monthly plan is mark
 current. Choose this plan is the only card action. Cancel is on Overview.
 Change-request examples live on **Plan requests** (`/billing/billing/plan_requests`).
 `/billing/billing/plan` redirects to `/plans` when the host route is configured.
-`RecordingStudioBilling::CustomerSidebarComponent` so those screens sit in Recording Studio's
-layout. Recurring dummy checkouts share one execution group, so the cancelled hybrid
-journey is history on that same plan. Add-ons, Usage, Invoices, Payments, Billing settings,
-checkout, invoice detail, and the demonstration payment portal use the same Flatpack cards,
-lists, badges, and buttons.
+Those screens sit in Recording Studio's default layout (PageNav back, no sidebar,
+no Sign out or Root Switchable control in that slot). Recurring dummy checkouts
+share one execution group, so the cancelled hybrid journey is history on that
+same plan. Add-ons, Usage, Invoices, Payments, Billing settings, checkout,
+invoice detail, and the demonstration payment portal use the same Flatpack cards,
+lists, badges, and buttons. The seeded Usage page calls `effective_entitlements`,
+which raises when the live usage allowance (5) and prepaid credit pack (1000)
+both grant `demo_api_calls` with `replace`. That is catalogue data, not a layout
+bug. When Stripe test keys are present, a $1 Stripe test monthly plan is also
+published on the shared catalogue and can take one of the Plan page's three card
+slots.
 
 ## Why this app exists
 
 Use it to verify the billing engine in a real host. If a layout, route, asset
 source, or Recording Studio initializer change breaks here, fix that before
 changing adapters. Keep user-facing copy on **products, prices, and checkout**;
-leave recordings and recordables in code. The dummy admin can open `/billing`
-because seeds grant Accessible `edit` on the workspace. A signed-in user
-without that grant receives `404`.
+leave recordings and recordables in code. The dummy admin can open `/billing` and `/admin` because seeds bootstrap
+Accessible ownership on the workspace and Admin root. A signed-in user
+without a workspace grant receives `404` on customer billing.

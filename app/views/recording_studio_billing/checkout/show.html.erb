@@ -1,3 +1,4 @@
+<% billing_page_nav(title: "Checkout", back_url: billing_overview_path_for) %>
 <% provider_key = @presenter.checkout_intent.financial_command&.provider_adapter_key %>
 <% provider_component = RecordingStudioBilling.configuration.billing_provider_component(provider_key, :checkout) %>
 <% provider_component = provider_component.constantize if provider_component.is_a?(String) %>

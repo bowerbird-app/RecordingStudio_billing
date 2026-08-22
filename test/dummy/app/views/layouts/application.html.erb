@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="rounded" class="h-full overscroll-none">
+<html data-theme="rounded">
   <head>
     <title><%= content_for(:title) || "Dummy" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -15,16 +15,17 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
+    <%# Load Tailwind utilities first. Do not link flat_pack/application — its relative
+        @imports are not rewritten by Propshaft and break sign-in styles. %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "flat_pack/variables", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "flat_pack/application", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "flat_pack/rich_text", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "flat_pack/variables", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "flat_pack/rich_text", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags if respond_to?(:javascript_importmap_tags) %>
   </head>
 
-  <body class="m-0 min-h-full bg-(--surface-page-background-color) text-(--surface-content-color)">
-    <main class="container mx-auto mt-28 px-5">
+  <body class="m-0 min-h-screen bg-[var(--surface-page-background-color)] text-[var(--surface-content-color)]">
+    <main class="mx-auto flex min-h-screen w-full max-w-md items-center justify-center p-6">
       <%= yield %>
     </main>
   </body>

@@ -11,7 +11,7 @@
       text: @presenter.copy("settings_payment_details", "Manage payment details"),
       style: :secondary,
       size: :md,
-      url: helpers.portal_billing_path(root_recording_id: @presenter.root_recording.id),
+      href: helpers.portal_billing_path(root_recording_id: @presenter.root_recording.id),
       method: :post
     ) %>
   <% end %>
@@ -36,7 +36,7 @@
     <% end %>
   <% end %>
   <% if @presenter.support_url.present? %>
-    <%= render FlatPack::Button::Component.new(text: @presenter.copy("support_label", "Billing support"), style: :secondary, size: :md, url: @presenter.support_url, target: "_blank") %>
+    <%= render FlatPack::Button::Component.new(text: @presenter.copy("support_label", "Billing support"), style: :secondary, size: :md, href: @presenter.support_url, target: "_blank") %>
   <% end %>
 </div>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
