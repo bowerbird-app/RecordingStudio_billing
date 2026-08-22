@@ -236,7 +236,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal original_count, RecordingStudioBilling::Product.count
-    foreign_price, foreign_admin = draft_price
+    foreign_price, foreign_admin = draft_price(admin_name: "Foreign Admin #{SecureRandom.hex(4)}")
     sign_in @user
     grant_admin_access!(site_admin_recording)
     post "/billing/admin/operations/create_draft_provider_account", params: {
