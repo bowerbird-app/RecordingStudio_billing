@@ -342,8 +342,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "2 x 1000 EUR"
     assert_includes response.body, "one-time"
     refute_includes response.body, "One off credit pack"
-    main = response.body[%r{<main class="p-6">.*?</main>}m]
-    assert main.present?
+    main = response.body[%r{<main class="[^"]*p-6[^"]*">.*?</main>}m]
+    assert main.present?, response.body
     refute_includes main, other_root.id
     assert_equal "one_off_credit_pack", purchase.mode
   end
@@ -399,10 +399,23 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   def switch_root(root)
+    ensure_view_access!(root)
     patch "/recording_studio_root_switchable/v1/root_switch", params: {
       scope: "all_workspaces", root_switch: { root_recording_id: root.id, return_to: "/" }
     }
-    assert_response :redirect
+    assert_response :redirect, response.body
+  end
+
+  def ensure_view_access!(root, actor: @user)
+    return if RecordingStudioAccessible.authorized?(actor:, recording: root, role: :view)
+
+    result = RecordingStudioAccessible.bootstrap_owner_access!(recording: root, actor:)
+    return if result.success?
+
+    result = RecordingStudioAccessible.grant_access(
+      recording: root, actor:, role: :view, manager_actor: actor
+    )
+    raise result.error unless result.success?
   end
 
   def published_checkout_option(recurrence: "one_time", interval: nil, adapter_key: "fake", product_kind: "service", checkout_policy: "allowed", amount_minor: 1_000)
