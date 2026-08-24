@@ -4,30 +4,8 @@
 
 ## 0.9.0
 
-Require a human display name on Product and BillingOption.
-
-### Added
-
-- Product and BillingOption now require `name` next to the stable catalogue
-  `key`, matching ProviderAccount. Dummy seeds use human labels such as
-  Monthly plan and Annual plan. The New product form asks for Name first. The
-  Products inventory shows Name and still shows Key.
-
-### Upgrade notes
-
-- Run the new engine migration
-  (`20260822000001_add_name_to_products_and_billing_options`). Fresh installs
-  pick it up from install SQL. There is no production data and no backfill:
-  create and seed paths must send `name` explicitly. Do not default name from
-  key. `create_draft_product` and `create_draft_billing_option` already accept
-  column attributes, so hosts only need to include `name` in `attributes`.
-  Commercial manifests still publish product `key` and `kind`; name is for
-  Admin inventory and create forms.
-
-## 0.8.0
-
-Turn the three billing Admin hubs into dashboards with inventory, instead of
-empty section titles and filter-only screens.
+Turn the three billing Admin hubs into dashboards with inventory, and require a
+human display name on Product and BillingOption.
 
 ### Added
 
@@ -69,11 +47,27 @@ empty section titles and filter-only screens.
   which writes a draft with `RecordingStudio.record!`. The button and screen
   authorize `billing_products` `create` the same way other billing admin_actions
   do. View-only actors do not see New and receive 403 on the create screen.
+- Product and BillingOption now require `name` next to the stable catalogue
+  `key`, matching ProviderAccount. `Product#name` is the required column, not
+  the 0.8.0 config lookup. Dummy seeds store human labels on those rows
+  (Free plan, Pro, Pro yearly, Starter). The New product form asks for Name
+  first. The Products inventory shows Name and still shows Key.
 
 ### Upgrade notes
 
-- No host migration. Include `BillingAdminSupport` on the Admin root as before.
-  The concern still enables `:billing_commercial`, `:billing_financial`, and
+- Run the new engine migration
+  (`20260822000001_add_name_to_products_and_billing_options`). Fresh installs
+  pick it up from install SQL. There is no production data and no backfill:
+  create and seed paths must send `name` explicitly. Do not default name from
+  key. `create_draft_product` and `create_draft_billing_option` already accept
+  column attributes, so hosts only need to include `name` in `attributes`.
+  Commercial manifests still publish product `key` and `kind`; name is for
+  Admin inventory, create forms, and customer offer labels.
+- Hosts that set `config.product_display_names` in 0.8.0 should put those
+  strings on `Product#name`. The config key remains accepted as an offer-label
+  fallback only; it no longer overrides the column.
+- Include `BillingAdminSupport` on the Admin root as before. The concern still
+  enables `:billing_commercial`, `:billing_financial`, and
   `:billing_operations`. Inventory screens become reachable because those
   sections now link them; do not add placeholder sections.
 - Account-scoped feature overrides remain a root-scoped screen. They appear
@@ -88,7 +82,7 @@ empty section titles and filter-only screens.
   `RecordingStudioAccessible` `avatar_resolver`. Without it, granted actors
   still fall back to + Access. Dummy now ships that resolver.
 - Dummy/dev only: the Gemfiles pin Flatpack #159 until that branch is tagged.
-  Published `flat_pack ~> 0.1.133` is unchanged. Do not copy button CSS into
+  Published `flat_pack ~> 0.1.135` is unchanged. Do not copy button CSS into
   Billing. After #159 merges, switch the pin back to a released tag. Hosts that
   set `data-theme` only on `body` should also set it on `html` so the rounded
   rebinds inherit from the document root.
@@ -96,6 +90,53 @@ empty section titles and filter-only screens.
   Billing CRUD controller. Hosts that already registered `create_draft_product`
   keep that POST. Do not add a generic Admin form that writes published product
   rows. Revise stays `revise`. Publish stays `CommercialPublisher`.
+
+## 0.8.0
+
+Compose customer Overview, Plan, and Usage on Flatpack Billing parts. Customer
+child routes sit on the engine root instead of a nested `resource :billing`.
+
+### Breaking
+
+- Gemspec floor is now `flat_pack ~> 0.1.135` (Billing family: Plan Summary,
+  Plan Picker, Usage Meter, Status Alert). Pin the Flatpack branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version is on main.
+- Customer screens that were `/billing/billing/:page` are now `/billing/:page`
+  (`usage`, `plan`, `plan_requests`, `addons`, `invoices`, `payments`,
+  `settings`, `checkout`, `portal`). Helper names are unchanged
+  (`usage_billing_path`, `checkout_billing_path`, …).
+- Plan tiles use `FlatPack::Billing::PlanPicker`. Choosing a plan is a GET to
+  `/billing/checkout/new`, then the existing POST checkout. Choosable tiles use
+  **Choose plan**. The current tile is a disabled **Current** button in the
+  card body (not a badge, not `cta: false`).
+
+### Changed
+
+- Overview current plan is `FlatPack::Billing::PlanSummary` in a
+  `Grid` (`cols: 3`). Primary action is Change plan (to `/plans`). Status is
+  omitted (`status: nil`, no badge). Cancel / resume sit in the actions row
+  as secondary buttons. The footer slot is not set.
+- Dummy catalogue display names: Free plan, Pro ($49), Pro yearly, and Starter
+  ($1 Stripe test). Two monthly tiles no longer share "Monthly plan".
+- Usage uses Usage Meter for the period, List rows for prepaid credits and
+  charges, a named "On this plan" list instead of a hash dump, and
+  `Billing::StatusAlert` for the read-only notice. Card titles use the same
+  Card header heading as Invoices — SectionTitle's baked-in `my-8` is for
+  page sections, not card chrome.
+
+### Upgrade notes
+
+- Bump the host Flatpack pin to `0.1.135` (GitHub branch
+  `cursor/plan-picker-current-no-cta-6ba6` until that version lands on main).
+- Update any hardcoded `/billing/billing/...` links to `/billing/...`. Named
+  helpers do not change.
+- Set `config.product_display_names` when two plans would otherwise share an
+  interval label such as "Monthly plan". Dummy uses
+  `DummyV1Catalogue::PRODUCT_DISPLAY_NAMES`.
+- Rebuild Tailwind so Flatpack Billing classes are present.
+- Plan picker copy default is **Choose plan** (was "Choose this plan").
+  Sign-in CTA default is **Sign in to choose a plan**. Current tiles no
+  longer pass `cta: false`.
 
 ## 0.7.0
 

@@ -7,6 +7,13 @@ require_relative "../../../app/services/recording_studio_billing/fake_tax_calcul
 # products, prices, and journey fixtures through the same services production
 # uses. Reset the dummy database if a published record no longer matches.
 class DummyV1Catalogue
+  PRODUCT_DISPLAY_NAMES = {
+    "demo_free_plan" => "Free plan",
+    "demo_monthly_plan" => "Pro",
+    "demo_annual_plan" => "Pro yearly",
+    "stripe_test_monthly_plan" => "Starter"
+  }.freeze
+
   Result = Struct.new(
     :user, :workspace, :admin_root, :root_recording, :admin_root_recording,
     :account, :billing_admin, :fake_provider, :stripe_test_provider,
@@ -28,15 +35,15 @@ class DummyV1Catalogue
     "demo_usage_option" => "Monthly usage",
     "demo_free_plan" => "Free plan",
     "demo_free_plan_option" => "Monthly",
-    "demo_monthly_plan" => "Monthly plan",
+    "demo_monthly_plan" => "Pro",
     "demo_monthly_plan_option" => "Monthly",
-    "demo_annual_plan" => "Annual plan",
+    "demo_annual_plan" => "Pro yearly",
     "demo_annual_plan_option" => "Annual",
     "demo_quantity_addon" => "Quantity add-on",
     "demo_quantity_addon_option" => "Monthly add-on",
     "demo_credit_pack" => "Credit pack",
     "demo_credit_pack_option" => "One-time pack",
-    "stripe_test_monthly_plan" => "Monthly plan",
+    "stripe_test_monthly_plan" => "Starter",
     "stripe_test_monthly_plan_option" => "Monthly"
   }.freeze
 
@@ -65,6 +72,7 @@ class DummyV1Catalogue
   end
 
   def call
+    RecordingStudioBilling.configuration.product_display_names = PRODUCT_DISPLAY_NAMES
     ActiveRecord::Base.connection.clear_query_cache
     @user = User.find_or_create_by!(email: "admin@admin.com") do |user|
       user.password = "Password"

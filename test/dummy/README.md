@@ -53,8 +53,9 @@ bin/rails db:reset
 ## Useful routes
 
 - `/` — dummy home
-- `/billing` — customer billing
-- `/plans` — plan picker
+- `/billing` — customer billing (Plan Summary)
+- `/billing/usage` — usage meters and prepaid credits
+- `/plans` — plan picker (Free plan, Pro, Pro yearly)
 - `/admin` — staff admin (Admin root)
 - `/dummy_portal` — demonstration payment portal (payment methods, address, tax IDs, invoice history)
 - `/users/sign_in` — Devise sign-in
@@ -107,23 +108,25 @@ plans, prices, and tax at checkout. If a later Charge Market would change the
 price, checkout requotes, restarts, rejects, or holds for review instead of
 keeping the cheaper quote. Browser return does not complete a purchase.
 
-Customer **Plan** is `/plans` (host route; gem-owned controller and cards). After seed,
-Studio Workspace shows a title, subtitle, and three Flatpack pricing cards for the US
-free ($0), monthly ($49), and annual ($490) plans. The live monthly plan is marked
-current. Choose this plan is the only card action. Cancel is on Overview.
-Change-request examples live on **Plan requests** (`/billing/billing/plan_requests`).
-`/billing/billing/plan` redirects to `/plans` when the host route is configured.
-Those screens sit in Recording Studio's default layout (PageNav back, no sidebar,
-no Sign out or Root Switchable control in that slot). Recurring dummy checkouts
-share one execution group, so the cancelled hybrid journey is history on that
-same plan. Add-ons, Usage, Invoices, Payments, Billing settings, checkout,
-invoice detail, and the demonstration payment portal use the same Flatpack cards,
-lists, badges, and buttons. The seeded Usage page calls `effective_entitlements`,
-which raises when the live usage allowance (5) and prepaid credit pack (1000)
-both grant `demo_api_calls` with `replace`. That is catalogue data, not a layout
-bug. When Stripe test keys are present, a $1 Stripe test monthly plan is also
-published on the shared catalogue and can take one of the Plan page's three card
-slots.
+Customer **Plan** is `/plans` (host route; gem-owned controller and Plan Picker).
+After seed, Studio Workspace shows a title, subtitle, and three Flatpack Plan
+Picker tiles for the US Free plan ($0), Pro ($49), and Pro yearly ($490). The
+live Pro plan shows a disabled Current button in the card body. Choose plan
+is the action on the other tiles. Overview puts Change plan and Cancel in the Plan Summary actions
+row. Change-request examples live on **Plan requests**
+(`/billing/plan_requests`). `/billing/plan` redirects to `/plans` when the host
+route is configured. Those screens sit in Recording Studio's default layout
+(PageNav back, no sidebar, no Sign out or Root Switchable control in that slot).
+Recurring dummy checkouts share one execution group, so the cancelled hybrid
+journey is history on that same plan. Overview uses Plan Summary. Usage uses
+Usage Meter, List rows, and Status Alert. Add-ons, Invoices, Payments, Billing
+settings, checkout, invoice detail, and the demonstration payment portal stay on
+cards, lists, badges, and buttons. The seeded Usage page calls
+`effective_entitlements`, which raises when the live usage allowance (5) and
+prepaid credit pack (1000) both grant `demo_api_calls` with `replace`. That is
+catalogue data, not a layout bug. When Stripe test keys are present, a $1 Stripe
+test plan named **Starter** is also published on the shared catalogue and can
+take one of the Plan page's three tiles.
 
 ## Why this app exists
 

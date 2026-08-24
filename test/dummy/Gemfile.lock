@@ -48,7 +48,7 @@ GIT
 
 GIT
   remote: https://github.com/bowerbird-app/flatpack.git
-  revision: daceb04b76578b2d7adfa42a65e1f66f42d24f23
+  revision: 6050a348c1c661c15dcdfe7bd92169e2eb1c299a
   branch: cursor/plan-picker-current-no-cta-6ba6
   specs:
     flat_pack (0.1.135)
@@ -61,7 +61,7 @@ PATH
   remote: ../..
   specs:
     recording_studio_billing (0.9.0)
-      flat_pack (~> 0.1.133)
+      flat_pack (~> 0.1.135)
       rails (~> 8.1.0)
       recording_studio (~> 4.2)
       recording_studio_accessible (~> 0.7.0)

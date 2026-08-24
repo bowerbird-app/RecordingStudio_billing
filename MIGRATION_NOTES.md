@@ -10,8 +10,21 @@ install SQL. Existing hosts run
 `20260822000001_add_name_to_products_and_billing_options`.
 
 There is no production data and no backfill. Create, revise, and seed paths
-must send `name` explicitly. Do not copy `key` into `name`. Dummy seeds use
-human labels such as Monthly plan and Annual plan.
+must send `name` explicitly. Do not copy `key` into `name`. `Product#name` is
+the required column, not `config.product_display_names`. Dummy seeds store
+human labels such as Free plan, Pro, Pro yearly, and Starter on those rows.
+
+## 0.8.0 — Flatpack Billing composition
+
+No schema change. Hosts bump Flatpack to `~> 0.1.135` (branch
+`cursor/plan-picker-current-no-cta-6ba6` until it is on main) and replace hardcoded
+`/billing/billing/...` paths with `/billing/...`. Named route helpers stay the
+same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
+Usage Meter, and Status Alert. Overview puts Change plan and Cancel / Resume in
+the Plan Summary actions row and omits the status badge (`status: nil`). Plan
+Picker choosable tiles say Choose plan; the current tile is a disabled Current
+button in the card body. From 0.9.0, put distinct titles on `Product#name`.
+`config.product_display_names` remains an offer-label fallback only.
 
 ## 0.6.0 — app-owned gates and freemium bootstrap
 

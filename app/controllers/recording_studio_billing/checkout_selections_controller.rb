@@ -4,6 +4,14 @@ module RecordingStudioBilling
   class CheckoutSelectionsController < ApplicationController
     before_action -> { authorize_billing_action!(:start_checkout) }
 
+    def new
+      @billing_option_recording_id = params.require(:billing_option_recording_id)
+      @plan_name = checkout_plan_name(@billing_option_recording_id)
+    rescue ActionController::ParameterMissing, ActiveRecord::RecordNotFound
+      redirect_back fallback_location: RecordingStudioBilling::PlansPage.path_for(root_recording),
+                    alert: "That billing selection is not currently available."
+    end
+
     def create
       result = RecordingStudioBilling.create_checkout_intent(
         root_recording: root_recording,
@@ -23,6 +31,20 @@ module RecordingStudioBilling
     end
 
     private
+
+    def checkout_plan_name(option_recording_id)
+      recording = RecordingStudio::Recording.find(option_recording_id)
+      option = recording.recordable
+      raise ActiveRecord::RecordNotFound unless option.is_a?(BillingOption)
+
+      product = option.product_recording&.recordable
+      BasePresenter.new(root_recording:).offer_label(
+        kind: product.try(:kind) || "plan",
+        interval: option.interval,
+        name: product.try(:name),
+        key: product.try(:key)
+      )
+    end
 
     def trusted_host_country
       context = RecordingStudioBilling.configuration.billing_location_context_resolver&.call(
