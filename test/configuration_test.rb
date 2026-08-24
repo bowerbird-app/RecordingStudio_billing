@@ -73,6 +73,12 @@ class ConfigurationTest < Minitest::Test
     assert_equal "commercial_authorizer must respond to call", error.message
   end
 
+  def test_normalizes_product_display_names
+    @configuration.product_display_names = { demo_monthly_plan: "Pro" }
+
+    assert_equal "Pro", @configuration.product_display_names.fetch("demo_monthly_plan")
+  end
+
   def test_merge_accepts_customer_delivery_copy_and_support_link
     @configuration.merge!(
       billing_copy: { settings_notice: "Contact billing support." },

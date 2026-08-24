@@ -13,6 +13,9 @@ RecordingStudioBilling.configure do |config|
   config.plans_page_route_helper = :plans_path
   config.plans_page_requires_sign_in = true
   #
+  # Optional product titles when two plans would otherwise share an interval label:
+  # config.product_display_names = { "pro_monthly" => "Pro", "starter_monthly" => "Starter" }
+  #
   # Optional freemium bootstrap from a published $0 plan in your admin catalogue:
   # config.default_free_plan_product_key = "free_plan"
   #

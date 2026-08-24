@@ -4,6 +4,7 @@ require File.expand_path("../../../../app/services/recording_studio_billing/fake
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_tax_calculator", __dir__)
 require File.expand_path("../../lib/dummy_stripe_checkout_execution", __dir__)
 require File.expand_path("../../lib/dummy_stripe_test_credentials", __dir__)
+require Rails.root.join("db/dummy_v1_catalogue")
 
 module RecordingStudioBilling
   class DummyFinancialAdapter < FakeFinancialAdapter
@@ -161,6 +162,7 @@ RecordingStudioBilling.configure do |config|
   end
   config.plans_page_route_helper = :plans_path
   config.plans_page_requires_sign_in = true
+  config.product_display_names = DummyV1Catalogue::PRODUCT_DISPLAY_NAMES
 end
 
 RecordingStudioBilling.register_provider(:fake, RecordingStudioBilling::DummyFinancialAdapter.new)

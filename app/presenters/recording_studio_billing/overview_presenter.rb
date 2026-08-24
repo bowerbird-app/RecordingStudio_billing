@@ -44,6 +44,7 @@ module RecordingStudioBilling
         interval: line.interval,
         recurrence: snapshot_value(terms, "billing_option", "recurrence"),
         name: snapshot_value(terms, "product", "name"),
+        key: snapshot_value(terms, "product", "key"),
         amount_minor: line.amount_minor
       )
     end
@@ -55,6 +56,7 @@ module RecordingStudioBilling
         interval: line.interval,
         recurrence: snapshot_value(terms, "billing_option", "recurrence"),
         name: snapshot_value(terms, "product", "name"),
+        key: snapshot_value(terms, "product", "key"),
         amount_minor: line.amount_minor
       )
       cadence = cadence_label(snapshot_value(terms, "billing_option", "recurrence") || "recurring", line.interval)

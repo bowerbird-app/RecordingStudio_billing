@@ -12,5 +12,9 @@ module RecordingStudioBilling
     commercial_reference :provider_account_recording, type: "RecordingStudioBilling::ProviderAccount"
 
     validates :kind, inclusion: { in: KINDS }
+
+    def name
+      RecordingStudioBilling.configuration.product_display_names[key]
+    end
   end
 end

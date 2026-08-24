@@ -30,9 +30,14 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
-    assert_includes response.body, "Monthly plan"
+    assert_includes response.body, "Pro"
     assert_includes response.body, "$49"
-    assert_includes response.body, "View plans"
+    assert_includes response.body, "Change plan"
+    assert_includes response.body, "Cancel plan"
+    refute_includes response.body, "View plans"
+    refute_includes response.body, "Active"
+    assert_operator response.body.index("Change plan"), :<, response.body.index("Cancel plan")
+    refute_includes response.body[response.body.index("Change plan")..response.body.index("Cancel plan")], "border-t"
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
     assert_includes response.body, 'data-theme="rounded"'
     assert_includes response.body, "flat-pack-page-nav"
@@ -232,23 +237,28 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   test "plan invoices payments and portal show hybrid money changes and restricted payment details" do
     select_root(@workspace_root)
 
-    get "/billing/billing/plan", params: { root_recording_id: @workspace_root.id }
+    get "/billing/plan", params: { root_recording_id: @workspace_root.id }
     assert_response :redirect
     assert_includes response.redirect_url, "/plans"
     assert_includes response.redirect_url, @workspace_root.id.to_s
 
     get "/plans", params: { root_recording_id: @workspace_root.id }
     assert_response :success, response.body
-    assert_includes response.body, "Monthly plan"
+    assert_includes response.body, "Pro"
     assert_includes response.body, "Current"
+    assert_includes response.body, "disabled"
+    refute_includes response.body, "data-flat-pack-plan-picker=\"cta-spacer\""
+    refute_includes response.body, "Current plan"
     assert_includes response.body, "$0"
     assert_includes response.body, "$49"
     assert_includes response.body, "$490"
     assert_includes response.body, "Free plan"
-    assert_includes response.body, "Annual plan"
+    assert_includes response.body, "Pro yearly"
+    refute_includes response.body, "Annual plan"
     assert_includes response.body, "Choose a plan"
     assert_includes response.body, "Pick the plan that fits this workspace"
-    assert_includes response.body, "Choose this plan"
+    assert_includes response.body, "Choose plan"
+    refute_includes response.body, "Choose this plan"
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
     assert_includes response.body, "flat-pack-page-nav"
     refute_includes response.body, "$51"
@@ -256,7 +266,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Cancel plan"
     refute_includes response.body, "Scheduled"
 
-    get "/billing/billing/plan_requests", params: { root_recording_id: @workspace_root.id }
+    get "/billing/plan_requests", params: { root_recording_id: @workspace_root.id }
     assert_response :success, response.body
     assert_includes response.body, "Plan requests"
     assert_includes response.body, "Scheduled"
@@ -278,21 +288,21 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_equal change_count, RecordingStudioBilling::SubscriptionChangeIntent.count
 
-    get "/billing/billing/invoices", params: { root_recording_id: @workspace_root.id }
+    get "/billing/invoices", params: { root_recording_id: @workspace_root.id }
     assert_response :success
     assert_includes response.body, "Waiting for confirmation"
 
-    get "/billing/billing/payments", params: { root_recording_id: @workspace_root.id }
+    get "/billing/payments", params: { root_recording_id: @workspace_root.id }
     assert_response :success
     assert_includes response.body, "Refund"
     assert_includes response.body, "Waiting for confirmation"
 
-    get "/billing/billing/settings", params: { root_recording_id: @workspace_root.id }
+    get "/billing/settings", params: { root_recording_id: @workspace_root.id }
     assert_response :success
     assert_includes response.body, "Manage payment details"
     assert_includes response.body, "payment portal"
 
-    post "/billing/billing/portal", params: { root_recording_id: @workspace_root.id }
+    post "/billing/portal", params: { root_recording_id: @workspace_root.id }
     assert_redirected_to "http://www.example.com/dummy_portal"
     follow_redirect!
     assert_response :success

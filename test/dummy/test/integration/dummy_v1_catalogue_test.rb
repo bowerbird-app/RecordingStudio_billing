@@ -48,6 +48,9 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     assert_equal "service", products.find_by!(key: "demo_usage_product").kind
     assert_equal "credit_pack", products.find_by!(key: "demo_credit_pack").kind
     assert_equal "plan", products.find_by!(key: "demo_monthly_plan").kind
+    assert_equal "Pro", products.find_by!(key: "demo_monthly_plan").name
+    assert_equal "Pro yearly", products.find_by!(key: "demo_annual_plan").name
+    assert_equal "Free plan", products.find_by!(key: "demo_free_plan").name
     assert_equal 14, options.find_by!(key: "demo_annual_plan_option").trial_days
     assert_equal 0, options.find_by!(key: "demo_monthly_plan_option").trial_days
     assert_equal [0, 4_900, 49_000], %w[demo_free_plan demo_monthly_plan demo_annual_plan].map { |key|

@@ -2,6 +2,19 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.8.0 — Flatpack Billing composition
+
+No schema change. Hosts bump Flatpack to `~> 0.1.135` (branch
+`cursor/plan-picker-current-no-cta-6ba6` until it is on main) and replace hardcoded
+`/billing/billing/...` paths with `/billing/...`. Named route helpers stay the
+same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
+Usage Meter, and Status Alert. Overview puts Change plan and Cancel / Resume in
+the Plan Summary actions row and omits the status badge (`status: nil`). Plan
+Picker choosable tiles say Choose plan; the current tile is a disabled Current
+button in the card body. Set
+`config.product_display_names` if two catalogue products would otherwise share
+an interval label.
+
 ## 0.6.0 — app-owned gates and freemium bootstrap
 
 Adds `recording_studio_billing_default_entitlement_bootstraps` and extends

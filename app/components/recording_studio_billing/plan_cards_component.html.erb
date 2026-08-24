@@ -1,5 +1,1 @@
-<div class="grid gap-6 md:grid-cols-3">
-  <% @presenter.plan_cards.each do |plan| %>
-    <%= render RecordingStudioBilling::PlanCardComponent.new(plan:, presenter: @presenter) %>
-  <% end %>
-</div>
+<%= render FlatPack::Billing::PlanPicker::Component.new(items: @presenter.plan_picker_items) %>

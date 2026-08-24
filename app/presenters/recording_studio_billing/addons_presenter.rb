@@ -15,6 +15,7 @@ module RecordingStudioBilling
             interval: snapshot_value(terms, "billing_option", "interval"),
             recurrence: snapshot_value(terms, "billing_option", "recurrence") || purchase.mode,
             name: snapshot_value(terms, "product", "name"),
+            key: snapshot_value(terms, "product", "key"),
             amount_minor: purchase.amount_minor
           ),
           quantity: purchase.quantity,

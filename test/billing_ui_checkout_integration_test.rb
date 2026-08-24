@@ -46,12 +46,12 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   test "same rendered checkout form creates one intent command and attempt" do
     parameters = selection_params
 
-    post "/billing/billing/checkout", params: parameters
+    post "/billing/checkout", params: parameters
     assert_redirected_to %r{/billing/checkout/}
     first_intent = RecordingStudioBilling::CheckoutIntent.for_root(@root).sole
     assert_redirected_to "/billing/checkout/#{first_intent.id}?root_recording_id=#{@root.id}"
 
-    post "/billing/billing/checkout", params: parameters
+    post "/billing/checkout", params: parameters
 
     assert_redirected_to "/billing/checkout/#{first_intent.id}?root_recording_id=#{@root.id}"
     assert_equal 1, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
@@ -60,7 +60,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   test "plans-style checkout without country_code uses trusted host market context" do
-    post "/billing/billing/checkout", params: {
+    post "/billing/checkout", params: {
       checkout_request_key: SecureRandom.hex(16),
       items: { "0" => { billing_option_recording_id: @option.recording.id } }
     }
@@ -74,7 +74,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   test "plans-style checkout without country or host evidence fails closed" do
     RecordingStudioBilling.configuration.billing_location_context_resolver = nil
 
-    post "/billing/billing/checkout", params: {
+    post "/billing/checkout", params: {
       checkout_request_key: SecureRandom.hex(16),
       items: { "0" => { billing_option_recording_id: @option.recording.id } }
     }
@@ -84,9 +84,9 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   end
 
   test "same checkout request key with changed selection redirects safely without a second command" do
-    post "/billing/billing/checkout", params: selection_params
+    post "/billing/checkout", params: selection_params
 
-    post "/billing/billing/checkout", params: selection_params(quantity: 2)
+    post "/billing/checkout", params: selection_params(quantity: 2)
 
     assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 1, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
@@ -228,7 +228,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       selection_params(items: { "0" => { billing_option_recording_id: @option.recording.id, amount_minor: 1,
                                          provider: "forged", tax: "forged", url: "https://evil.example", market: "forged", total: 1 } })
     ].each do |parameters|
-      post "/billing/billing/checkout", params: parameters
+      post "/billing/checkout", params: parameters
 
       assert_redirected_to %r{/plans\?root_recording_id=}
     end
@@ -239,18 +239,18 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   test "direct requests for disabled or duplicate checkout options redirect without persistence" do
     disabled_root, disabled_option = published_checkout_option(checkout_policy: "disabled")
     switch_root(disabled_root)
-    post "/billing/billing/checkout", params: selection_params(items: {
-                                                                 "0" => { billing_option_recording_id: disabled_option.recording.id, quantity: 1 }
-                                                               })
+    post "/billing/checkout", params: selection_params(items: {
+                                                         "0" => { billing_option_recording_id: disabled_option.recording.id, quantity: 1 }
+                                                       })
 
     assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(disabled_root).count
 
     switch_root(@root)
-    post "/billing/billing/checkout", params: selection_params(items: {
-                                                                 "0" => { billing_option_recording_id: @option.recording.id, quantity: 1 },
-                                                                 "1" => { billing_option_recording_id: @option.recording.id, quantity: 1 }
-                                                               })
+    post "/billing/checkout", params: selection_params(items: {
+                                                         "0" => { billing_option_recording_id: @option.recording.id, quantity: 1 },
+                                                         "1" => { billing_option_recording_id: @option.recording.id, quantity: 1 }
+                                                       })
 
     assert_redirected_to %r{/plans\?root_recording_id=}
     assert_equal 0, RecordingStudioBilling::CheckoutIntent.for_root(@root).count
@@ -270,8 +270,12 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing", params: { root_recording_id: root.id }
     assert_response :success
     assert_includes response.body, "Monthly plan"
-    assert_includes response.body, "View plans"
+    assert_includes response.body, "Change plan"
     assert_includes response.body, "Cancel plan"
+    refute_includes response.body, "View plans"
+    refute_includes response.body, "Active"
+    assert_operator response.body.index("Change plan"), :<, response.body.index("Cancel plan")
+    refute_includes response.body[response.body.index("Change plan")..response.body.index("Cancel plan")], "border-t"
     refute_includes response.body, "Current versions"
     refute_includes response.body, "Market:"
 
@@ -336,7 +340,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     RecordingStudioBilling.ensure_account(root_recording: other_root, name: "Other")
     switch_root(root)
 
-    get "/billing/billing/addons", params: { root_recording_id: root.id }
+    get "/billing/addons", params: { root_recording_id: root.id }
 
     assert_response :success
     assert_includes response.body, "Credit pack"
