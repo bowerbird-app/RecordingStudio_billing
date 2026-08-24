@@ -28,6 +28,25 @@ class DummyV1Catalogue
     "demo_global_market" => { countries: [], currency: "USD", amount: 1_300, global: true }
   }.freeze
 
+  CATALOGUE_NAMES = {
+    "demo_checkout_product" => "Checkout product",
+    "demo_checkout_option" => "Checkout",
+    "demo_usage_product" => "Usage product",
+    "demo_usage_option" => "Monthly usage",
+    "demo_free_plan" => "Free plan",
+    "demo_free_plan_option" => "Monthly",
+    "demo_monthly_plan" => "Pro",
+    "demo_monthly_plan_option" => "Monthly",
+    "demo_annual_plan" => "Pro yearly",
+    "demo_annual_plan_option" => "Annual",
+    "demo_quantity_addon" => "Quantity add-on",
+    "demo_quantity_addon_option" => "Monthly add-on",
+    "demo_credit_pack" => "Credit pack",
+    "demo_credit_pack_option" => "One-time pack",
+    "stripe_test_monthly_plan" => "Starter",
+    "stripe_test_monthly_plan_option" => "Monthly"
+  }.freeze
+
   PLAN_MARKET_AMOUNTS = {
     "demo_free_plan" => {
       "demo_us_market" => { amount: 0, currency: "USD" }
@@ -161,11 +180,13 @@ class DummyV1Catalogue
   def seed_markets_and_checkout_prices!
     product = find_or_record(
       RecordingStudioBilling::Product, "demo_checkout_product",
-      provider_account_recording: @fake_provider.recording, kind: "service", feature_values: {}
+      provider_account_recording: @fake_provider.recording, kind: "service",
+      name: catalogue_name("demo_checkout_product"), feature_values: {}
     )
     option = find_or_record(
       RecordingStudioBilling::BillingOption, "demo_checkout_option",
       parent: product, product_recording: product.recording, recurrence: "one_time",
+      name: catalogue_name("demo_checkout_option"),
       quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat",
       collection_method: "automatic", payment_terms_days: 0, trial_days: 0,
       proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed",
@@ -198,12 +219,14 @@ class DummyV1Catalogue
     @usage_product = find_or_record(
       RecordingStudioBilling::Product, "demo_usage_product",
       provider_account_recording: @fake_provider.recording, kind: "service",
+      name: catalogue_name("demo_usage_product"),
       feature_values: { "demo_api_calls" => 5 }
     )
     assert_record!(@usage_product, kind: "service")
     @usage_option = find_or_record(
       RecordingStudioBilling::BillingOption, "demo_usage_option",
       parent: @usage_product, product_recording: @usage_product.recording,
+      name: catalogue_name("demo_usage_option"),
       recurrence: "recurring", interval: "month", interval_count: 1, quantity_mode: "fixed",
       default_quantity: 1, pricing_model: "per_unit", collection_method: "automatic",
       payment_terms_days: 0, trial_days: 0, proration_policy: "none",
@@ -260,11 +283,12 @@ class DummyV1Catalogue
       product = find_or_record(
         RecordingStudioBilling::Product, key,
         provider_account_recording: @fake_provider.recording, kind: spec[:kind],
-        feature_values: spec[:feature_values]
+        name: catalogue_name(key), feature_values: spec[:feature_values]
       )
       option = find_or_record(
         RecordingStudioBilling::BillingOption, "#{key}_option",
         parent: product, product_recording: product.recording, recurrence: spec[:recurrence],
+        name: catalogue_name("#{key}_option"),
         interval: spec[:interval], interval_count: spec[:interval] && 1,
         quantity_mode: spec[:quantity_mode], minimum_quantity: spec[:minimum_quantity],
         maximum_quantity: spec[:maximum_quantity], default_quantity: 1, pricing_model: "flat",
@@ -474,11 +498,13 @@ class DummyV1Catalogue
     product = find_or_record(
       RecordingStudioBilling::Product, "stripe_test_monthly_plan",
       provider_account_recording: @stripe_test_provider.recording, kind: "plan",
+      name: catalogue_name("stripe_test_monthly_plan"),
       feature_values: { "demo_projects" => 10 }
     )
     option = find_or_record(
       RecordingStudioBilling::BillingOption, "stripe_test_monthly_plan_option",
       parent: product, product_recording: product.recording, recurrence: "recurring",
+      name: catalogue_name("stripe_test_monthly_plan_option"),
       interval: "month", interval_count: 1, quantity_mode: "fixed", default_quantity: 1,
       pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0,
       trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate",
@@ -835,6 +861,10 @@ class DummyV1Catalogue
       grant.effective_at = effective_at
       grant.safe_metadata = { "seed" => true }
     end
+  end
+
+  def catalogue_name(key)
+    CATALOGUE_NAMES.fetch(key)
   end
 
   def find_or_record(model, key, parent: nil, root: nil, unique_by: nil, **attributes)

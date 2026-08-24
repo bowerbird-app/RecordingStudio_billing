@@ -2,6 +2,95 @@
 
 ## Unreleased
 
+## 0.9.0
+
+Turn the three billing Admin hubs into dashboards with inventory, and require a
+human display name on Product and BillingOption.
+
+### Added
+
+- Products and pricing, Financial records, and Billing operations each show
+  three list widgets of seeded rows. Each widget links through to its inventory
+  screen (`billing_products`, `billing_prices`, `billing_manifests`,
+  `billing_invoices`, `billing_payments`, `billing_financial_commands`,
+  `billing_subscriptions`, `billing_plan_updates`,
+  `billing_reconciliation_issues`).
+- The three hub screens now render a table for the relation they already
+  queried (published manifests, financial commands, reconciliation issues).
+- Inventory screens that filter on catalogue `key` use the `catalogue_key`
+  query param. Recording Studio Admin routes already occupy `params[:key]`
+  as the screen id, so a filter named `key` hid every row.
+- Financial command attempts and checkout intents tables now use columns that
+  exist on those models (`attempt_number` / `provider_idempotency_key`, and
+  `advisory_currency_code` / `presentation_preference`).
+- Each hub also links every other site-scoped inventory screen in its area so
+  Recording Studio Admin `screen_enabled?` returns those screens. They appear
+  in `/admin/sections` search and return 200. Hubs still only surface the
+  high-signal widget set.
+- Account billing operations stays registered for hosts that administer a
+  `:billing` workspace root, but it is hidden on the site Admin root. Dummy
+  `/admin` no longer lists a section that 404s.
+- Financial commands hub rows keep command type and state in the wrapping
+  label, so `subscription_change` and `requires_reconciliation` no longer
+  collide.
+- Dummy Accessible now resolves avatars from the owner grant. Admin hubs use
+  `recording_studio_accessible_avatars` and only show + Access when that
+  grant list is empty.
+- Dummy and the development Gemfile pin Flatpack
+  `cursor/plan-picker-current-no-cta-6ba6` (PR #159, 0.1.135) so the rounded
+  theme rebinds `--button-border-radius` and charcoal `--button-primary-*`
+  aliases. Dummy `recording_studio/default_layout` also puts `data-theme` on
+  `html`, not only `body`. Billing does not fork button CSS.
+- Products inventory (`billing_products`) shows a primary New button. It opens
+  the Admin create screen (`billing_product_new`) on the same Products and
+  pricing section. Save posts to the existing `create_draft_product` operation,
+  which writes a draft with `RecordingStudio.record!`. The button and screen
+  authorize `billing_products` `create` the same way other billing admin_actions
+  do. View-only actors do not see New and receive 403 on the create screen.
+- Product and BillingOption now require `name` next to the stable catalogue
+  `key`, matching ProviderAccount. `Product#name` is the required column, not
+  the 0.8.0 config lookup. Dummy seeds store human labels on those rows
+  (Free plan, Pro, Pro yearly, Starter). The New product form asks for Name
+  first. The Products inventory shows Name and still shows Key.
+
+### Upgrade notes
+
+- Run the new engine migration
+  (`20260822000001_add_name_to_products_and_billing_options`). Fresh installs
+  pick it up from install SQL. There is no production data and no backfill:
+  create and seed paths must send `name` explicitly. Do not default name from
+  key. `create_draft_product` and `create_draft_billing_option` already accept
+  column attributes, so hosts only need to include `name` in `attributes`.
+  Commercial manifests still publish product `key` and `kind`; name is for
+  Admin inventory, create forms, and customer offer labels.
+- Hosts that set `config.product_display_names` in 0.8.0 should put those
+  strings on `Product#name`. The config key remains accepted as an offer-label
+  fallback only; it no longer overrides the column.
+- Include `BillingAdminSupport` on the Admin root as before. The concern still
+  enables `:billing_commercial`, `:billing_financial`, and
+  `:billing_operations`. Inventory screens become reachable because those
+  sections now link them; do not add placeholder sections.
+- Account-scoped feature overrides remain a root-scoped screen. They appear
+  only when the current admin access recording is a `:billing` workspace root
+  that can render them. Dummy Admin stays on the site Admin root and does not
+  invent a second feature-override UI.
+- Create/revise stay `record!` / `revise`. Publish stays `CommercialPublisher`.
+  Plan updates and reconciliation stay the existing POST domain actions.
+- Bookmark or automation URLs that filtered inventory with `?key=` must switch
+  to `?catalogue_key=`. The on-screen filter label is still Key.
+- Hosts that want avatars in the Admin default-layout slot must set
+  `RecordingStudioAccessible` `avatar_resolver`. Without it, granted actors
+  still fall back to + Access. Dummy now ships that resolver.
+- Dummy/dev only: the Gemfiles pin Flatpack #159 until that branch is tagged.
+  Published `flat_pack ~> 0.1.135` is unchanged. Do not copy button CSS into
+  Billing. After #159 merges, switch the pin back to a released tag. Hosts that
+  set `data-theme` only on `body` should also set it on `html` so the rounded
+  rebinds inherit from the document root.
+- Products inventory New is an Admin screen button, not a second admin or a
+  Billing CRUD controller. Hosts that already registered `create_draft_product`
+  keep that POST. Do not add a generic Admin form that writes published product
+  rows. Revise stays `revise`. Publish stays `CommercialPublisher`.
+
 ## 0.8.0
 
 Compose customer Overview, Plan, and Usage on Flatpack Billing parts. Customer

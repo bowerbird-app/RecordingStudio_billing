@@ -437,10 +437,11 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     )
     product = record_child(
       RecordingStudioBilling::Product.new(provider_account_recording: provider, key: "product_#{SecureRandom.hex(4)}",
-                                          kind: product_kind, feature_values: {}), provider_root, admin.recording
+                                          name: "Checkout product", kind: product_kind, feature_values: {}), provider_root, admin.recording
     )
     option_recording = record_child(
       RecordingStudioBilling::BillingOption.new(product_recording: product, key: "option_#{SecureRandom.hex(4)}",
+                                                name: "Checkout option",
                                                 recurrence:, interval:, interval_count: interval && 1, quantity_mode: "adjustable", minimum_quantity: 1, maximum_quantity: 3, default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy:, tax_policy: "exclusive", feature_values: {}), provider_root, product
     )
     price = record_child(

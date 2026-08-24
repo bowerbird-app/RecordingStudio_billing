@@ -13,7 +13,8 @@ RecordingStudioBilling.configure do |config|
   config.plans_page_route_helper = :plans_path
   config.plans_page_requires_sign_in = true
   #
-  # Optional product titles when two plans would otherwise share an interval label:
+  # Put customer-facing titles on Product#name. This map is an offer-label
+  # fallback only and does not replace the required column:
   # config.product_display_names = { "pro_monthly" => "Pro", "starter_monthly" => "Starter" }
   #
   # Optional freemium bootstrap from a published $0 plan in your admin catalogue:

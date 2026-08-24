@@ -11,10 +11,7 @@ module RecordingStudioBilling
     belongs_to :provider_account_recording, class_name: "RecordingStudio::Recording", inverse_of: false
     commercial_reference :provider_account_recording, type: "RecordingStudioBilling::ProviderAccount"
 
+    validates :name, presence: true
     validates :kind, inclusion: { in: KINDS }
-
-    def name
-      RecordingStudioBilling.configuration.product_display_names[key]
-    end
   end
 end

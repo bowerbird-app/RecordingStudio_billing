@@ -2,6 +2,18 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.9.0 — product and billing option names
+
+Adds required `name` on `recording_studio_billing_products` and
+`recording_studio_billing_billing_options`. Fresh installs pick it up from
+install SQL. Existing hosts run
+`20260822000001_add_name_to_products_and_billing_options`.
+
+There is no production data and no backfill. Create, revise, and seed paths
+must send `name` explicitly. Do not copy `key` into `name`. `Product#name` is
+the required column, not `config.product_display_names`. Dummy seeds store
+human labels such as Free plan, Pro, Pro yearly, and Starter on those rows.
+
 ## 0.8.0 — Flatpack Billing composition
 
 No schema change. Hosts bump Flatpack to `~> 0.1.135` (branch
@@ -11,9 +23,8 @@ same. Overview, Plan, and Usage now compose Flatpack Plan Summary, Plan Picker,
 Usage Meter, and Status Alert. Overview puts Change plan and Cancel / Resume in
 the Plan Summary actions row and omits the status badge (`status: nil`). Plan
 Picker choosable tiles say Choose plan; the current tile is a disabled Current
-button in the card body. Set
-`config.product_display_names` if two catalogue products would otherwise share
-an interval label.
+button in the card body. From 0.9.0, put distinct titles on `Product#name`.
+`config.product_display_names` remains an offer-label fallback only.
 
 ## 0.6.0 — app-owned gates and freemium bootstrap
 
@@ -155,4 +166,4 @@ Do not edit copied engine migrations in the host. Schema changes belong in this 
 
 `test/dummy` uses the same install migration. Reset it with `bin/rails db:drop db:create db:migrate` from `test/dummy`, then commit `test/dummy/db/structure.sql`.
 
-The dummy host uses FlatPack. Signed-in dummy pages use the gem-template left sidebar layout. Billing engine pages use `app/views/layouts/recording_studio/default_layout.html.erb`. Dummy seeds rebuild the V1 demonstration catalogue and grant the seeded admin Accessible `edit` on Studio Workspace; reset the dummy database if published records were created by an older seed. Customer billing needs the Accessible `recording_studio_accesses` table, which dummy restores after Recording Studio v3 removed core access tables.
+The dummy host uses FlatPack and Recording Studio `UsesDefaultLayout`. Signed-in dummy, customer billing, and staff `/admin` pages use a thin dummy `recording_studio/default_layout` with `data-theme="rounded"` on `html` and `body`. Dummy/dev pins Flatpack #159 for rounded button tokens. Devise sign-in stays on `layouts/application`. Dummy seeds rebuild the V1 demonstration catalogue, grant the seeded admin Accessible `edit` on Studio Workspace and owner access on Billing Administration, and populate the three billing Admin hubs. Reset the dummy database if published records were created by an older seed. Customer billing needs the Accessible `recording_studio_accesses` table, which dummy restores after Recording Studio v3 removed core access tables.

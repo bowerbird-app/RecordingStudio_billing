@@ -341,6 +341,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::Product.new(
         provider_account_recording: provider_recording,
         key: "studio",
+        name: "Studio",
         kind: "plan"
       ),
       admin_root,
@@ -350,6 +351,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::BillingOption.new(
         product_recording: product_recording,
         key: "monthly",
+        name: "Monthly",
         recurrence: "recurring",
         interval: "month",
         interval_count: 1,
@@ -400,10 +402,37 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
     invalid_product = RecordingStudioBilling::Product.new(
       provider_account_recording: provider_recording,
       key: "invalid_product",
+      name: "Invalid product",
       kind: "subscription"
     )
     assert_not_predicate invalid_product, :valid?
     assert_includes invalid_product.errors[:kind], "is not included in the list"
+
+    unnamed_product = RecordingStudioBilling::Product.new(
+      provider_account_recording: provider_recording,
+      key: "unnamed_product",
+      kind: "plan"
+    )
+    assert_not_predicate unnamed_product, :valid?
+    assert_includes unnamed_product.errors[:name], "can't be blank"
+
+    unnamed_option = RecordingStudioBilling::BillingOption.new(
+      product_recording: product_recording,
+      key: "unnamed_option",
+      recurrence: "one_time",
+      quantity_mode: "fixed",
+      default_quantity: 1,
+      pricing_model: "flat",
+      collection_method: "automatic",
+      payment_terms_days: 0,
+      trial_days: 0,
+      proration_policy: "none",
+      lifecycle_policy: "immediate",
+      checkout_policy: "allowed",
+      tax_policy: "exclusive"
+    )
+    assert_not_predicate unnamed_option, :valid?
+    assert_includes unnamed_option.errors[:name], "can't be blank"
 
     invalid_market = RecordingStudioBilling::Market.new(
       provider_account_recording: provider_recording,
@@ -440,6 +469,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
   test "billing options reject unsupported tier pricing and rates never carry customer money" do
     billing_option = RecordingStudioBilling::BillingOption.new(
       key: "graduated",
+      name: "Graduated",
       recurrence: "recurring",
       interval: "month",
       interval_count: 1,
@@ -620,6 +650,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::Product.new(
         provider_account_recording: provider,
         key: unique_key("product"),
+        name: "Studio plan",
         kind: "plan",
         feature_values: {}
       ),
@@ -630,6 +661,7 @@ class RecordingStudioV3Test < ActiveSupport::TestCase
       RecordingStudioBilling::BillingOption.new(
         product_recording: product,
         key: unique_key("option"),
+        name: "One-time",
         recurrence: "one_time",
         quantity_mode: "fixed",
         default_quantity: 1,

@@ -543,11 +543,12 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
                             rounding_policy: "half_up", tax_presentation_policy: "exclusive", verification_policy: "none"
                           ), provider_root, admin.recording)
     product = record_child(
-      RecordingStudioBilling::Product.new(provider_account_recording: provider, key: product_key, kind: "plan",
-                                          feature_values: {}), provider_root, admin.recording
+      RecordingStudioBilling::Product.new(provider_account_recording: provider, key: product_key, name: "Monthly plan",
+                                          kind: "plan", feature_values: {}), provider_root, admin.recording
     )
     option = record_child(RecordingStudioBilling::BillingOption.new(
-                            product_recording: product, key: option_key, recurrence: "recurring", interval: "month", interval_count: 1, quantity_mode: "fixed",
+                            product_recording: product, key: option_key, name: "Monthly",
+                            recurrence: "recurring", interval: "month", interval_count: 1, quantity_mode: "fixed",
                             default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days: 0,
                             proration_policy: "none", lifecycle_policy: "immediate", checkout_policy: "allowed", tax_policy: "exclusive", feature_values: {}
                           ), provider_root, product)
@@ -559,11 +560,12 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     addon_price = nil
     if mixed
       addon_product = record_child(
-        RecordingStudioBilling::Product.new(provider_account_recording: provider, key: addon_product_key, kind: "addon",
-                                            feature_values: {}), provider_root, admin.recording
+        RecordingStudioBilling::Product.new(provider_account_recording: provider, key: addon_product_key, name: "Quantity add-on",
+                                            kind: "addon", feature_values: {}), provider_root, admin.recording
       )
       addon_option = record_child(RecordingStudioBilling::BillingOption.new(
-                                    product_recording: addon_product, key: addon_option_key, recurrence: "recurring", interval: "month", interval_count: 1,
+                                    product_recording: addon_product, key: addon_option_key, name: "Monthly add-on",
+                                    recurrence: "recurring", interval: "month", interval_count: 1,
                                     quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic",
                                     payment_terms_days: 0, trial_days: 0, proration_policy: "none", lifecycle_policy: "immediate",
                                     checkout_policy: "allowed", tax_policy: "exclusive", feature_values: {}
