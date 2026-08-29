@@ -10,10 +10,10 @@ module RecordingStudioBilling
 
     def status_badge_style(state)
       case state.to_s
-      when "Succeeded", "Applied", "Active", "Trial" then :success
+      when "Succeeded", "Applied", "Active", "Trial", "Done", "Paid" then :success
       when "Failed", "Cancelled", "Past due" then :danger
       when "Scheduled" then :primary
-      when "Waiting for confirmation", "Paused" then :warning
+      when "Waiting", "Waiting for confirmation", "Paused", "Needs a look" then :warning
       else :default
       end
     end

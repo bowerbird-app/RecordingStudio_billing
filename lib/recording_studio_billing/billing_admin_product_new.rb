@@ -62,10 +62,7 @@ module RecordingStudioBilling
     end
 
     def provider_label(account)
-      name = account.name.to_s.strip
-      return account.key if name.blank? || name == account.key
-
-      "#{name} (#{account.key})"
+      account.name.to_s.strip.presence || account.key
     end
 
     def billing_mount_path(context)

@@ -88,8 +88,8 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
         assert_includes response.body, seeded_row_label_for(screen_key)
         next unless screen_key == "billing_financial_commands"
 
-        assert_includes response.body, "subscription_change · "
-        refute_includes response.body, 'flex-shrink-0 ml-2">requires_reconciliation'
+        assert_includes response.body, "Plan change · "
+        refute_includes response.body, 'flex-shrink-0 ml-2">Needs a look'
       end
     end
   end
@@ -182,23 +182,27 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
   def seeded_row_label_for(key)
     case key
     when "billing_commercial", "billing_manifests"
-      RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first.manifest_digest.first(12)
+      product_key = RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first
+                                .canonical_data.dig("product", "key")
+      RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key).name
     when "billing_financial", "billing_financial_commands"
-      RecordingStudioBilling::FinancialCommand.order(created_at: :desc).first.command_type
+      "Plan change"
     when "billing_operations", "billing_reconciliation_issues"
-      RecordingStudioBilling::ReconciliationIssue.order(created_at: :desc).first.kind
+      "Provider mismatch"
     when "billing_products"
-      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.key
+      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
     when "billing_prices"
-      RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first.key
+      price = RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first
+      option = price.billing_option_recording.recordable
+      option.product_recording.recordable.name
     when "billing_invoices"
-      RecordingStudioBilling::Invoice.order(created_at: :desc).first.currency_code
+      "$"
     when "billing_payments"
-      RecordingStudioBilling::Payment.order(created_at: :desc).first.currency_code
+      "$"
     when "billing_subscriptions"
-      RecordingStudioBilling::Subscription.with_current_recording.order(created_at: :desc).first.identifier
+      "Pro"
     when "billing_plan_updates"
-      RecordingStudioBilling::PlanUpdate.with_current_recording.order(created_at: :desc).first.key
+      "Pro"
     else
       raise "no seeded label for #{key}"
     end

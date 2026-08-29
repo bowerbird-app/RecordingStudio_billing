@@ -93,8 +93,9 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
 
     with_authorization(true) { get "/billing/payments", params: { root_recording_id: @root.id } }
     assert_response :success
-    assert_includes response.body, "1000 USD"
-    assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "$10"
+    assert_includes response.body, "Waiting"
+    refute_includes response.body, "Waiting for confirmation"
     assert_includes response.body, "Paid by card"
     refute_includes response.body, "Source, reason and tax"
   end
@@ -125,9 +126,10 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     with_authorization(true) { get "/billing/invoices", params: { root_recording_id: @root.id } }
 
     assert_response :success
-    assert_includes response.body, "Credit: 100 USD"
-    assert_includes response.body, "Refund: 200 USD"
-    assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "Credit · $1"
+    assert_includes response.body, "Refund · $2"
+    assert_includes response.body, "Waiting"
+    refute_includes response.body, "Waiting for confirmation"
   end
 
   test "usage route renders only the selected root's periods grants and included amounts" do

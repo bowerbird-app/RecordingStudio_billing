@@ -27,7 +27,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
-  test "financial command widget rows keep type and state in the wrapping label" do
+    test "financial command widget rows keep type and state in the wrapping label" do
     spec = RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.find do |entry|
       entry.fetch(:screen) == "billing_financial_commands"
     end
@@ -42,9 +42,29 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
 
     assert_equal 1, items.size
-    assert_equal "subscription_change · requires_reconciliation", items.first[:text]
+    assert_equal "Plan change · Needs a look", items.first[:text]
     refute items.first.key?(:trailing)
     assert_equal "/admin/screens/billing_financial_commands", items.first[:href]
+  end
+
+  test "product and price widgets prefer human names and formatted money" do
+    product = Struct.new(:name, :key, :kind).new("Starter", "stripe_test_monthly_plan", "plan")
+    price = Struct.new(:amount_minor, :currency_code, :currency_exponent, :billing_option_recording).new(
+      100, "USD", 2, nil
+    )
+    option = Struct.new(:product_recording).new(Struct.new(:recordable).new(product))
+    price.billing_option_recording = Struct.new(:recordable).new(option)
+
+    assert_equal "Starter",
+                 RecordingStudioBilling::BillingAdminHubs.send(:widget_text, product, :product_name)
+    assert_equal "Plan",
+                 RecordingStudioBilling::BillingAdminHubs.send(:widget_trailing, product, :product_kind)
+    assert_equal "Starter · $1",
+                 RecordingStudioBilling::BillingAdminHubs.send(:widget_text, price, :price_offer)
+    assert_equal "€470",
+                 RecordingStudioBilling::DisplayFormatters.format_money(47_000, "EUR")
+    assert_equal "26 Aug",
+                 RecordingStudioBilling::DisplayFormatters.format_date(Time.utc(2026, 8, 26), now: Time.utc(2026, 8, 29))
   end
 
   test "inventory table columns and filters exist on their models" do

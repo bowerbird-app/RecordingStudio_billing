@@ -19,7 +19,7 @@ module RecordingStudioBilling
     end
 
     def payment_recorded_at(payment)
-      payment.try(:recorded_at)&.to_fs(:long)
+      display_date(payment.try(:recorded_at))
     end
 
     def refund_status(refund)

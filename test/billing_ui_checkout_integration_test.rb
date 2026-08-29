@@ -315,7 +315,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     end
     get "/billing/subscription_changes/#{review.id}", params: { root_recording_id: root.id }
     assert_response :success
-    assert_match(/Waiting for confirmation/, response.body)
+    assert_match(/Waiting/, response.body)
+    refute_match(/Waiting for confirmation/, response.body)
     assert_equal "active", subscription.current.state
     assert_equal snapshot_count, line_snapshots.count
 

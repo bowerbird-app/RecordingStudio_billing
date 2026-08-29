@@ -37,12 +37,12 @@
         <%= render FlatPack::List::Component.new(divider: true) do %>
           <% Array(@presenter.refunds).each do |refund| %>
             <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: @presenter.refund_status(refund), style: status_badge_style(@presenter.refund_status(refund)), size: :sm))) do %>
-              <%= @presenter.copy("refund_title", "Refund") %>: <%= @presenter.display_amount(refund.amount_minor, refund.currency_code) %>
+              <%= @presenter.copy("refund_title", "Refund") %> · <%= @presenter.display_amount(refund.amount_minor, refund.currency_code) %>
             <% end %>
           <% end %>
           <% Array(@presenter.pending_refund_rows).each do |row| %>
             <%= render FlatPack::List::Item.new(trailing: render(FlatPack::Badge::Component.new(text: row[:status], style: status_badge_style(row[:status]), size: :sm))) do %>
-              <%= row[:label] %>: <%= row[:amount] %>
+              <%= row[:label] %> · <%= row[:amount] %>
             <% end %>
           <% end %>
         <% end %>

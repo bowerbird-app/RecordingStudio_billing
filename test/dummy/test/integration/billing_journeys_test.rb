@@ -273,7 +273,8 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Scheduled"
     assert_includes response.body, "Applied"
     assert_includes response.body, "Failed"
-    assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "Waiting"
+    refute_includes response.body, "Waiting for confirmation"
 
     subscription = RecordingStudioBilling::SubscriptionLine.find_by!(
       checkout_intent_item_id: RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:active-monthly-checkout").items.first.id
@@ -291,12 +292,17 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     get "/billing/invoices", params: { root_recording_id: @workspace_root.id }
     assert_response :success
-    assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "Bills and refunds"
+    assert_includes response.body, "Waiting"
+    refute_includes response.body, "Waiting for confirmation"
+    refute_includes response.body, "Invoice -"
+    refute_includes response.body, " USD"
 
     get "/billing/payments", params: { root_recording_id: @workspace_root.id }
     assert_response :success
     assert_includes response.body, "Refund"
-    assert_includes response.body, "Waiting for confirmation"
+    assert_includes response.body, "Waiting"
+    refute_includes response.body, "Waiting for confirmation"
 
     get "/billing/settings", params: { root_recording_id: @workspace_root.id }
     assert_response :success

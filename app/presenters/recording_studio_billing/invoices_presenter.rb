@@ -15,18 +15,20 @@ module RecordingStudioBilling
     end
 
     def adjustment_label(adjustment)
-      "#{money_state(adjustment.kind)}: #{display_amount(adjustment.amount_minor, adjustment.currency_code)}"
+      "#{money_state(adjustment.kind)} · #{display_amount(adjustment.amount_minor, adjustment.currency_code)}"
     end
 
     def refund_label(refund)
-      "#{copy('refund_title', 'Refund')}: #{display_amount(refund.amount_minor, refund.currency_code)}"
+      "#{copy('refund_title', 'Refund')} · #{display_amount(refund.amount_minor, refund.currency_code)}"
     end
 
     def pending_money_rows
       Array(refund_intents).reject { |intent| intent.try(:refund) }.map do |intent|
-        "#{copy('refund_title', 'Refund')}: #{display_amount(intent.amount_minor, intent.currency_code)} (#{money_state(intent.financial_command&.state || intent.state)})"
+        status = money_state(intent.financial_command&.state || intent.state)
+        "#{copy('refund_title', 'Refund')} · #{display_amount(intent.amount_minor, intent.currency_code)} (#{status})"
       end + Array(adjustment_intents).reject { |intent| intent.try(:financial_adjustment) }.map do |intent|
-        "#{money_state(intent.kind)}: #{display_amount(intent.amount_minor, intent.currency_code)} (#{money_state(intent.financial_command&.state || intent.state)})"
+        status = money_state(intent.financial_command&.state || intent.state)
+        "#{money_state(intent.kind)} · #{display_amount(intent.amount_minor, intent.currency_code)} (#{status})"
       end
     end
   end

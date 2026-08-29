@@ -154,12 +154,14 @@ class BillingUiCustomerCopyTest < Minitest::Test
     )
 
     assert_includes html, "API calls"
-    assert_includes html, "5 of 10"
     assert_includes html, "5 of 5 available"
     assert_includes html, "No expiry"
     assert_includes html, "On this plan"
+    assert_includes html, "Credits left"
+    assert_includes html, "What this workspace used"
     assert_includes html, "Priority support"
     assert_includes html, "Yes"
+    refute_includes html, "Prepaid credits"
     refute_includes html, "demo_api_calls"
     refute_includes html, "Caps"
     refute_includes html, "Grant allocation"
@@ -185,8 +187,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
       root_recording: root, payments: [payment], refunds: [], refund_intents: []
     )
 
-    assert_includes invoices.invoice_label(invoice), "Invoice"
-    assert_includes invoices.invoice_label(invoice), "1000 USD"
+    assert_includes invoices.invoice_label(invoice), "16 Aug"
+    assert_includes invoices.invoice_label(invoice), "$10"
+    refute_includes invoices.invoice_label(invoice), "Invoice"
     refute_includes invoices.invoice_label(invoice), invoice.id
     assert_equal "Paid by card", payments.payment_summary(payment)
     assert_equal "Succeeded", payments.payment_state(payment)
@@ -213,7 +216,7 @@ class BillingUiCustomerCopyTest < Minitest::Test
       root_recording: root, payments: [], refunds: [], refund_intents: [intent]
     )
 
-    assert_equal "Waiting for confirmation", payments.pending_refund_rows.sole.fetch(:status)
+    assert_equal "Waiting", payments.pending_refund_rows.sole.fetch(:status)
   end
 
   private

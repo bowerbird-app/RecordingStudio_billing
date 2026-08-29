@@ -33,7 +33,7 @@ module RecordingStudioBilling
         limit = policy&.limit_quantity
         {
           usage_key: usage_label(period.usage_key),
-          window: "#{period.starts_at.to_fs(:long)} - #{period.ends_at.to_fs(:long)}",
+          window: display_usage_window(period.starts_at, period.ends_at),
           state: money_state(period.state),
           used: policy&.consumed_quantity.to_i,
           limit: limit.to_i.positive? ? limit.to_i : nil,
@@ -45,13 +45,17 @@ module RecordingStudioBilling
       end
     end
 
+    def usage_stories
+      Array(allocations).map { |allocation| usage_story_for(allocation) }.compact
+    end
+
     def grant_rows
       Array(credit_grants).map do |grant|
         {
           key: usage_label(grant.credit_key),
           available: grant.remaining_quantity,
           quantity: grant.quantity,
-          expires_at: grant.expires_at&.to_fs(:long) || copy("usage_no_expiry", "No expiry")
+          expires_at: grant.expires_at ? display_date(grant.expires_at) : copy("usage_no_expiry", "No expiry")
         }
       end
     end
@@ -72,6 +76,35 @@ module RecordingStudioBilling
     end
 
     private
+
+    def usage_story_for(allocation)
+      measured = allocation.measured_quantity.to_i
+      return if measured.zero? && allocation.excess_quantity.to_i.zero?
+
+      label = usage_label(allocation.credit_key)
+      window = display_usage_window(allocation.usage_period&.starts_at, allocation.usage_period&.ends_at)
+      period_phrase = usage_period_phrase(window)
+      credited = allocation.credited_quantity.to_i
+      excess = allocation.excess_quantity.to_i
+      overage = allocation.overage_calculation
+      money = overage && display_amount(overage.amount_minor, overage.currency_code)
+
+      detail = "#{credited} on the plan, #{excess} extra"
+      detail = "#{detail} · #{money}" if money.present?
+      "#{measured} #{label} #{period_phrase}. #{detail}"
+    end
+
+    def usage_period_phrase(window)
+      text = window.to_s
+      return "this period" if text.blank?
+
+      case text
+      when "Last hour" then "last hour"
+      when "This month" then "this month"
+      when /\A\d/ then "on #{text}"
+      else text.downcase
+      end
+    end
 
     def simple_usage_value(value)
       value.is_a?(Hash) || value.is_a?(Array) ? nil : value.to_s

@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.9.2
+
+Human-readable billing copy and formatters for customer and Admin screens.
+Money and dates are display-only; cents and timestamps stay unchanged in the
+database. No Flatpack bump and no PlanSummary / PlanPicker / UsageMeter chrome
+restyle.
+
+### Changed
+
+- Money display uses currency symbols (`$49`, `€470`) instead of
+  `4900 USD`-style minor units.
+- Dates use short day labels (`26 Aug`, with year only when not the current
+  year). Usage windows prefer `Last hour` / `This month` / `26 Aug`.
+- Customer Usage leads with one period story, renames prepaid credits to
+  Credits left, and drops the Closed status pill on charges.
+- Customer Invoices subtitle is `Bills and refunds.`; rows are
+  `26 Aug · $49` without an Invoice prefix; Succeeded badges hide when the
+  money movement is already done; Waiting replaces Waiting for confirmation.
+- Admin hub widgets show product names and formatted money instead of
+  catalogue keys and raw minor units. Published manifests show
+  `Pro · 26 Aug` (hash-only rows are omitted). Financial commands are labeled
+  Plan changes (`Plan change · Needs a look`). Subscriptions and plan updates
+  prefer workspace/plan names. Reconciliation kinds use `Provider mismatch`.
+- Hub subtitles no longer list inventory. New product Provider options show
+  the provider name without echoing the catalogue key. Inventory Kind/State
+  (and money columns) use the same human labels; Key stays for staff.
+
+### Upgrade notes
+
+- Hosts that asserted raw strings such as `4900 USD`, `Waiting for confirmation`,
+  `subscription_change`, or manifest digests in Billing UI tests should update
+  expectations to the human labels above.
+- Override copy still goes through `config.billing_copy` where those keys
+  already exist (page subtitles and similar). Formatter output itself is not
+  copied through that hash.
+
 ## 0.9.1
 
 Pin Flatpack to published `v0.1.141`. No product, Admin, or customer-billing

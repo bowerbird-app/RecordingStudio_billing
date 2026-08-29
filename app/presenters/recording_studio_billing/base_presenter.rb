@@ -25,28 +25,20 @@ module RecordingStudioBilling
       RecordingStudioBilling.configuration.hooks.billing_page_contents(page, self)
     end
 
-    def display_amount(amount_minor, currency_code)
-      [amount_minor, currency_code].compact.join(" ")
+    def display_amount(amount_minor, currency_code, exponent: 2)
+      DisplayFormatters.format_money(amount_minor, currency_code, exponent:)
     end
 
     def customer_price(amount_minor, currency_code, exponent: 2)
-      units = amount_minor.to_i / (10.0**exponent)
-      formatted = units == units.to_i ? units.to_i.to_s : format("%.#{exponent}f", units)
-      case currency_code.to_s.upcase
-      when "USD" then "$#{formatted}"
-      when "EUR" then "€#{formatted}"
-      when "GBP" then "£#{formatted}"
-      else
-        "#{formatted} #{currency_code}"
-      end
+      display_amount(amount_minor, currency_code, exponent:)
     end
 
-    def price_interval_suffix(interval)
-      case interval.to_s
-      when "year" then copy("price_suffix_year", "/yr")
-      when "week" then copy("price_suffix_week", "/wk")
-      else copy("price_suffix_month", "/mo")
-      end
+    def display_date(time)
+      DisplayFormatters.format_date(time)
+    end
+
+    def display_usage_window(starts_at, ends_at)
+      DisplayFormatters.format_usage_window(starts_at, ends_at)
     end
 
     def display_value(value)
@@ -126,8 +118,7 @@ module RecordingStudioBilling
 
     def invoice_label(invoice)
       issued = invoice.issued_at || invoice.try(:created_at)
-      [copy("invoice_title", "Invoice"), issued&.to_fs(:long),
-       display_amount(invoice.total_minor, invoice.currency_code)].compact.join(" · ")
+      [display_date(issued), display_amount(invoice.total_minor, invoice.currency_code)].compact.join(" · ")
     end
 
     def current_subscription_lines(subscription)
@@ -140,22 +131,15 @@ module RecordingStudioBilling
     end
 
     def money_state(value)
-      case value.to_s
-      when "requires_review", "requires_reconciliation", "pending_provider", "awaiting_confirmation",
-           "executing", "pending", "uncertain", "processing"
-        copy("money_state_waiting", "Waiting for confirmation")
-      when "scheduled" then copy("money_state_scheduled", "Scheduled")
-      when "applied" then copy("money_state_applied", "Applied")
-      when "completed", "succeeded", "captured", "paid" then copy("money_state_complete", "Succeeded")
-      when "failed" then copy("money_state_failed", "Failed")
-      when "cancelled", "canceled" then copy("money_state_cancelled", "Cancelled")
-      when "trialing" then copy("money_state_trialing", "Trial")
-      when "active" then copy("money_state_active", "Active")
-      when "past_due" then copy("money_state_past_due", "Past due")
-      when "paused" then copy("money_state_paused", "Paused")
-      else
-        value.to_s.humanize
-      end
+      DisplayFormatters.customer_money_state(value)
+    end
+
+    def money_state_complete?(state)
+      DisplayFormatters.money_state_complete?(money_state(state))
+    end
+
+    def show_money_status?(state)
+      !money_state_complete?(state)
     end
 
     private

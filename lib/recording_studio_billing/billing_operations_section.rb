@@ -8,7 +8,7 @@ module RecordingStudioBilling
     key "billing_commercial"
     icon :shopping_bag
     title "Products and pricing"
-    subtitle "Products, prices, markets, and providers"
+    subtitle "Products and pricing"
     blast_radius :site
     availability_scope :all
   end
@@ -17,7 +17,7 @@ module RecordingStudioBilling
     key "billing_financial"
     icon :banknotes
     title "Financial records"
-    subtitle "Commands, checkout, tax, and subscription activity"
+    subtitle "Financial records"
     blast_radius :site
     availability_scope :all
   end
@@ -26,7 +26,7 @@ module RecordingStudioBilling
     key "billing_operations"
     icon :credit_card
     title "Billing operations"
-    subtitle "Products, providers, tax, usage, and reconciliation"
+    subtitle "Billing operations"
     blast_radius :site
     availability_scope :all
   end
@@ -108,7 +108,7 @@ module RecordingStudioBilling
                           filters: %i[key state], columns: %i[key state] },
     billing_cost_rates: { section: "billing_operations", title: "Cost rates", model: "CostRate", scope: :current,
                           filters: %i[key currency_code state], columns: %i[key amount_minor currency_code state] },
-    billing_financial_commands: { section: "billing_financial", title: "Financial commands", model: "FinancialCommand",
+    billing_financial_commands: { section: "billing_financial", title: "Plan changes", model: "FinancialCommand",
                                   filters: %i[command_type state], columns: %i[command_type state provider_adapter_key created_at] },
     billing_financial_attempts: { section: "billing_financial", title: "Financial command attempts",
                                   model: "FinancialCommandAttempt", filters: %i[state], columns: %i[state attempt_number provider_idempotency_key started_at] },
@@ -194,7 +194,9 @@ module RecordingStudioBilling
       end
       table do
         title definition.fetch(:title)
-        definition.fetch(:columns).each { |column| column column }
+        definition.fetch(:columns).each do |column_key|
+          column column_key, **BillingAdminHubs.inventory_column_options(key, column_key)
+        end
         default_columns(*definition.fetch(:columns))
         default_sort :created_at, direction: :desc
         admin_action key, :investigate if ADMIN_INVESTIGATION_RESOURCES.include?(key.to_s)

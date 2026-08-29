@@ -165,9 +165,10 @@ billing-admin-enabled root.
 
 The three site-scoped Admin hubs are dashboards, not empty titles. Products
 and pricing shows Products, Prices, and Published manifests. Financial records
-shows Invoices, Payments, and Financial commands. Billing operations shows
+shows Invoices, Payments, and Plan changes. Billing operations shows
 Subscriptions, Plan updates, and Reconciliation issues. Each widget lists
-current rows and links through to that inventory screen. The matching hub
+human-readable rows (product names, formatted money, plan names) and links
+through to that inventory screen. The matching hub
 screens (`billing_commercial`, `billing_financial`, `billing_operations`) query
 the same relations and render a table so their filters have rows.
 

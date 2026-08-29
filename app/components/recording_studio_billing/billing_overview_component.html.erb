@@ -1,6 +1,6 @@
 <%= render FlatPack::PageTitle::Component.new(
   title: @presenter.copy("overview_title", "Billing"),
-  subtitle: @presenter.copy("overview_subtitle", "Your current plan and billing for this workspace."),
+  subtitle: @presenter.copy("overview_subtitle", "Your current plan."),
   variant: :h1
 ) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>

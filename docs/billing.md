@@ -231,7 +231,7 @@ Change plan (to `/plans`). Status is omitted (`status: nil`) so there is no
 badge. Cancel / resume sit in the same actions row as secondary buttons. The
 footer slot is not used, so the card has no empty footer strip.
 
-Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting for confirmation. Those screens, plus Add-ons, Usage, Settings, checkout, and invoice detail, use
+Plan changes are select → compare → confirm → result. Cancel and resume show consequences and an effective date, and they never use GET. Payments and invoices show refunds and adjustments, including requests that are still waiting. Invoice rows use short dates and symbol money (`26 Aug · $49`) and only keep a status when work is not done (`Waiting`). Those screens, plus Add-ons, Usage, Settings, checkout, and invoice detail, use
 Flatpack Billing and family parts (Plan Summary, Plan Picker, Usage Meter,
 Status Alert, cards, lists, badges, and buttons) rather than custom page chrome.
 
@@ -244,8 +244,9 @@ added by `draw_recording_studio_billing_plans` during install. The gem provides
 The billing mount still exposes `GET /billing/plan`, which redirects to the host
 plans route when configured. **Plan requests** stays under billing
 (`/billing/plan_requests`). **Usage** is `/billing/usage` on the engine root
-(not `/billing/billing/usage`). Period usage is a Usage Meter; prepaid credits
-and charges are List rows; plan features are a named "On this plan" list.
+(not `/billing/billing/usage`). Usage leads with one period story (what you
+used, what was on the plan, what is extra and owed), then Credits left and the
+named "On this plan" feature list.
 
 The Plan page shows a title, subtitle, and a three-column Plan Picker (Free
 plan, Pro, and Pro yearly in the dummy). Tiles show the resolved
@@ -283,8 +284,14 @@ The site Admin root (`BillingAdminSupport`) enables three hubs:
 | Hub | Widgets | Hub screen table |
 | --- | --- | --- |
 | Products and pricing | Products, Prices, Published manifests | Published manifests |
-| Financial records | Invoices, Payments, Financial commands | Financial commands |
+| Financial records | Invoices, Payments, Plan changes | Plan changes |
 | Billing operations | Subscriptions, Plan updates, Reconciliation issues | Reconciliation issues |
+
+Widget and inventory labels prefer human product names and formatted money
+(`Starter · $1`, `Pro · $49`, `$49 · Paid`) over catalogue keys and raw minor
+units. Manifest previews show `Pro · 26 Aug` when a product name is known;
+hash-only rows are omitted. Plan change rows read `Plan change · Needs a look`
+instead of `subscription_change · requires_reconciliation`.
 
 A widget with a child screen links through to that inventory. Recording Studio
 Admin only enables a screen when an enabled section links it, so each hub also
@@ -300,7 +307,9 @@ avatars; + Access is only the empty-grant fallback.
 
 Products inventory has a primary New button. It opens the Admin create screen
 on the same Products and pricing section. The form asks for Name, then Key,
-Kind, and Provider. Save posts to `create_draft_product`, which writes a
+Kind, and Provider. Kind options are Plan, Credit pack, Add-on, and Service.
+Provider options show the provider name without echoing the catalogue key.
+Save posts to `create_draft_product`, which writes a
 draft with `RecordingStudio.record!`. That path authorizes the registered
 `billing_products` `create` action (`required_role :admin`). It does not use
 a generic Admin form that writes published rows. Revise stays `revise`.
