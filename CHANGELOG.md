@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.9.1
+
+Pin Flatpack to published `v0.1.141`. No product, Admin, or customer-billing
+UI redesign in this release.
+
+### Changed
+
+- Gemspec requires `flat_pack ~> 0.1.141`. Dummy and development Gemfiles pin
+  Flatpack git tag `v0.1.141` (annotated tag `31ea491672030525cd0fd0b300e0ae7041b65981`,
+  commit `c50fee8a4b1bbd73d1122d6d0b8fff5873b26220`). The stale branch pin
+  `cursor/plan-picker-current-no-cta-6ba6` (Flatpack #159) is removed.
+- Dummy no longer forks `recording_studio/default_layout`. Authenticated
+  screens stay on core `UsesDefaultLayout`. Rounded theme on `html` comes from
+  the existing `_default_layout_head` hook (script sets `data-theme="rounded"`
+  on the document element). Devise sign-in stays on `layouts/application`.
+
+### Upgrade notes
+
+- Require Flatpack `~> 0.1.141` (pin git tag `v0.1.141`). No host view or
+  config changes for this bump. Hosts that previously forked default layout
+  only to put `data-theme` on `html` can use `_default_layout_head` instead.
+
 ## 0.9.0
 
 Turn the three billing Admin hubs into dashboards with inventory, and require a

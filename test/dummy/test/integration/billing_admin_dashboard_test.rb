@@ -161,8 +161,8 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
 
   def assert_admin_shell
     assert_includes response.body, 'data-recording-studio-default-layout="true"'
-    assert_select "html[data-theme=rounded]"
     assert_select "body[data-theme=rounded]"
+    assert_includes response.body, 'document.documentElement.setAttribute("data-theme", "rounded")'
     refute_includes response.body, "recording_studio_root_switch_dropdown"
     refute_includes response.body, "Sign out"
   end

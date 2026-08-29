@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.9.0", RecordingStudioBilling::VERSION
+    assert_equal "0.9.1", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_uses_default_layout_entry_buttons
@@ -33,12 +33,11 @@ class RecordingStudioBillingTest < Minitest::Test
 
     refute File.exist?(File.join(dummy_layouts, "flat_pack_sidebar.html.erb"))
     refute File.exist?(File.join(dummy_layouts, "flat_pack/_sidebar.html.erb"))
+    refute File.exist?(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
 
-    default_layout = File.read(File.join(dummy_layouts, "recording_studio/default_layout.html.erb"))
-    assert_includes default_layout, '<html data-theme="'
-    refute_includes default_layout, "flat_pack_sidebar"
-    refute_includes default_layout, "Sign out"
-    refute_includes default_layout, "recording_studio_root_switch_dropdown"
+    head = File.read(File.expand_path("dummy/app/views/recording_studio/_default_layout_head.html.erb", __dir__))
+    assert_includes head, 'document.documentElement.setAttribute("data-theme", "rounded")'
+    refute_includes head, "recording_studio/default_layout"
 
     application = File.read(File.join(dummy_layouts, "application.html.erb"))
     assert_includes application, '<html data-theme="rounded">'
@@ -55,7 +54,7 @@ class RecordingStudioBillingTest < Minitest::Test
 
   def test_dummy_runs_flatpack_rounded_button_rebinds
     spec = Bundler.definition.specs["flat_pack"].first
-    assert_operator Gem::Version.new(spec.version.to_s), :>=, Gem::Version.new("0.1.135")
+    assert_operator Gem::Version.new(spec.version.to_s), :>=, Gem::Version.new("0.1.141")
 
     css = File.read(File.join(spec.full_gem_path, "app/assets/stylesheets/flat_pack/variables.css"))
     assert_includes css, "--color-primary: oklch(0.3211 0 0)"
@@ -63,6 +62,23 @@ class RecordingStudioBillingTest < Minitest::Test
     assert_includes css, "--button-border-radius: var(--radius-md)"
     assert_operator css.scan('[data-theme="rounded"]').size, :>=, 2
     assert_match(/\[data-theme="rounded"\][^{]*\{[^}]*--button-border-radius: var\(--radius-md\)/m, css)
+  end
+
+  def test_gemfiles_pin_flatpack_v0141
+    [File.expand_path("../Gemfile", __dir__), File.expand_path("dummy/Gemfile", __dir__)].each do |gemfile|
+      assert_includes File.read(gemfile), 'gem "flat_pack", github: "bowerbird-app/flatpack", tag: "v0.1.141"'
+      refute_includes File.read(gemfile), "cursor/plan-picker-current-no-cta-6ba6"
+    end
+
+    [File.expand_path("../Gemfile.lock", __dir__), File.expand_path("dummy/Gemfile.lock", __dir__)].each do |lockfile|
+      lock = File.read(lockfile)
+      assert_includes lock, "tag: v0.1.141"
+      assert_includes lock, "flat_pack (0.1.141)"
+      assert_includes lock, "31ea491672030525cd0fd0b300e0ae7041b65981"
+    end
+
+    gemspec = File.read(File.expand_path("../recording_studio_billing.gemspec", __dir__))
+    assert_includes gemspec, '"flat_pack", "~> 0.1.141"'
   end
 
   def test_dummy_sql_structure_preserves_billing_integrity_objects

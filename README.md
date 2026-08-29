@@ -532,9 +532,10 @@ which provides `RecordingStudioAdmin::AllowsAdminSections`.
 The PostgreSQL/UUID dummy app preserves Devise, FlatPack, Root Switchable,
 Codespaces, and idempotent seeds. Signed-in dummy and billing pages use
 Recording Studio's `recording_studio/default_layout` only (`data-theme` rounded
-on `html` and `body`, PageNav back/close, no Sign out or Root Switchable control
-in that slot). Dummy/dev Gemfiles pin Flatpack #159 so rounded buttons inherit
-charcoal primary and `--button-border-radius`; do not fork that CSS here. Devise
+on `html` via `_default_layout_head` and on `body` from core, PageNav back/close,
+no Sign out or Root Switchable control in that slot). Dummy/dev Gemfiles pin
+Flatpack `v0.1.141` so rounded buttons inherit charcoal primary and
+`--button-border-radius`; do not fork that CSS here. Devise
 sign-in stays on `layouts/application`. Dummy
 seeds bootstrap the first owner on the workspace and Admin root with
 `bootstrap_owner_access!`, then mount staff admin at `/admin`. Its credential-free

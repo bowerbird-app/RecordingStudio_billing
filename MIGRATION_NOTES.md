@@ -2,6 +2,12 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.9.1 — Flatpack v0.1.141 pin
+
+No schema change. Hosts bump Flatpack to `~> 0.1.141` (git tag `v0.1.141`).
+Dummy drops the forked `recording_studio/default_layout` and sets rounded on
+`html` via `_default_layout_head`.
+
 ## 0.9.0 — product and billing option names
 
 Adds required `name` on `recording_studio_billing_products` and
@@ -166,4 +172,4 @@ Do not edit copied engine migrations in the host. Schema changes belong in this 
 
 `test/dummy` uses the same install migration. Reset it with `bin/rails db:drop db:create db:migrate` from `test/dummy`, then commit `test/dummy/db/structure.sql`.
 
-The dummy host uses FlatPack and Recording Studio `UsesDefaultLayout`. Signed-in dummy, customer billing, and staff `/admin` pages use a thin dummy `recording_studio/default_layout` with `data-theme="rounded"` on `html` and `body`. Dummy/dev pins Flatpack #159 for rounded button tokens. Devise sign-in stays on `layouts/application`. Dummy seeds rebuild the V1 demonstration catalogue, grant the seeded admin Accessible `edit` on Studio Workspace and owner access on Billing Administration, and populate the three billing Admin hubs. Reset the dummy database if published records were created by an older seed. Customer billing needs the Accessible `recording_studio_accesses` table, which dummy restores after Recording Studio v3 removed core access tables.
+The dummy host uses FlatPack and Recording Studio `UsesDefaultLayout`. Signed-in dummy, customer billing, and staff `/admin` pages use core `recording_studio/default_layout` with `data-theme="rounded"` on `body` from core and on `html` via `_default_layout_head`. Dummy/dev pins Flatpack `v0.1.141` for rounded button tokens. Devise sign-in stays on `layouts/application`. Dummy seeds rebuild the V1 demonstration catalogue, grant the seeded admin Accessible `edit` on Studio Workspace and owner access on Billing Administration, and populate the three billing Admin hubs. Reset the dummy database if published records were created by an older seed. Customer billing needs the Accessible `recording_studio_accesses` table, which dummy restores after Recording Studio v3 removed core access tables.
