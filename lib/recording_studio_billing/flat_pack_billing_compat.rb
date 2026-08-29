@@ -38,13 +38,13 @@ module RecordingStudioBilling
 
         content_tag(:div, class: "flex items-start justify-between gap-3 mb-2") do
           safe_join([
-            heading,
-            render(FlatPack::Badge::Component.new(
-              text: status_config.fetch(:text),
-              style: status_config.fetch(:style),
-              size: :sm
-            ))
-          ])
+                      heading,
+                      render(FlatPack::Badge::Component.new(
+                               text: status_config.fetch(:text),
+                               style: status_config.fetch(:style),
+                               size: :sm
+                             ))
+                    ])
         end
       end
 
@@ -123,8 +123,8 @@ module RecordingStudioBilling
           href: sanitize_plan_href(normalized[:href]),
           cta: show_cta,
           cta_text: show_cta ? default_cta_text(normalized) : nil,
-          current: !!normalized[:current],
-          highlighted: !!normalized[:highlighted]
+          current: cast_boolean(normalized[:current]),
+          highlighted: cast_boolean(normalized[:highlighted])
         }
       end
 
