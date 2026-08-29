@@ -33,6 +33,14 @@ module RecordingStudioBilling
       display_amount(amount_minor, currency_code, exponent:)
     end
 
+    def price_interval_suffix(interval)
+      case interval.to_s
+      when "year" then copy("price_suffix_year", "/yr")
+      when "week" then copy("price_suffix_week", "/wk")
+      else copy("price_suffix_month", "/mo")
+      end
+    end
+
     def display_date(time)
       DisplayFormatters.format_date(time)
     end

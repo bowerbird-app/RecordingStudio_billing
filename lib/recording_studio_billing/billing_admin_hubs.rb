@@ -112,7 +112,7 @@ module RecordingStudioBilling
         screen_class.table do
           title definition.fetch(:title)
           definition.fetch(:columns).each do |column_key|
-            column column_key, **hub_table_column_options(section_key, column_key)
+            column column_key, **BillingAdminHubs.hub_table_column_options(section_key, column_key)
           end
           default_columns(*definition.fetch(:columns))
           default_sort :created_at, direction: :desc
@@ -238,7 +238,6 @@ module RecordingStudioBilling
         {}
       end
     end
-    private_class_method :hub_table_column_options
 
     def widget_text(row, key)
       case key
