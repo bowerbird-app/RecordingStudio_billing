@@ -67,6 +67,19 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
                  RecordingStudioBilling::DisplayFormatters.format_date(Time.utc(2026, 8, 26), now: Time.utc(2026, 8, 29))
   end
 
+  test "manifest widget labels lead with product name and keep a short digest" do
+    manifest = Struct.new(:canonical_data, :recording_snapshots, :used_at, :created_at, :manifest_digest).new(
+      { "product" => { "key" => "demo_pro" } }, {}, Time.utc(2026, 8, 29), Time.utc(2026, 8, 29), "a4633aedffd3"
+    )
+
+    label = RecordingStudioBilling::BillingAdminHubs.stub(:name_from_product_key, ->(*) { "Pro" }) do
+      RecordingStudioBilling::BillingAdminHubs.send(:manifest_offer_label, manifest)
+    end
+
+    assert_equal "Pro · 29 Aug · a4633a", label
+    refute_equal "a4633aedffd3", label
+  end
+
   test "plan update widget labels stay distinct when products match" do
     option = Struct.new(:product_recording).new(
       Struct.new(:recordable).new(Struct.new(:name, :key, :kind).new("Pro", "demo_pro", "plan"))

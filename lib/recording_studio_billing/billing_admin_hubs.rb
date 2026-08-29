@@ -290,9 +290,10 @@ module RecordingStudioBilling
     def manifest_offer_label(manifest)
       name = manifest_product_name(manifest)
       date = DisplayFormatters.format_date(manifest.used_at || manifest.created_at)
+      digest = manifest.manifest_digest.to_s.first(6).presence
       return if name.blank?
 
-      [name, date].compact.join(" · ")
+      [name, date, digest].compact.join(" · ")
     end
     private_class_method :manifest_offer_label
 

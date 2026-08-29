@@ -23,7 +23,8 @@ restyle.
   money movement is already done; Waiting replaces Waiting for confirmation.
 - Admin hub widgets show product names and formatted money instead of
   catalogue keys and raw minor units. Published manifests show
-  `Pro · 26 Aug` (hash-only rows are omitted). Financial commands are labeled
+  `Pro · 26 Aug` with a short digest suffix so rows stay distinct (never
+  hash-only titles). Financial commands are labeled
   Plan changes (`Plan change · Needs a look`). Subscriptions and plan updates
   prefer workspace/plan names. Reconciliation kinds use `Provider mismatch`.
 - Admin hub widgets keep one row per record. Plan updates use
