@@ -173,13 +173,15 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     germany = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-germany")
     get "/billing/checkout/#{italy.id}", params: { root_recording_id: @workspace_root.id }
     assert_response :success
-    assert_includes response.body, "4500 EUR"
-    refute_includes response.body, "4700 EUR"
+    assert_includes response.body, "€45"
+    refute_includes response.body, "€47"
+    refute_includes response.body, "4500 EUR"
 
     get "/billing/checkout/#{germany.id}", params: { root_recording_id: @workspace_root.id }
     assert_response :success
-    assert_includes response.body, "4700 EUR"
-    refute_includes response.body, "4500 EUR"
+    assert_includes response.body, "€47"
+    refute_includes response.body, "€45"
+    refute_includes response.body, "4700 EUR"
   end
 
   test "tax calculator contracts reject disabled and unsupported requests without creating projections" do
