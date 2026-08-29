@@ -67,7 +67,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       get "/admin/sections/billing_commercial/widgets/#{widget_key}"
       assert_response :success, widget_key
       assert_operator seeded_row_count_for(screen_key), :>, 0
-      assert_includes response.body, seeded_row_label_for(screen_key)
+      assert_includes response.body, seeded_widget_label_for(screen_key)
       assert_includes response.body, "/admin/screens/#{screen_key}"
     end
 
@@ -85,7 +85,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
         assert_includes section_body, RecordingStudioAdmin.widget_for(widget_key).title
         get "/admin/sections/#{section_key}/widgets/#{widget_key}"
         assert_response :success, widget_key
-        assert_includes response.body, seeded_row_label_for(screen_key)
+        assert_includes response.body, seeded_widget_label_for(screen_key)
         next unless screen_key == "billing_financial_commands"
 
         assert_includes response.body, "Plan change · "
@@ -107,7 +107,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       assert_includes response.body, expected_table_title(key)
       next unless HIGH_SIGNAL_SCREENS.include?(key) || HUB_SECTIONS.include?(key)
 
-      assert_includes response.body, seeded_row_label_for(key)
+      assert_includes response.body, seeded_table_label_for(key)
     end
   end
 
@@ -179,12 +179,41 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       RecordingStudioBilling::ADMIN_OPERATION_AREAS.fetch(key.to_sym).fetch(:title)
   end
 
-  def seeded_row_label_for(key)
+  def seeded_widget_label_for(key)
     case key
-    when "billing_commercial", "billing_manifests"
+    when "billing_products"
+      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
+    when "billing_prices"
+      price = RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first
+      option = price.billing_option_recording.recordable
+      option.product_recording.recordable.name
+    when "billing_manifests"
       product_key = RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first
                                 .canonical_data.dig("product", "key")
       RecordingStudioBilling::Product.with_current_recording.find_by!(key: product_key).name
+    when "billing_invoices"
+      invoice = RecordingStudioBilling::Invoice.order(created_at: :desc).first
+      RecordingStudioBilling::DisplayFormatters.format_money(invoice.total_minor, invoice.currency_code)
+    when "billing_payments"
+      payment = RecordingStudioBilling::Payment.order(created_at: :desc).first
+      RecordingStudioBilling::DisplayFormatters.format_money(payment.amount_minor, payment.currency_code)
+    when "billing_financial_commands"
+      "Plan change"
+    when "billing_subscriptions"
+      "Pro"
+    when "billing_plan_updates"
+      "Pro"
+    when "billing_reconciliation_issues"
+      "Provider mismatch"
+    else
+      raise "no seeded widget label for #{key}"
+    end
+  end
+
+  def seeded_table_label_for(key)
+    case key
+    when "billing_commercial", "billing_manifests"
+      RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first.manifest_digest.first(12)
     when "billing_financial", "billing_financial_commands"
       "Plan change"
     when "billing_operations", "billing_reconciliation_issues"
@@ -193,18 +222,21 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
     when "billing_prices"
       price = RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first
-      option = price.billing_option_recording.recordable
-      option.product_recording.recordable.name
+      RecordingStudioBilling::DisplayFormatters.format_money(
+        price.amount_minor, price.currency_code, exponent: price.currency_exponent
+      )
     when "billing_invoices"
-      "$"
+      invoice = RecordingStudioBilling::Invoice.order(created_at: :desc).first
+      RecordingStudioBilling::DisplayFormatters.format_money(invoice.total_minor, invoice.currency_code)
     when "billing_payments"
-      "$"
+      payment = RecordingStudioBilling::Payment.order(created_at: :desc).first
+      RecordingStudioBilling::DisplayFormatters.format_money(payment.amount_minor, payment.currency_code)
     when "billing_subscriptions"
-      "Pro"
+      RecordingStudioBilling::Subscription.with_current_recording.order(created_at: :desc).first.identifier
     when "billing_plan_updates"
-      "Pro"
+      RecordingStudioBilling::PlanUpdate.with_current_recording.order(created_at: :desc).first.key
     else
-      raise "no seeded label for #{key}"
+      raise "no seeded table label for #{key}"
     end
   end
 

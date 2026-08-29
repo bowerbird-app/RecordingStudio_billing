@@ -27,7 +27,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
-    test "financial command widget rows keep type and state in the wrapping label" do
+  test "financial command widget rows keep type and state in the wrapping label" do
     spec = RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.find do |entry|
       entry.fetch(:screen) == "billing_financial_commands"
     end
