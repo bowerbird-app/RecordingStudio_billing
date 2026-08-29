@@ -109,7 +109,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_select "[data-stripe-publishable-key='pk_test_embedded']"
     assert_includes response.body, "https://js.stripe.com/v3/"
     assert_select "script[type='module'][src*='recording_studio_billing/stripe_checkout']"
-    assert_includes response.body, "2 x 1000 EUR"
+    assert_includes response.body, "2 x €10"
+    refute_includes response.body, "1000 EUR"
     refute_includes response.body, 'import "recording_studio_billing/stripe_checkout"'
     refute_includes response.body, "import 'recording_studio_billing/stripe_checkout'"
     persisted = [intent.attributes, command.attributes, intent.attempts.map(&:attributes)].inspect
@@ -345,7 +346,8 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Credit pack"
-    assert_includes response.body, "2 x 1000 EUR"
+    assert_includes response.body, "2 x €10"
+    refute_includes response.body, "1000 EUR"
     assert_includes response.body, "one-time"
     refute_includes response.body, "One off credit pack"
     main = response.body[%r{<main class="[^"]*p-6[^"]*">.*?</main>}m]
