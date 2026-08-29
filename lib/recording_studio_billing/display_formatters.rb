@@ -158,7 +158,7 @@ module RecordingStudioBilling
     end
 
     def hour_window?(duration)
-      duration <= 1.hour + 1.minute && duration >= 59.minutes
+      duration.between?(59.minutes, 1.hour + 1.minute)
     end
     private_class_method :hour_window?
 

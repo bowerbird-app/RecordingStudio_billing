@@ -25,6 +25,7 @@ Metrics/ClassLength:
 Metrics/ModuleLength:
   Exclude:
     - 'lib/recording_studio_billing/billing_operations_section.rb'
+    - 'lib/recording_studio_billing/billing_admin_hubs.rb'
 
 Metrics/MethodLength:
   Exclude:
