@@ -44,7 +44,7 @@ module RecordingStudioBilling
       option = line.fetch("billing_option", {})
       {
         label: line.dig("product", "name").presence || "Plan",
-        amount: [price["amount_minor"], price["currency_code"]].compact.join(" "),
+        amount: presenter.display_amount(price["amount_minor"], price["currency_code"]),
         quantity: price["quantity"] || 1,
         cadence: option["recurrence"] == "recurring" ? option["interval"] : "one-time",
         tax: "Tax is calculated at checkout"
