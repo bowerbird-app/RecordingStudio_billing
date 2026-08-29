@@ -17,6 +17,12 @@ UI redesign in this release.
   screens stay on core `UsesDefaultLayout`. Rounded theme on `html` comes from
   the existing `_default_layout_head` hook (script sets `data-theme="rounded"`
   on the document element). Devise sign-in stays on `layouts/application`.
+- Boot compat: published PlanSummary still requires a status symbol, and
+  PlanPicker still puts CTAs in the tile footer with a Current badge. Billing
+  Overview keeps `status: nil` (no Active badge) and PlanPicker keeps body
+  Choose plan / disabled Current via temporary `FlatPackBillingCompat` prepends
+  until Flatpack ships those on a tag (open #159). Remove the compat when
+  Flatpack defines `omitted_status?` / `default_cta_text` on those components.
 
 ### Upgrade notes
 

@@ -139,6 +139,7 @@ module RecordingStudioBilling
     end
 
     config.to_prepare do
+      RecordingStudioBilling::FlatPackBillingCompat.apply!
       RecordingStudioBilling.register_builtin_providers!
       RecordingStudioBilling.register_webhook_actions!
       if defined?(RecordingStudioAdmin::ApplicationController)

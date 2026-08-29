@@ -13,6 +13,7 @@ require "recording_studio_billing/billable"
 require "recording_studio_billing/billing_admin_support"
 require "recording_studio_billing/billing_admin_product_new"
 require "recording_studio_billing/billing_operations_section"
+require "recording_studio_billing/flat_pack_billing_compat"
 require "recording_studio_billing/engine"
 
 module RecordingStudioBilling
