@@ -154,7 +154,7 @@ module RecordingStudioBilling
     end
 
     def money_state_complete?(label)
-      label.to_s.in?(%w[Succeeded Applied Paid Done])
+      label.to_s.in?(%w[Succeeded Applied Paid Done Closed])
     end
 
     def hour_window?(duration)

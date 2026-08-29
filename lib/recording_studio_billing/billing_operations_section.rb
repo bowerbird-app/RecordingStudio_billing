@@ -8,7 +8,7 @@ module RecordingStudioBilling
     key "billing_commercial"
     icon :shopping_bag
     title "Products and pricing"
-    subtitle "Products and pricing"
+    subtitle "Products, prices, markets, and providers"
     blast_radius :site
     availability_scope :all
   end
@@ -17,7 +17,7 @@ module RecordingStudioBilling
     key "billing_financial"
     icon :banknotes
     title "Financial records"
-    subtitle "Financial records"
+    subtitle "Commands, checkout, tax, and subscription activity"
     blast_radius :site
     availability_scope :all
   end
@@ -26,7 +26,7 @@ module RecordingStudioBilling
     key "billing_operations"
     icon :credit_card
     title "Billing operations"
-    subtitle "Billing operations"
+    subtitle "Products, providers, tax, usage, and reconciliation"
     blast_radius :site
     availability_scope :all
   end

@@ -67,6 +67,31 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
                  RecordingStudioBilling::DisplayFormatters.format_date(Time.utc(2026, 8, 26), now: Time.utc(2026, 8, 29))
   end
 
+  test "plan update widget labels stay distinct when products match" do
+    option = Struct.new(:product_recording).new(
+      Struct.new(:recordable).new(Struct.new(:name, :key, :kind).new("Pro", "demo_pro", "plan"))
+    )
+    recording = Struct.new(:recordable).new(option)
+    first = Struct.new(:billing_option_recording, :key, :effective_at, :created_at).new(
+      recording, "demo_plan_update_uncertain", nil, Time.utc(2026, 8, 29)
+    )
+    second = Struct.new(:billing_option_recording, :key, :effective_at, :created_at).new(
+      recording, "demo_plan_update_failed", nil, Time.utc(2026, 8, 29)
+    )
+
+    assert_equal "Pro · Uncertain",
+                 RecordingStudioBilling::BillingAdminHubs.send(:widget_text, first, :plan_update_label)
+    assert_equal "Pro · Failed",
+                 RecordingStudioBilling::BillingAdminHubs.send(:widget_text, second, :plan_update_label)
+  end
+
+  test "operations hub kind column formats provider mismatch" do
+    options = RecordingStudioBilling::BillingAdminHubs.hub_table_column_options("billing_operations", :kind)
+    row = Struct.new(:kind).new("provider_result_mismatch")
+
+    assert_equal "Provider mismatch", options.fetch(:value).call(row, nil)
+  end
+
   test "inventory table columns and filters exist on their models" do
     RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
       model = "RecordingStudioBilling::#{definition.fetch(:model)}".constantize

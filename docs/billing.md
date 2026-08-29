@@ -244,8 +244,9 @@ added by `draw_recording_studio_billing_plans` during install. The gem provides
 The billing mount still exposes `GET /billing/plan`, which redirects to the host
 plans route when configured. **Plan requests** stays under billing
 (`/billing/plan_requests`). **Usage** is `/billing/usage` on the engine root
-(not `/billing/billing/usage`). Usage leads with one period story (what you
-used, what was on the plan, what is extra and owed), then Credits left and the
+(not `/billing/billing/usage`). Usage keeps Flatpack UsageMeter rows for each
+period (window caption as `Last hour` / `This month` / `26 Aug`), then Credits
+left, Usage charges (no Closed pill when settled; money as `$0.30`), and the
 named "On this plan" feature list.
 
 The Plan page shows a title, subtitle, and a three-column Plan Picker (Free

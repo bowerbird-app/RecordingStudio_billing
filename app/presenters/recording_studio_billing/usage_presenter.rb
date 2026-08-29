@@ -45,10 +45,6 @@ module RecordingStudioBilling
       end
     end
 
-    def usage_stories
-      Array(allocations).map { |allocation| usage_story_for(allocation) }.compact
-    end
-
     def grant_rows
       Array(credit_grants).map do |grant|
         {
@@ -69,6 +65,7 @@ module RecordingStudioBilling
           credited: allocation.credited_quantity,
           excess: allocation.excess_quantity,
           state: money_state(allocation.state),
+          show_status: show_money_status?(allocation.state),
           prepaid: allocation.usage_credit_allocations.sum(&:quantity),
           extra_usage: overage && display_amount(overage.amount_minor, overage.currency_code)
         }
@@ -76,35 +73,6 @@ module RecordingStudioBilling
     end
 
     private
-
-    def usage_story_for(allocation)
-      measured = allocation.measured_quantity.to_i
-      return if measured.zero? && allocation.excess_quantity.to_i.zero?
-
-      label = usage_label(allocation.credit_key)
-      window = display_usage_window(allocation.usage_period&.starts_at, allocation.usage_period&.ends_at)
-      period_phrase = usage_period_phrase(window)
-      credited = allocation.credited_quantity.to_i
-      excess = allocation.excess_quantity.to_i
-      overage = allocation.overage_calculation
-      money = overage && display_amount(overage.amount_minor, overage.currency_code)
-
-      detail = "#{credited} on the plan, #{excess} extra"
-      detail = "#{detail} · #{money}" if money.present?
-      "#{measured} #{label} #{period_phrase}. #{detail}"
-    end
-
-    def usage_period_phrase(window)
-      text = window.to_s
-      return "this period" if text.blank?
-
-      case text
-      when "Last hour" then "last hour"
-      when "This month" then "this month"
-      when /\A\d/ then "on #{text}"
-      else text.downcase
-      end
-    end
 
     def simple_usage_value(value)
       value.is_a?(Hash) || value.is_a?(Array) ? nil : value.to_s

@@ -107,8 +107,6 @@ module RecordingStudioBilling
     def install_hub_tables!
       HUB_TABLES.each do |section_key, definition|
         screen_class = screen_class_for(section_key)
-        next if screen_class.table_value
-
         screen_class.table do
           title definition.fetch(:title)
           definition.fetch(:columns).each do |column_key|
@@ -227,7 +225,7 @@ module RecordingStudioBilling
     private_class_method :reset_section_children!
 
     def hub_table_column_options(section_key, column_key)
-      case [section_key, column_key]
+      case [section_key.to_s, column_key.to_s]
       when %w[billing_financial command_type]
         { value: ->(row, _) { DisplayFormatters.command_type_label(row.command_type) } }
       when %w[billing_financial state], %w[billing_operations state]
@@ -353,11 +351,20 @@ module RecordingStudioBilling
 
     def plan_update_label(plan_update)
       name = commercial_product_name(plan_update.billing_option_recording&.recordable)
-      return name if name.present?
+      detail = plan_update_detail(plan_update)
+      return [name, detail].compact_blank.uniq.join(" · ") if name.present? || detail.present?
 
       humanize_plan_update_key(plan_update.key)
     end
     private_class_method :plan_update_label
+
+    def plan_update_detail(plan_update)
+      from_key = humanize_plan_update_key(plan_update.key)
+      return from_key if from_key.present? && from_key != commercial_product_name(plan_update.billing_option_recording&.recordable)
+
+      DisplayFormatters.format_date(plan_update.effective_at || plan_update.created_at)
+    end
+    private_class_method :plan_update_detail
 
     def humanize_plan_update_key(key)
       stripped = key.to_s.delete_prefix("demo_").delete_prefix("plan_update_")

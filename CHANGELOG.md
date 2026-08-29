@@ -15,8 +15,9 @@ restyle.
   `4900 USD`-style minor units.
 - Dates use short day labels (`26 Aug`, with year only when not the current
   year). Usage windows prefer `Last hour` / `This month` / `26 Aug`.
-- Customer Usage leads with one period story, renames prepaid credits to
-  Credits left, and drops the Closed status pill on charges.
+- Customer Usage keeps Flatpack UsageMeter rows and the charges list; window
+  captions use `Last hour` / `This month` / `26 Aug`, prepaid credits become
+  Credits left, and the Closed status pill on settled charges is hidden.
 - Customer Invoices subtitle is `Bills and refunds.`; rows are
   `26 Aug · $49` without an Invoice prefix; Succeeded badges hide when the
   money movement is already done; Waiting replaces Waiting for confirmation.
@@ -25,9 +26,12 @@ restyle.
   `Pro · 26 Aug` (hash-only rows are omitted). Financial commands are labeled
   Plan changes (`Plan change · Needs a look`). Subscriptions and plan updates
   prefer workspace/plan names. Reconciliation kinds use `Provider mismatch`.
-- Hub subtitles no longer list inventory. New product Provider options show
-  the provider name without echoing the catalogue key. Inventory Kind/State
-  (and money columns) use the same human labels; Key stays for staff.
+- Admin hub widgets keep one row per record. Plan updates use
+  `Pro · Uncertain` (name plus what changed), not a repeated product name alone.
+- Hub section subtitles stay one short line and do not repeat the title.
+  New product Provider options show the provider name without echoing the
+  catalogue key. Inventory Kind/State (and money columns) use the same human
+  labels; Key stays for staff.
 
 ### Upgrade notes
 
