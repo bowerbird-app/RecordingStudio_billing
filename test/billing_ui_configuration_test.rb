@@ -118,7 +118,8 @@ class BillingUiConfigurationTest < Minitest::Test
     )
 
     assert_includes html, "Studio Pro"
-    assert_includes html, "3 x 1000 EUR"
+    assert_includes html, "3 x €10"
+    refute_includes html, "1000 EUR"
     assert_includes html, "monthly"
     assert_includes html, "Tax is calculated at checkout"
     refute_includes html, "Overage policy"
