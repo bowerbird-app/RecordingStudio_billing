@@ -1,0 +1,17 @@
+{
+  "id": "cs_test_default",
+  "object": "checkout.session",
+  "amount_subtotal": 1000,
+  "amount_total": 1090,
+  "created": 1700000000,
+  "currency": "usd",
+  "payment_status": "paid",
+  "status": "complete",
+  "client_secret": "must-not-persist",
+  "url": "https://checkout.stripe.com/c/pay/cs_test_default",
+  "total_details": {
+    "amount_discount": 0,
+    "amount_shipping": 0,
+    "amount_tax": 90
+  }
+}

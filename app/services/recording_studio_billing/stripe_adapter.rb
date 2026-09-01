@@ -16,6 +16,8 @@ module RecordingStudioBilling
     MAX_INVOICE_DOWNLOAD_BYTES = 10 * 1024 * 1024
     DOWNLOAD_OPEN_TIMEOUT = 5
     DOWNLOAD_READ_TIMEOUT = 15
+    CHECKOUT_LINE_ITEM_LIMIT = 100
+    CHECKOUT_SESSION_EXPAND = ["line_items.data.price.product"].freeze
 
     CAPABILITIES = V1Contract.provider_capabilities.freeze
 
@@ -374,12 +376,46 @@ module RecordingStudioBilling
 
     def retrieve_remote(client, reference)
       case reference
-      when /\Acs_/ then stripe_hash(client.v1.checkout.sessions.retrieve(reference))
+      when /\Acs_/ then retrieve_checkout_session(client, reference)
       when /\Asub_/ then stripe_hash(client.v1.subscriptions.retrieve(reference))
       when /\Are_/ then stripe_hash(client.v1.refunds.retrieve(reference))
       when /\Ain_/ then stripe_hash(client.v1.invoices.retrieve(reference))
       else raise ArgumentError, "unknown Stripe reference type"
       end
+    end
+
+    def retrieve_checkout_session(client, reference)
+      session = stripe_hash(client.v1.checkout.sessions.retrieve(reference, { expand: CHECKOUT_SESSION_EXPAND }))
+      page = session["line_items"]
+      data = Array(page.is_a?(Hash) ? page["data"] : nil)
+      listed_has_more = page.is_a?(Hash) && page["has_more"] == true
+      if checkout_line_items_incomplete?(page, data) && checkout_line_items_listable?(client)
+        listed = stripe_hash(
+          client.v1.checkout.sessions.line_items.list(
+            reference,
+            { limit: CHECKOUT_LINE_ITEM_LIMIT, expand: ["data.price.product"] }
+          )
+        )
+        data = Array(listed["data"])
+        listed_has_more = listed["has_more"] == true
+      end
+      session["line_items"] = capped_checkout_line_items(data, listed_has_more)
+      session
+    end
+
+    def capped_checkout_line_items(data, listed_has_more)
+      {
+        "data" => data.first(CHECKOUT_LINE_ITEM_LIMIT),
+        "has_more" => listed_has_more || data.size > CHECKOUT_LINE_ITEM_LIMIT
+      }
+    end
+
+    def checkout_line_items_incomplete?(page, data)
+      data.empty? || (page.is_a?(Hash) && page["has_more"] == true)
+    end
+
+    def checkout_line_items_listable?(client)
+      client.v1.checkout.sessions.respond_to?(:line_items)
     end
 
     def stripe_outcome(remote)
@@ -491,17 +527,15 @@ module RecordingStudioBilling
     def checkout_financial_payload(remote, command)
       return unless command.command_type == "checkout" && stripe_outcome(remote) == "succeeded"
 
-      totals = remote.slice("amount_subtotal", "amount_discount", "amount_tax", "amount_total", "currency",
-                            "payment_status")
-      return unless totals.values_at("amount_subtotal", "amount_tax", "amount_total").all? do |value|
-        value.is_a?(Integer)
-      end
+      totals = checkout_session_totals(remote)
+      return unless totals.values_at("amount_subtotal", "amount_tax", "amount_total").all? { |value| value.is_a?(Integer) }
 
       lines = Array(remote.dig("line_items", "data")).map { |line| normalized_checkout_line(line) }
       return if lines.empty? || lines.any?(&:nil?)
+      return if remote.dig("line_items", "has_more") == true
 
       payload = {
-        "subtotal_minor" => totals.fetch("amount_subtotal"), "discount_minor" => totals.fetch("amount_discount", 0),
+        "subtotal_minor" => totals.fetch("amount_subtotal"), "discount_minor" => totals.fetch("amount_discount"),
         "tax_minor" => totals.fetch("amount_tax"), "total_minor" => totals.fetch("amount_total"),
         "currency" => totals.fetch("currency").to_s.upcase, "payment_state" => totals.fetch("payment_status"), "lines" => lines
       }
@@ -516,6 +550,27 @@ module RecordingStudioBilling
       )
     rescue KeyError
       nil
+    end
+
+    def checkout_session_totals(remote)
+      details = remote["total_details"]
+      details = details.to_h.stringify_keys if details.respond_to?(:to_h)
+      details = {} unless details.is_a?(Hash)
+      {
+        "amount_subtotal" => remote["amount_subtotal"],
+        "amount_discount" => checkout_integer_amount(details["amount_discount"], remote["amount_discount"], default: 0),
+        "amount_tax" => checkout_integer_amount(details["amount_tax"], remote["amount_tax"]),
+        "amount_total" => remote["amount_total"],
+        "currency" => remote["currency"],
+        "payment_status" => remote["payment_status"]
+      }
+    end
+
+    def checkout_integer_amount(*values, default: nil)
+      values.each do |value|
+        return value if value.is_a?(Integer)
+      end
+      default
     end
 
     def normalized_checkout_line(line)

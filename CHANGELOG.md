@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.9.2
+
+Checkout retrieve now builds the financial payload from Stripe's default Session JSON.
+
+### Fixed
+
+- `StripeAdapter#retrieve` expands Checkout Session line items, or lists them once with a limit of 100, instead of assuming the retrieve already included `line_items`.
+- Tax and discount map from `total_details`. A leftover top-level `amount_tax` still works for older stubs.
+- If the line-item list still has more than 100 rows, retrieve withholds the financial payload so `ProjectCheckoutFinancialRecords` fail-closes.
+
+### Upgrade notes
+
+- No host or schema changes. Bump the gem if you pin `recording_studio_billing` by version.
+
 ## 0.9.1
 
 Vendor Cursor skills into the checkout so Cloud Agents can load them.

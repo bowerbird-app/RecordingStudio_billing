@@ -1,0 +1,31 @@
+{
+  "object": "list",
+  "url": "/v1/checkout/sessions/cs_test_default/line_items",
+  "has_more": false,
+  "data": [
+    {
+      "id": "li_test_1",
+      "object": "item",
+      "amount_discount": 0,
+      "amount_subtotal": 1000,
+      "amount_tax": 90,
+      "amount_total": 1090,
+      "currency": "usd",
+      "quantity": 1,
+      "price": {
+        "id": "price_inline",
+        "object": "price",
+        "unit_amount": 1000,
+        "currency": "usd",
+        "product": {
+          "id": "prod_inline",
+          "object": "product",
+          "metadata": {
+            "recording_studio_billing_item": "item-1",
+            "recording_studio_billing_manifest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      }
+    }
+  ]
+}
