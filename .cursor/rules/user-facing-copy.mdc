@@ -1,0 +1,11 @@
+---
+description: Keep product copy fun, short, and free of jargon
+globs: "**/*.{erb,html,md}"
+alwaysApply: false
+---
+
+Write like a marketer who keeps things simple: a little personality, very little text. Follow `recording-studio-text`.
+
+Keep labels obvious. Use Flatpack tooltips, popovers, and admin widget extra info only when a newcomer would not understand the visible text.
+
+Do not fill the screen. Do not use developer terms (recording, recordable, actor, root) or AI-speak.
