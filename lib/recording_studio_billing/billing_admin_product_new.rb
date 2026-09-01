@@ -45,11 +45,11 @@ module RecordingStudioBilling
     end
 
     def page!(scope:, context:, return_to:)
-      authorize_create!(context, audit: true, billing_admin_recording: scope.billing_admin_recording)
+      authorize_create!(context, audit: true)
       Page.new(
         access_recording: scope.access_recording,
         parent_recording_id: scope.billing_admin_recording.id,
-        create_path: create_url_for(context, billing_admin_recording: scope.billing_admin_recording),
+        create_path: create_url_for(context),
         cancel_path: sanitized_return_path(return_to, context),
         kind_options: KIND_OPTIONS,
         provider_options: provider_options_for(scope.billing_admin_recording)
@@ -57,7 +57,7 @@ module RecordingStudioBilling
     end
 
     def billing_admin_recording_for(context)
-      root = context.respond_to?(:access_recording) ? context.access_recording : nil
+      root = context.access_recording
       raise RecordingStudioAdmin::DefinitionNotFound, "Admin root is missing" if root.blank?
 
       RecordingStudio::Recording.unscoped.find_by!(
@@ -70,8 +70,8 @@ module RecordingStudioBilling
       raise RecordingStudioAdmin::DefinitionNotFound, "Billing admin is missing"
     end
 
-    def create_url_for(context, billing_admin_recording: nil)
-      parent_recording_id = (billing_admin_recording || billing_admin_recording_for(context)).id
+    def create_url_for(context)
+      parent_recording_id = billing_admin_recording_for(context).id
       engine_path = Engine.routes.url_helpers.admin_operations_create_path(
         operation: "create_draft_product",
         parent_recording_id:
@@ -80,7 +80,11 @@ module RecordingStudioBilling
     end
 
     def new_url_for(context)
-      engine_path = Engine.routes.url_helpers.new_admin_product_path(**new_product_query(context))
+      parent = billing_admin_recording_for(context)
+      engine_path = Engine.routes.url_helpers.new_admin_product_path(
+        parent_recording_id: parent.id,
+        return_to: products_screen_path(context)
+      )
       mounted_operation_url(context, engine_path)
     end
 
@@ -117,12 +121,12 @@ module RecordingStudioBilling
       end.to_s.chomp("/")
     end
 
-    def authorize_create!(context, audit: false, billing_admin_recording: nil)
+    def authorize_create!(context, audit: false)
       RecordingStudioAdmin.authorize_resource!(
         key: RESOURCE_KEY,
         action: :create,
         context: context,
-        record: billing_admin_recording || billing_admin_recording_for(context),
+        record: billing_admin_recording_for(context),
         audit: audit
       )
     end
@@ -139,14 +143,6 @@ module RecordingStudioBilling
         (record.is_a?(RecordingStudio::Recording) &&
          record.recordable_type == "RecordingStudioBilling::BillingAdmin")
     end
-
-    def new_product_query(context)
-      parent = billing_admin_recording_for(context)
-      { parent_recording_id: parent.id, return_to: products_screen_path(context) }
-    rescue RecordingStudioAdmin::DefinitionNotFound
-      {}
-    end
-    private_class_method :new_product_query
 
     def sanitized_return_path(return_to, context)
       safe_return = RecordingStudioAdmin::UrlSafety.safe_href(return_to)

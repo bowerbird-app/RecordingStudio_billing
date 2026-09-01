@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  class AdminProductsController < ApplicationController
-    skip_before_action :load_root_recording!
+  class AdminProductsController < AdminPageController
     before_action :load_new_product_scope!
 
     rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
@@ -38,16 +37,9 @@ module RecordingStudioBilling
     end
 
     def new_product_admin_surface
-      default = RecordingStudioAdmin.configuration.default_surface
       access_recording = @new_product_scope.access_recording
       RecordingStudioAdmin::Surface.new(
-        "billing_product_new",
-        path: default.path,
-        root_section: default.root_section,
-        authentication_method: default.authentication_method,
-        current_actor_method: default.current_actor_method,
-        access_recording_method: default.access_recording_method,
-        engine_layout: default.engine_layout,
+        "billing_admin_product_new",
         access_recording_resolver: ->(_context) { access_recording }
       )
     end

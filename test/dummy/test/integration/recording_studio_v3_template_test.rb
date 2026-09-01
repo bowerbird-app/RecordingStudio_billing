@@ -22,7 +22,6 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     operation_keys = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s)
     account_operation_keys = %w[billing_feature_overrides]
     site_operation_keys = operation_keys - account_operation_keys
-    product_create_links = ["/billing/admin/products/new"]
 
     assert_equal section_keys, RecordingStudioAdmin.sections.keys.grep(/^billing_/).sort
     assert_equal (screen_section_keys + operation_keys).sort,
@@ -59,7 +58,6 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
       widget_keys = screen_keys.map { |key| RecordingStudioBilling::BillingAdminHubs.widget_key_for(key) }
       linked_screens = RecordingStudioBilling::BillingAdminHubs.inventory_screen_keys_for(section_key)
       expected_links = linked_screens.dup
-      expected_links += product_create_links if section_key == "billing_commercial"
       expected_links += [section_key]
 
       assert_equal widget_keys, section.widget_keys
@@ -211,6 +209,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     context = Object.new
     def context.admin_screen_path(key) = "/admin/screens/#{key}"
 
+    def context.access_recording = nil
+
     def context.controller
       routes = Object.new
       def routes.recording_studio_billing_path = "/billing"
@@ -221,7 +221,7 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
       resolved = link.resolve(context)
       next unless resolved
 
-      resolved.url.to_s.split("?").first.delete_prefix("/admin/screens/")
+      resolved.url.to_s.delete_prefix("/admin/screens/")
     end
   end
 
