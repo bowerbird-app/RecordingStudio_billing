@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.9.4
+
+Payment state is `paid` everywhere. Dummy retrieve and refunds use that same contract. Dummy seed always reconciles through the paid gate instead of skipping when a payment_state key is already present.
+
+### Fixed
+
+- Dummy checkout retrieve writes `payment_state` `paid`, matching the webhook and reconcile gate.
+- `CreateRefundIntent` refunds a `paid` payment. A leftover `captured` row is rejected.
+- Dummy catalogue `complete_checkout` always reconciles and refuses to project unless the result is `paid`.
+
+### Upgrade notes
+
+- Bump the gem if you pin `recording_studio_billing` by version.
+- Refunds now require `payments.state = paid`. Update leftover `captured` payment rows before issuing refunds:
+
+```sql
+UPDATE recording_studio_billing_payments SET state = 'paid' WHERE state = 'captured';
+UPDATE recording_studio_billing_invoices SET state = 'paid' WHERE state = 'captured';
+```
+
 ## 0.9.3
 
 Paid Checkout now keeps Stripe subscription, subscription item, payment intent, and invoice identities so later `invoice.paid` receipts can find the original command.

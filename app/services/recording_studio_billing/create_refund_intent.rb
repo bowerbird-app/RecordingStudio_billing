@@ -42,7 +42,7 @@ module RecordingStudioBilling
         end
         if amount_minor.to_i <= 0 || amount_minor.to_i > refundable_amount(payment)
           raise ArgumentError,
-                "refund amount exceeds captured payment"
+                "refund amount exceeds paid payment"
         end
 
         intent = RefundIntent.create!(payment:, root_recording: payment.root_recording, account_recording: payment.account_recording,
@@ -71,7 +71,7 @@ module RecordingStudioBilling
     def payment_id = payment_input.respond_to?(:id) ? payment_input.id : payment_input
 
     def validate_payment!(payment)
-      raise ArgumentError, "refund payment is not captured" unless payment.state == "captured"
+      raise ArgumentError, "refund payment is not paid" unless payment.state == "paid"
       raise ArgumentError, "refund payment currency is invalid" unless payment.currency_code.match?(/\A[A-Z]{3}\z/)
 
       return if payment.financial_command&.provider_account_recording_id.present?

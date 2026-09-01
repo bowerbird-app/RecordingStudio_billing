@@ -799,7 +799,11 @@ class DummyV1Catalogue
       RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: @root_recording)
     end
     command = intent.financial_command
-    RecordingStudioBilling.reconcile_provider_command(command:) unless command.reload.normalized_result.key?("payment_state")
+    RecordingStudioBilling.reconcile_provider_command(command:)
+    command.reload
+    unless command.normalized_result["payment_state"] == "paid"
+      raise "dummy checkout #{key} did not reach paid"
+    end
     if project_payment && !RecordingStudioBilling::Payment.exists?(financial_command: command)
       RecordingStudioBilling.project_checkout_financial_records(checkout_intent: intent, root_recording: @root_recording)
     end

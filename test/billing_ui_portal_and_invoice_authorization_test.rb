@@ -77,7 +77,7 @@ class BillingUiPortalAndInvoiceAuthorizationTest < ActionDispatch::IntegrationTe
     command = invoice.financial_command
     RecordingStudioBilling::Payment.create!(root_recording: @root, account_recording: @account.recording,
                                             financial_command: command, currency_code: "USD", amount_minor: 1_000,
-                                            state: "captured", safe_snapshot: { "source" => "card", "tax" => "final" },
+                                            state: "paid", safe_snapshot: { "source" => "card", "tax" => "final" },
                                             recorded_at: Time.current)
     other_invoice = invoice_for(root: @other_root, account: @other_account)
 

@@ -58,6 +58,15 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
         actor_reference: "admin-1", reason: "customer request", line_allocation: { "payment" => payment.id }
       )
     end
+    stale_root, stale_account, stale_command = command_authority
+    stale = insert_payment(root: stale_root, account: stale_account, command: stale_command, state: "captured")
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling::CreateRefundIntent.call(
+        payment: stale, root_recording: stale_root, local_idempotency_key: "refund-captured", amount_minor: 1,
+        actor_reference: "admin-1", reason: "customer request", line_allocation: { "payment" => stale.id }
+      )
+    end
+    assert_match(/not paid/, error.message)
   end
 
   test "adjustments bind credits to their root and reject material conflicts" do
@@ -445,13 +454,13 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     )
   end
 
-  def insert_payment(root:, account:, command:)
+  def insert_payment(root:, account:, command:, state: "paid")
     now = Time.current
     id = SecureRandom.uuid
     RecordingStudioBilling::Payment.insert_all!([{
                                                   id:, root_recording_id: root.id, account_recording_id: account.recording.id, financial_command_id: command.id,
                                                   provider_reference: "payment-#{SecureRandom.uuid}", currency_code: "USD", amount_minor: 100,
-                                                  state: "captured", safe_snapshot: {}, recorded_at: now, created_at: now, updated_at: now
+                                                  state:, safe_snapshot: {}, recorded_at: now, created_at: now, updated_at: now
                                                 }])
     RecordingStudioBilling::Payment.find(id)
   end
