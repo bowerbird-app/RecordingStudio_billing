@@ -3,7 +3,8 @@
 # Reads Stripe *test* keys from the dummy host environment. Cursor Cloud secrets
 # keep the lowercase names `stripe_test_secret_key` and
 # `stripe_test_publishable_key`. Local shells may use the uppercase aliases.
-# Live `sk_live` / `pk_live` values are ignored.
+# Restricted test keys (`rk_test`) are accepted. Live `sk_live` / `rk_live` /
+# `pk_live` values are ignored.
 module DummyStripeTestCredentials
   RETURN_ORIGIN = "https://example.com"
   SECRET_ENV_NAMES = %w[stripe_test_secret_key STRIPE_TEST_SECRET_KEY STRIPE_SECRET_KEY].freeze
@@ -13,7 +14,7 @@ module DummyStripeTestCredentials
 
   def secret_key
     value = first_present(SECRET_ENV_NAMES)
-    value if value&.start_with?("sk_test")
+    value if value&.start_with?("sk_test", "rk_test")
   end
 
   def publishable_key

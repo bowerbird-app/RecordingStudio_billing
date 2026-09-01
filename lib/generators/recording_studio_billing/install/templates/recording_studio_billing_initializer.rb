@@ -2,7 +2,14 @@
 
 RecordingStudioBilling.configure do |config|
   # Stripe is built in and selected by default. Resolve credentials from host-managed secrets at execution time.
+  # Production secret values must be restricted keys (`rk_live` / `rk_test`), not full-account `sk_live` keys.
+  # Pin Stripe-Version 2026-07-29.dahlia on the Dashboard to match StripeAdapter::STRIPE_API_VERSION.
   # config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
+  #
+  # The engine does not enqueue jobs. Register a worker after a pending command is bound:
+  # RecordingStudioBilling.configuration.hooks.on(:financial_command_pending) do |command|
+  #   ExecuteFinancialCommandJob.perform_later(command.id)
+  # end
   #
   # Custom adapters use the same registry API:
   # RecordingStudioBilling.register_provider(:your_provider, YourProviderAdapter.new)

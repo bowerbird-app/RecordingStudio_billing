@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.9.7", RecordingStudioBilling::VERSION
+    assert_equal "0.9.8", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_uses_default_layout_entry_buttons
@@ -98,5 +98,34 @@ class RecordingStudioBillingTest < Minitest::Test
     assert_match(/CREATE TABLE public\.recording_studio_billing_products[\s\S]*name character varying NOT NULL/, structure)
     assert_match(/CREATE TABLE public\.recording_studio_billing_billing_options[\s\S]*name character varying NOT NULL/, structure)
     assert_includes structure, "CREATE TABLE public.recording_studio_accesses"
+  end
+
+  def test_host_docs_cover_workers_keys_tax_and_drop_template_identity
+    root = File.expand_path("..", __dir__)
+    billing = File.read(File.join(root, "docs/billing.md"))
+    initializer = File.read(
+      File.join(root, "lib/generators/recording_studio_billing/install/templates/recording_studio_billing_initializer.rb")
+    )
+
+    refute Dir.exist?(File.join(root, "docs/gem_template"))
+    assert_includes billing, ":financial_command_pending"
+    assert_includes billing, "rk_live"
+    assert_includes billing, "2026-07-29.dahlia"
+    assert_includes billing, "Tax registration"
+    assert_includes billing, "verify_webhook"
+    assert_includes initializer, "financial_command_pending"
+    assert_includes initializer, "rk_live"
+
+    [
+      File.join(root, "README.md"),
+      File.join(root, "UPDATE_SUMMARY.md"),
+      File.join(root, "docs/billing.md"),
+      File.join(root, ".github/copilot-instructions.md")
+    ].each do |path|
+      content = File.read(path)
+      refute_includes content, "GEM_TEMPLATE_API_KEY"
+      refute_includes content, "GemTemplate"
+      refute_includes content, "docs/gem_template"
+    end
   end
 end

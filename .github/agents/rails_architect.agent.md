@@ -16,7 +16,7 @@ You are a Senior Ruby on Rails Gem Engineer assisting with this Rails engine/gem
 
 **DRY & SRP**: Adhere strictly to Don't Repeat Yourself and Single Responsibility Principle.
 
-**Engine Isolation**: Respect namespace isolation. All code should be properly namespaced under the engine's module (`GemTemplate`). Use `isolate_namespace` patterns correctly.
+**Engine Isolation**: Respect namespace isolation. All code should be properly namespaced under the engine's module (`RecordingStudioBilling`). Use `isolate_namespace` patterns correctly.
 
 **Gem Best Practices**:
 - Keep dependencies minimal and well-justified
@@ -36,7 +36,7 @@ You are a Senior Ruby on Rails Gem Engineer assisting with this Rails engine/gem
 **Security**: Always use Strong Parameters in controllers. Never interpolate user input directly into SQL queries; use ActiveRecord placeholders.
 
 **Engine-Specific**:
-- Prefix all database tables with the engine name (e.g., `gem_template_error_logs`)
+- Prefix all database tables with the engine name (e.g., `recording_studio_billing_invoices`)
 - Namespace all routes under the engine
 - Isolate assets and stylesheets to avoid conflicts with host applications
 - Use `Engine.config` for configuration options
@@ -80,10 +80,10 @@ bundle exec rake test
 - **Real-World Validation**: Do not assume code works just because unit tests pass.
 - **Browser Simulation**: When modifying UI or flows (like `dashboard/index.html.erb`), explicitly verify the user experience:
   1. Start the server (`cd test/dummy && bin/dev`).
-  2. Navigate to the relevant page (e.g., `/gem_template` or `/gem_template/analytics`).
+  2. Navigate to the relevant page (e.g., `/billing` or `/admin`).
   3. Interact with the UI elements (click buttons, fill forms, toggle switches).
   4. Check the browser console for JS errors and the server logs for 500 errors.
-- **Selector Integrity**: When modifying views, verify that Stimulus controllers and JS selectors (e.g., `data-gem-template-target`) still match the HTML.
+- **Selector Integrity**: When modifying views, verify that Stimulus controllers and JS selectors still match the HTML.
 
 ## 5. Validation Expectations
 
@@ -96,7 +96,7 @@ bundle exec rake test
 
 Be concise.
 
-When generating code, include file paths in comments (e.g., `# app/models/gem_template/error_log.rb`).
+When generating code, include file paths in comments (e.g., `# app/models/recording_studio_billing/invoice.rb`).
 
 If a chosen approach has performance implications (like a slow database query), explicitly warn the developer.
 
@@ -116,7 +116,7 @@ For engine-specific concerns (routing, asset isolation, namespace conflicts), pr
 - For Tailwind CSS, use scoped configuration to avoid conflicts
 
 **Configuration**:
-- Provide a configuration block: `GemTemplate.configure do |config|`
+- Provide a configuration block: `RecordingStudioBilling.configure do |config|`
 - Allow host applications to customize behavior
 - Provide sensible defaults
 

@@ -33,6 +33,76 @@ Invoices are unique per financial command too.
 
 Webhook tables come from `recording_studio_webhooks`. Billing inbound-event tables store the webhook event id without a foreign key, so billing can install after the webhooks gem.
 
+## Production host setup
+
+The engine does not run Stripe, workers, or tax by itself. A host that takes money
+must wire these four things before production checkout.
+
+### Workers
+
+Creating a checkout or subscription-change intent only binds a pending
+`FinancialCommand`. After that bind the engine fires
+`:financial_command_pending`. Register a host job there and call the public
+execute helpers from that job. The engine ships no job class.
+
+```ruby
+RecordingStudioBilling.configuration.hooks.on(:financial_command_pending) do |command|
+  ExecuteFinancialCommandJob.perform_later(command.id)
+end
+```
+
+The dummy job is the reference: checkout calls `execute_checkout_intent`;
+subscription changes call `execute_subscription_change_intent` then
+`apply_subscription_change_intent` when execute succeeded. Dummy development
+runs that job inline. Production must use a real queue and a worker process.
+
+A `no_charge` checkout completes after execute and does not wait for a webhook.
+Paid Stripe checkout still completes through webhook or reconcile. Browser
+return is not confirmation.
+
+### Stripe restricted keys
+
+Resolve credentials from host-managed secrets. Production Stripe secret values
+must be restricted keys (`rk_live` / `rk_test`), not full-account `sk_live`
+keys. Grant the key only the surfaces this adapter calls:
+
+- Checkout Sessions (create, retrieve, list line items)
+- Subscriptions (retrieve, update)
+- Invoices (retrieve)
+- Refunds (create, retrieve)
+- Credit notes (create)
+- Billing Portal sessions and configurations
+- Tax Calculations, if the host enables Stripe Tax
+
+Publishable keys stay `pk_test` / `pk_live`. Dummy development still accepts
+`sk_test` or `rk_test` plus `pk_test` and ignores live keys.
+
+### Pin the Stripe API version
+
+`StripeAdapter` sends Stripe-Version `2026-07-29.dahlia`
+(`RecordingStudioBilling::StripeAdapter::STRIPE_API_VERSION`). Pin the same
+version on the Stripe Dashboard for the account and webhook endpoint so
+Checkout retrieve and webhook payloads stay on one contract. Do not let the
+SDK default drift independently of this gem. Hosts that pass a custom
+`client_factory` must send that same `stripe_version`.
+
+### Tax registration or fail-closed
+
+Tax stays off until a host commercial policy enables a registered calculator.
+Stripe Tax also needs a Tax registration in the Stripe Dashboard for every
+country you charge. Missing tax data, an unknown calculator, or a missing
+registration is fail-closed: `unsupported_tax_calculation`, never an assumed
+zero. Do not set `tax_policy.enabled` until those registrations exist and
+`stripe_tax_code_resolver` returns a real Stripe tax code for each semantic
+category.
+
+### Webhook identity check
+
+`RecordingStudioWebhooks` verifies the Stripe signature on the raw HTTP body.
+`StripeAdapter#verify_webhook` does not verify signatures. It checks that the
+already-verified envelope's event id and object id match the dispatch. Keep
+that name; it is the adapter contract `ApplyProviderWebhook` calls.
+
 ## Adapters
 
 - **Stripe** (`RecordingStudioBilling::StripeAdapter`) is the production adapter. Invoice presentation uses hosted Stripe Checkout with invoice creation. `send_invoice` maps to Stripe subscription/invoice collection with `days_until_due`. Checkout Session retrieve expands `line_items.data.price.product` and `subscription`. If that retrieve still omits line items or reports `has_more`, the adapter lists line items once with a limit of 100. Tax and discount come from `total_details`. If the list still has more than 100 items, retrieve withholds the financial payload so projection fail-closes instead of inventing totals. Listing uses Stripe's `sessions.line_items` API. The client must expose that surface. Paid retrieve also copies opaque Stripe identities (`sub_`, `si_`, `pi_`, `in_`) into the financial payload. `PersistCheckoutProviderIdentities` stores those rows so a later `invoice.paid` can resolve the original checkout command through the subscription when the new invoice id is unknown. Already-projected checkout money is not rewritten. Identities persist only after the first successful Checkout retrieve. An `invoice.paid` that arrives first stays unknown until Stripe retries. Checkout line items send the frozen product name as `product_data.name`.

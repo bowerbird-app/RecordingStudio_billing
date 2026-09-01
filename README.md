@@ -315,11 +315,18 @@ Stripe ships as the built-in default provider and is registered under `:stripe`
 during engine boot. Registration stores only adapter objects in process memory;
 provider classes and credentials are never persisted. Before any real Stripe
 operation, the host must configure a credential resolver backed by host
-credentials or a secret manager. The engine never receives raw card data.
+credentials or a secret manager. Production values must be restricted keys
+(`rk_live` / `rk_test`), not full-account `sk_live` keys. Pin Stripe-Version
+`2026-07-29.dahlia` on the Dashboard to match
+`StripeAdapter::STRIPE_API_VERSION`. The engine never receives raw card data.
 
 ```ruby
 RecordingStudioBilling.configure do |config|
   config.stripe_credential_resolver = -> { Rails.application.credentials.dig(:billing, :stripe) }
+end
+
+RecordingStudioBilling.configuration.hooks.on(:financial_command_pending) do |command|
+  ExecuteFinancialCommandJob.perform_later(command.id)
 end
 ```
 
@@ -373,7 +380,9 @@ end
 Commercial Manifests, approved lines and integer minor-unit amounts, verified
 locations, semantic categories, effective time, and an idempotency key. Unknown,
 disabled, or unsupported tax returns `unsupported_tax_calculation`, never an
-assumed zero. Completed and pending results append immutable `TaxCalculation`
+assumed zero. Stripe Tax additionally requires a Tax registration in the
+Stripe Dashboard for each charging country; enable `tax_policy` only after
+those registrations exist. Completed and pending results append immutable `TaxCalculation`
 history; identical retries return the existing calculation and materially
 different reuse returns `conflict`. `recover_tax_calculation` reuses the durable
 provider idempotency key and appends a linked revision rather than changing the
@@ -414,9 +423,11 @@ bin/rails db:schema:dump
 ```
 
 Stripe is the default provider key and its built-in adapter auto-registers at
-boot. Configure host credentials before executing real Stripe work; without
-them, execution returns the normalized provider-neutral `provider_unavailable`
-result. The built-in adapter supports embedded and redirect Checkout,
+boot. Configure host credentials, a worker on `:financial_command_pending`, a
+pinned Stripe API version, and Tax registrations before executing real Stripe
+work. Without credentials, execution returns the normalized provider-neutral
+`provider_unavailable` result. See [docs/billing.md](docs/billing.md)
+(Production host setup). The built-in adapter supports embedded and redirect Checkout,
 provider-priced subscription changes, refunds, invoice credit-note adjustments,
 provider-state retrieval for reconciliation, Customer Portal sessions, invoice
 retrieval, and the existing Stripe Tax calculator contract. It does not support
@@ -476,8 +487,9 @@ end
 request, verifying the provider signature while the raw body is available,
 persisting the receipt, deduplicating it, and dispatching verified context.
 Billing registers the `recording_studio_billing.provider_event.v1` action and
-consumes that verified dispatch context. Billing then verifies the normalized
-provider object identity, reconciles provider-authoritative command state, and
+consumes that verified dispatch context. `StripeAdapter#verify_webhook` then
+checks that the envelope's event id and object id match; it does not verify
+signatures. Billing then reconciles provider-authoritative command state, and
 projects a completed checkout only when reconciliation succeeds. After a paid
 Checkout retrieve, Billing stores opaque Stripe identities (`sub_`, `si_`,
 `pi_`, `in_`) on that command. A later `invoice.paid` receipt can resolve

@@ -718,4 +718,45 @@ class StripeAdapterTest < Minitest::Test
     assert_equal "CA", captured.fetch(:params).dig("customer_details", "address", "state")
     assert_equal "tax-key", captured.fetch(:options).fetch(:idempotency_key)
   end
+
+  def test_default_client_factory_pins_the_stripe_api_version
+    adapter = RecordingStudioBilling::StripeAdapter.new
+    client = adapter.send(:stripe_client, { secret_key: "rk_test_pin" })
+    version = client.instance_variable_get(:@requestor).instance_variable_get(:@config).api_version
+
+    assert_equal "2026-07-29.dahlia", RecordingStudioBilling::StripeAdapter::STRIPE_API_VERSION
+    assert_equal RecordingStudioBilling::StripeAdapter::STRIPE_API_VERSION, version
+  end
+
+  def test_tax_calculator_default_client_factory_pins_the_same_stripe_api_version
+    calculator = RecordingStudioBilling::StripeAdapter::TaxCalculator.new(
+      credential_resolver: -> { "rk_test_pin" },
+      tax_code_resolver: ->(_category) { "txcd_test" }
+    )
+    client = calculator.send(:stripe_client, "rk_test_pin")
+    version = client.instance_variable_get(:@requestor).instance_variable_get(:@config).api_version
+
+    assert_equal RecordingStudioBilling::StripeAdapter::STRIPE_API_VERSION, version
+  end
+
+  def test_verify_webhook_checks_envelope_identity_without_a_stripe_client
+    client_calls = 0
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: -> { "rk_test_pin" },
+      client_factory: lambda { |_secret|
+        client_calls += 1
+        raise "verify_webhook must not construct Stripe"
+      }
+    )
+    payload = { "id" => "evt_1", "data" => { "object" => { "id" => "cs_1" } } }
+
+    trusted = adapter.verify_webhook(
+      provider_account_recording_id: "acct", environment: "test",
+      event_id: "evt_1", remote_type: "checkout.session", remote_id: "cs_1", payload:
+    )
+
+    assert_equal "evt_1", trusted.fetch(:event_id)
+    assert_equal "cs_1", trusted.fetch(:remote_id)
+    assert_equal 0, client_calls
+  end
 end
