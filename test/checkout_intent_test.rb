@@ -8,6 +8,7 @@ require "rails/test_help"
 
 class CheckoutIntentTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
+
   self.use_transactional_tests = false
   parallelize(workers: 1)
 
