@@ -1,0 +1,17 @@
+---
+description: Parameter naming and consistency
+alwaysApply: true
+---
+
+# Parameter naming and consistency
+
+When creating or changing parameter names:
+
+- Use clear, human-readable names. Prefer simple everyday language that explains what the value represents.
+- Keep names concise, but do not shorten them so much that their meaning becomes unclear.
+- Avoid “computer speak”, unnecessary abbreviations, implementation-detail names, and vague names such as `data`, `info`, `obj`, `payload`, `value`, or `params` unless they genuinely describe the domain concept.
+- Before introducing a new parameter, inspect nearby and related code for existing naming patterns. Follow the established convention where it is clear and appropriate.
+- Search for existing parameters, methods, routes, schemas, models, and API contracts that may already represent the same concept. Reuse the existing name where possible.
+- Do not introduce a new parameter that conflicts with, duplicates, or ambiguously overlaps an existing parameter. If two names appear to represent the same thing, prefer consolidating on the established name.
+- When a new parameter must differ from an existing one, make the distinction explicit in its name and document the reason where it would not otherwise be obvious.
+- Preserve backwards compatibility for public APIs, persisted data, URLs, and integrations. Do not rename existing parameters without identifying and handling every affected caller.

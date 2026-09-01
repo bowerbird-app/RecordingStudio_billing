@@ -1,0 +1,6 @@
+---
+description: Prefer clean breaks over backwards-compatibility layers; document upgrades
+alwaysApply: true
+---
+
+Avoid overcomplicating code with backwards compatibility which can lead to convoluted code. Aim for a clean and simple code base. When making changes, provide upgrade notes, provide code for upgrading, and tests to ensure the upgrade was successful.

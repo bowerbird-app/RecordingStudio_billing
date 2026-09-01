@@ -1,0 +1,6 @@
+---
+description: Update docs holistically when the product or workflow changes
+alwaysApply: true
+---
+
+When doing work on this repo, update the docs that explain how it works. Do not dominate the docs with the current change. Think holistically and keep the docs usable and human readable.

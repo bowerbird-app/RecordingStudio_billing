@@ -8,13 +8,14 @@ sessions reliably.
 |---|---|
 | `.cursor/skills/` | pstack + Recording Studio plugin skills (merged by folder name) |
 | `.cursor/agents/` | pstack (`poteto-agent`, `comment-sicko`) and Recording Studio specialists |
-| `.cursor/rules/` | Recording Studio plugin standing rules (Flatpack, copy, RS constraints) |
+| `.cursor/rules/` | Plugin standing rules plus account/team rules (see `.cursor/rules/README.md`) |
 | `.cursor/skills/LICENSE` | pstack MIT license (Lauren Tan, 2026) |
 | `.cursor/skills/LICENSE-recording-studio` | Recording Studio plugin MIT (Bowerbird, 2026) |
 | `.cursor/taste-skill-attribution.md` | leonxlnx/taste-skill MIT attribution |
 
-Do not edit these files to change billing behavior. Refresh each pack separately
-so one copy does not wipe the other.
+Plugin-vendored skills, agents, and the four plugin rule files should be
+refreshed from upstream rather than hand-edited. Account/team rules in
+`.cursor/rules/` (everything except the four plugin files) belong to this repo.
 
 ## pstack
 
@@ -41,7 +42,12 @@ git clone --depth 1 https://github.com/bowerbird-app/RecordingStudio_cursor_plug
 cp -R /tmp/rs-cursor-plugin/skills/. .cursor/skills/
 cp -R /tmp/rs-cursor-plugin/agents/. .cursor/agents/
 mkdir -p .cursor/rules
-cp /tmp/rs-cursor-plugin/rules/*.mdc .cursor/rules/
+cp /tmp/rs-cursor-plugin/rules/recording-studio.mdc \
+  /tmp/rs-cursor-plugin/rules/flatpack-is-the-system.mdc \
+  /tmp/rs-cursor-plugin/rules/flatpack-ui.mdc \
+  /tmp/rs-cursor-plugin/rules/user-facing-copy.mdc \
+  .cursor/rules/
+# Do not delete other .cursor/rules/*.mdc — those are account/team rules in this repo.
 cp /tmp/rs-cursor-plugin/LICENSE .cursor/skills/LICENSE-recording-studio
 cp /tmp/rs-cursor-plugin/docs/taste-skill-attribution.md .cursor/taste-skill-attribution.md
 ```

@@ -10,8 +10,10 @@ Vendor Cursor skills into the checkout so Cloud Agents can load them.
 
 - `.cursor/skills/` and `.cursor/agents/` contain the pstack skill pack
   (`/poteto-mode` and related workflows) and the Recording Studio Cursor plugin
-  skills and specialists. Standing Flatpack / Recording Studio rules live in
-  `.cursor/rules/`. See [docs/cursor-skills.md](docs/cursor-skills.md).
+  skills and specialists. `.cursor/rules/` has the plugin standing rules plus
+  account/team Cursor rules (verification, screenshots, gem versioning, CI).
+  See [docs/cursor-skills.md](docs/cursor-skills.md) and
+  [`.cursor/rules/README.md`](.cursor/rules/README.md).
   These files are not packaged in the gem.
 
 ### Upgrade notes

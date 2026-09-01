@@ -41,8 +41,10 @@ Useful Recording Studio skills here: `recording-studio-getting-started`,
 `recording-studio-tests`. Specialists live in `.cursor/agents/`
 (`rails-expert`, `ui-style-expert`, `minitest-coverage`, and others).
 
-Standing rules from the Recording Studio plugin are in `.cursor/rules/`
-(Flatpack-only UI, user-facing copy, Recording Studio constraints).
+Standing rules live in `.cursor/rules/`. Plugin rules cover Recording Studio
+constraints, Flatpack-only UI, and user-facing copy. Account and team rules
+(browser verification, screenshots, gem versioning, CI, secrets, and similar)
+are listed in [`.cursor/rules/README.md`](../.cursor/rules/README.md).
 
 Origin and refresh steps: [`.cursor/SOURCE.md`](../.cursor/SOURCE.md).
 The pstack guide is upstream:
