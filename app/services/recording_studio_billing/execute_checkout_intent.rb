@@ -39,7 +39,7 @@ module RecordingStudioBilling
         FinancialCommandExecutor.new(command:, adapter:).execute(claim:)
       end
       project_result!(intent.id, command.id)
-      intent.reload
+      complete_no_charge!(intent.reload)
     rescue StandardError
       project_result!(intent.id, command.id) if intent && command
       raise
@@ -174,6 +174,26 @@ module RecordingStudioBilling
                         safe_result: command_attempt.normalized_result,
                         safe_error_details: command_attempt.safe_error_details)
         intent.update!(state: intent_state) unless intent.state == intent_state
+      end
+    end
+
+    def complete_no_charge!(intent)
+      return intent unless intent.state == "awaiting_confirmation"
+      return intent unless no_charge?(intent)
+
+      ProjectCompletedCheckoutIntent.call(checkout_intent: intent, root_recording: intent.root_recording)
+      intent.reload
+    end
+
+    def no_charge?(intent)
+      items = intent.items.to_a
+      return false if items.empty?
+
+      items.all? do |item|
+        terms = item.commercial_manifest.fetch("canonical_data", {})
+        item.presentation == "no_charge" &&
+          terms.dig("price", "amount_minor").to_i.zero? &&
+          terms.dig("billing_option", "recurrence") == "recurring"
       end
     end
 

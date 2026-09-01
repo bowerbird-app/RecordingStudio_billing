@@ -290,6 +290,16 @@ never generates a replacement mutation key. Supplied commercial manifests must
 belong to the command root, be used, use the supported schema/resolver versions,
 retain a valid digest, and remain protected by the immutable-history trigger.
 
+Creating a checkout or subscription-change intent only binds a pending
+`FinancialCommand`. The engine does not enqueue a job. After that bind it fires
+`RecordingStudioBilling::Hooks.trigger(:financial_command_pending, command)`.
+Hosts register a worker there and call `execute_checkout_intent` or
+`execute_subscription_change_intent` from their own job system. The dummy app
+does this with `ExecuteFinancialCommandJob`. For a subscription change, apply
+after execute succeeds. A `no_charge` checkout completes its commercial
+lifecycle inside `execute_checkout_intent` and does not wait for a webhook.
+Paid Stripe checkout still completes through webhook or reconcile.
+
 Adapters return `AdapterResponse` using one of these normalized statuses:
 `success`, `duplicate`, `invalid`, `unauthorized`, `unsupported`, the specific
 `unsupported_*` statuses, `conflict`, `provider_unavailable`,

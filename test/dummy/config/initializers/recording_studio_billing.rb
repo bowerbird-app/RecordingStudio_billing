@@ -2,7 +2,6 @@
 
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_financial_adapter", __dir__)
 require File.expand_path("../../../../app/services/recording_studio_billing/fake_tax_calculator", __dir__)
-require File.expand_path("../../lib/dummy_stripe_checkout_execution", __dir__)
 require File.expand_path("../../lib/dummy_stripe_test_credentials", __dir__)
 require Rails.root.join("db/dummy_v1_catalogue")
 
@@ -177,12 +176,11 @@ unless Rails.env.test?
   end
 end
 
-Rails.application.config.to_prepare do
-  if DummyStripeTestCredentials.user_flow_enabled?
-    controller = "RecordingStudioBilling::CheckoutSelectionsController".constantize
-    controller.prepend(DummyStripeCheckoutExecution) unless controller < DummyStripeCheckoutExecution
-  end
+RecordingStudioBilling.configuration.hooks.on(:financial_command_pending) do |command|
+  ExecuteFinancialCommandJob.perform_later(command.id)
+end
 
+Rails.application.config.to_prepare do
   RecordingStudioBilling.configuration.feature_definitions = {
     "demo_priority_support" => {
       source: "catalogue", merge_rule: "replace", default: false, type: "boolean", meter_key: nil,

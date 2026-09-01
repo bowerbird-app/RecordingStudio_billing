@@ -69,6 +69,10 @@ module RecordingStudioBilling
       ExecuteCheckoutIntent.call(...)
     end
 
+    def execute_subscription_change_intent(...)
+      ExecuteSubscriptionChangeIntent.call(...)
+    end
+
     def project_completed_checkout_intent(...)
       ProjectCompletedCheckoutIntent.call(...)
     end

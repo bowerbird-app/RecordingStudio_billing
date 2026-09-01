@@ -51,6 +51,8 @@ module RecordingStudioBilling
     end
 
     def checkout_action
+      return { kind: :notice, text: copy("checkout_no_charge", "No payment is due for this plan.") } if checkout_intent.state == "completed" && no_charge?
+
       return if blocked_checkout?
 
       key, default = ACTION_COPY.fetch(presentation_mode) { ACTION_COPY.fetch("embedded") }
