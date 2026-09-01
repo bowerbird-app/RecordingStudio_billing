@@ -179,9 +179,9 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
-  def with_stubbed_new_product_parent
+  def with_stubbed_new_product_parent(&)
     parent = Struct.new(:id).new("parent-1")
-    RecordingStudioBilling::BillingAdminProductNew.stub(:billing_admin_recording_for, parent) { yield }
+    RecordingStudioBilling::BillingAdminProductNew.stub(:billing_admin_recording_for, parent, &)
   end
 
   def access_context_for(recordable)
