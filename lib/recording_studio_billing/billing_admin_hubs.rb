@@ -103,7 +103,7 @@ module RecordingStudioBilling
       end
       if section_key == "billing_commercial"
         section_class.link :new_product, text: "New product", url: lambda { |context|
-          context.admin_screen_path(BillingAdminProductNew::SCREEN_KEY)
+          BillingAdminProductNew.new_url_for(context)
         }
       end
       hub_title = HUB_TABLES.fetch(section_key).fetch(:title)

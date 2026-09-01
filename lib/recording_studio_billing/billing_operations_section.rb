@@ -189,7 +189,7 @@ module RecordingStudioBilling
         button :new_product,
                text: "New",
                style: :primary,
-               url: ->(context) { BillingAdminProductNew.new_screen_path(context) },
+               url: ->(context) { BillingAdminProductNew.new_url_for(context) },
                visible_if: ->(context) { BillingAdminProductNew.create_allowed?(context) }
       end
       table do

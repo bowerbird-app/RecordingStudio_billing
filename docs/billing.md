@@ -298,13 +298,14 @@ Dummy Admin hubs render `recording_studio_accessible_avatars` in the
 default-layout slot. Configure `avatar_resolver` so granted actors become
 avatars; + Access is only the empty-grant fallback.
 
-Products inventory has a primary New button. It opens the Admin create screen
-on the same Products and pricing section. The form asks for Name, then Key,
-Kind, and Provider. Save posts to `create_draft_product`, which writes a
-draft with `RecordingStudio.record!`. That path authorizes the registered
-`billing_products` `create` action (`required_role :admin`). It does not use
-a generic Admin form that writes published rows. Revise stays `revise`.
-Publish stays `CommercialPublisher`.
+Products inventory has a primary New button. It opens the billing create page
+(`/billing/admin/products/new?parent_recording_id=…`). The GET validates
+that BillingAdmin parent and authorizes against that Admin root. The form
+asks for Name, then Key, Kind, and Provider. Save posts to
+`create_draft_product`, which writes a draft with `RecordingStudio.record!`.
+That path authorizes the registered `billing_products` `create` action
+(`required_role :admin`). Billing does not fork Admin's `screens/show`
+template. Revise stays `revise`. Publish stays `CommercialPublisher`.
 
 Product and BillingOption require a human `name` as well as the stable
 catalogue `key`. Inventory shows both. Dummy seeds use labels such as Monthly

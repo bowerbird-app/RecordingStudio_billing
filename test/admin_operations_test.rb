@@ -255,11 +255,28 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
 
     grant_view_access!(site_admin_recording)
     refute RecordingStudioBilling::BillingAdminProductNew.create_allowed?(context)
+
+    get "/billing/admin/products/new", params: { parent_recording_id: @billing_admin_recording.id }
+    assert_response :forbidden
   end
 
   test "a site admin can use the product create screen action" do
     with_site_admin do
       assert RecordingStudioBilling::BillingAdminProductNew.create_allowed?(product_create_admin_context)
+
+      get "/billing/admin/products/new", params: {
+        parent_recording_id: @billing_admin_recording.id,
+        return_to: "/admin/screens/billing_products"
+      }
+      assert_response :success
+      assert_includes response.body, "New product"
+      assert_select "input[name='parent_recording_id'][value='#{@billing_admin_recording.id}']"
+
+      get "/billing/admin/products/new"
+      assert_response :not_found
+
+      get "/billing/admin/products/new", params: { parent_recording_id: @price.recording.id }
+      assert_response :not_found
     end
   end
 

@@ -13,7 +13,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
 
       assert_equal widget_keys, section.widget_keys
       expected_links = RecordingStudioBilling::BillingAdminHubs.inventory_screen_keys_for(section_key)
-      expected_links += [RecordingStudioBilling::BillingAdminProductNew::SCREEN_KEY] if section_key == "billing_commercial"
+      expected_links += ["/billing/admin/products/new"] if section_key == "billing_commercial"
       expected_links += [section_key]
       assert_equal expected_links, linked_screen_keys_for(section)
       assert_equal RecordingStudioBilling::BillingAdminHubs::HUB_TABLES.fetch(section_key).fetch(:title),
@@ -47,6 +47,15 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     assert_equal "/admin/screens/billing_financial_commands", items.first[:href]
   end
 
+  test "billing does not fork Admin screens show" do
+    refute File.exist?(RecordingStudioBilling::Engine.root.join("app/views/recording_studio_admin/screens/show.html.erb"))
+    refute Dir.exist?(RecordingStudioBilling::Engine.root.join("app/views/recording_studio_admin"))
+    refute RecordingStudioAdmin.screen_for("billing_product_new")
+
+    admin_show = RecordingStudioAdmin::Engine.root.join("app/views/recording_studio_admin/screens/show.html.erb")
+    assert_includes File.read(admin_show), "FlatPack::ButtonGroup::Component"
+  end
+
   test "inventory table columns and filters exist on their models" do
     RecordingStudioBilling::ADMIN_OPERATION_AREAS.each do |screen_key, definition|
       model = "RecordingStudioBilling::#{definition.fetch(:model)}".constantize
@@ -57,7 +66,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     end
   end
 
-  test "products inventory registers a primary New button to the Admin create screen" do
+  test "products inventory registers a primary New button to the billing create page" do
     screen = RecordingStudioAdmin.screen_for("billing_products")
     button = screen.buttons_value.find { |entry| entry.name == :new_product }
 
@@ -67,8 +76,19 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
 
     context = Object.new
     def context.admin_screen_path(key) = "/admin/screens/#{key}"
-    assert_equal "/admin/screens/billing_product_new", button.url.call(context)
-    assert RecordingStudioAdmin.screen_for("billing_product_new")
+
+    def context.controller
+      routes = Object.new
+      def routes.recording_studio_billing_path = "/billing"
+      Object.new.tap { |controller| controller.define_singleton_method(:main_app) { routes } }
+    end
+
+    url = with_stubbed_new_product_parent { button.url.call(context) }
+    assert_includes url, "/billing/admin/products/new"
+    assert_includes url, "parent_recording_id=parent-1"
+    assert_includes url, "return_to="
+    assert_includes url, "billing_products"
+    refute RecordingStudioAdmin.screen_for("billing_product_new")
     assert_equal %i[name key kind state],
                  RecordingStudioBilling::ADMIN_OPERATION_AREAS.fetch(:billing_products).fetch(:columns)
   end
@@ -144,12 +164,23 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     context = Object.new
     def context.admin_screen_path(key) = "/admin/screens/#{key}"
 
+    def context.controller
+      routes = Object.new
+      def routes.recording_studio_billing_path = "/billing"
+      Object.new.tap { |controller| controller.define_singleton_method(:main_app) { routes } }
+    end
+
     section.links.filter_map do |link|
       resolved = link.resolve(context)
       next unless resolved
 
-      resolved.url.to_s.delete_prefix("/admin/screens/")
+      resolved.url.to_s.split("?").first.delete_prefix("/admin/screens/")
     end
+  end
+
+  def with_stubbed_new_product_parent
+    parent = Struct.new(:id).new("parent-1")
+    RecordingStudioBilling::BillingAdminProductNew.stub(:billing_admin_recording_for, parent) { yield }
   end
 
   def access_context_for(recordable)
