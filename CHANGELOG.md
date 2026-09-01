@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.9.3
+
+Paid Checkout now keeps Stripe subscription, subscription item, payment intent, and invoice identities so later `invoice.paid` receipts can find the original command.
+
+### Added
+
+- `StripeAdapter#retrieve` copies opaque `sub_`, `si_`, `pi_`, and `in_` ids from a paid Checkout Session into the financial payload. Wrong prefixes are ignored.
+- After a successful checkout retrieve, `PersistCheckoutProviderIdentities` writes those ids as `ProviderReference` rows on the checkout command.
+- Recurring `invoice.paid` looks up the stored `sub_` identity when the new `in_` is unknown, then stores the new invoice id on that command. Already-projected checkout money is not written again.
+
+### Upgrade notes
+
+- No host or schema changes. Bump the gem if you pin `recording_studio_billing` by version.
+- Recurring Stripe invoice receipts resolve only after the first paid Checkout retrieve has stored the subscription id. An `invoice.paid` that arrives first is unknown until retry.
+
 ## 0.9.2
 
 Checkout retrieve now builds the financial payload from Stripe's default Session JSON.

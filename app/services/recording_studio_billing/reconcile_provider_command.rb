@@ -80,6 +80,7 @@ module RecordingStudioBilling
         command.update!(state:, reconciliation_state: "reconciled",
                         normalized_result: normalized_result.merge("status" => outcome, "outcome" => outcome))
         if state == "succeeded" && command.command_type == "checkout"
+          PersistCheckoutProviderIdentities.call(command:)
           CheckoutIntent.where(financial_command: command).update_all(state: "awaiting_confirmation",
                                                                       updated_at: Time.current)
         end

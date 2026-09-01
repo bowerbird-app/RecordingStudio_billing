@@ -17,7 +17,13 @@ module RecordingStudioBilling
     DOWNLOAD_OPEN_TIMEOUT = 5
     DOWNLOAD_READ_TIMEOUT = 15
     CHECKOUT_LINE_ITEM_LIMIT = 100
-    CHECKOUT_SESSION_EXPAND = ["line_items.data.price.product"].freeze
+    CHECKOUT_SESSION_EXPAND = ["line_items.data.price.product", "subscription"].freeze
+    CHECKOUT_IDENTITY_PREFIXES = {
+      "subscription" => "sub_",
+      "payment_intent" => "pi_",
+      "invoice" => "in_",
+      "subscription_item" => "si_"
+    }.freeze
 
     CAPABILITIES = V1Contract.provider_capabilities.freeze
 
@@ -534,7 +540,7 @@ module RecordingStudioBilling
         "subtotal_minor" => totals.fetch("amount_subtotal"), "discount_minor" => totals.fetch("amount_discount"),
         "tax_minor" => totals.fetch("amount_tax"), "total_minor" => totals.fetch("amount_total"),
         "currency" => totals.fetch("currency").to_s.upcase, "payment_state" => totals.fetch("payment_status"), "lines" => lines
-      }
+      }.merge(checkout_identity_fields(remote))
       tax = command.canonical_request.dig("request", "tax").to_h.stringify_keys
       return payload unless tax["enabled"] == true && tax["mode"] == "provider_native"
 
@@ -578,12 +584,51 @@ module RecordingStudioBilling
       fields = value.slice("quantity", "amount_subtotal", "amount_discount", "amount_tax", "amount_total")
       return unless item_id.present? && manifest.present? && fields.values.all? { |amount| amount.is_a?(Integer) }
 
-      { "checkout_intent_item_id" => item_id, "manifest_digest" => manifest, "currency" => value.fetch("currency").to_s.upcase,
-        "quantity" => value.fetch("quantity"), "unit_amount_minor" => value.fetch("price").fetch("unit_amount"),
-        "subtotal_minor" => value.fetch("amount_subtotal"), "discount_minor" => value.fetch("amount_discount"),
-        "tax_minor" => value.fetch("amount_tax"), "total_minor" => value.fetch("amount_total") }
+      line = { "checkout_intent_item_id" => item_id, "manifest_digest" => manifest, "currency" => value.fetch("currency").to_s.upcase,
+               "quantity" => value.fetch("quantity"), "unit_amount_minor" => value.fetch("price").fetch("unit_amount"),
+               "subtotal_minor" => value.fetch("amount_subtotal"), "discount_minor" => value.fetch("amount_discount"),
+               "tax_minor" => value.fetch("amount_tax"), "total_minor" => value.fetch("amount_total") }
+      subscription_item = checkout_opaque_id(value["subscription_item"], CHECKOUT_IDENTITY_PREFIXES.fetch("subscription_item"))
+      line["subscription_item"] = subscription_item if subscription_item
+      line
     rescue KeyError
       nil
+    end
+
+    def checkout_identity_fields(remote)
+      fields = {}
+      %w[subscription payment_intent invoice].each do |key|
+        id = checkout_opaque_id(remote[key], CHECKOUT_IDENTITY_PREFIXES.fetch(key))
+        fields[key] = id if id
+      end
+      items = checkout_subscription_item_ids(remote)
+      fields["subscription_items"] = items if items.any?
+      fields
+    end
+
+    def checkout_subscription_item_ids(remote)
+      ids = []
+      subscription = remote["subscription"]
+      if subscription.is_a?(Hash)
+        Array(subscription.dig("items", "data")).each do |item|
+          id = checkout_opaque_id(item, CHECKOUT_IDENTITY_PREFIXES.fetch("subscription_item"))
+          ids << id if id
+        end
+      end
+      Array(remote.dig("line_items", "data")).each do |line|
+        value = line.respond_to?(:to_h) ? line.to_h.stringify_keys : {}
+        id = checkout_opaque_id(value["subscription_item"], CHECKOUT_IDENTITY_PREFIXES.fetch("subscription_item"))
+        ids << id if id
+      end
+      ids.uniq
+    end
+
+    def checkout_opaque_id(value, prefix)
+      id = value.is_a?(Hash) ? value["id"] : value
+      return unless id.is_a?(String) && id.start_with?(prefix) && id.bytesize.between?(1, 255)
+      return unless id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._:-]*\z/)
+
+      id
     end
 
     def recurring?(items)
