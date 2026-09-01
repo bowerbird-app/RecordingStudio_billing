@@ -1,0 +1,12 @@
+---
+description: Other skills may give taste or branding guidance; Recording Studio code is always Flatpack
+alwaysApply: true
+---
+
+Other skills may give taste or branding guidance. Code is always Flatpack ViewComponents, tokens, and named themes.
+
+Never Tailwind, shadcn, GSAP, custom CSS kits, or third-party UI libraries on gem, dummy, or Admin screens.
+
+Dummy default is `html data-theme="rounded"` plus core `UsesDefaultLayout`. Hosts use a named theme (for example `featured-in`), not forked CSS.
+
+If a look is missing, add a Flatpack token or component first. Look up https://flatpack.bowerbird.io/ before naming a part. Product screens stay on `UsesDefaultLayout`; do not wrap a title plus one-action form in an extra card. Follow `recording-studio-flatpack` and `recording-studio-ui`.

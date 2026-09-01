@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.9.1
+
+Vendor Cursor skills into the checkout so Cloud Agents can load them.
+
+### Added
+
+- `.cursor/skills/` and `.cursor/agents/` contain the pstack skill pack
+  (`/poteto-mode` and related workflows) and the Recording Studio Cursor plugin
+  skills and specialists. `.cursor/rules/` has the plugin standing rules plus
+  account/team Cursor rules (verification, screenshots, gem versioning, CI).
+  See [docs/cursor-skills.md](docs/cursor-skills.md) and
+  [`.cursor/rules/README.md`](.cursor/rules/README.md).
+  These files are not packaged in the gem.
+
+### Upgrade notes
+
+- No host or schema changes. Bump the gem if you pin `recording_studio_billing`
+  by version. Agent chats pick up the skills from the git checkout.
+
 ## 0.9.0
 
 Turn the three billing Admin hubs into dashboards with inventory, and require a

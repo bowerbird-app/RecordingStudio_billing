@@ -584,6 +584,13 @@ bin/dev
 
 Sign in with `admin@admin.com` / `Password`.
 
+## Cursor agent skills
+
+Cloud Agents load project skills from `.cursor/skills/` and standing rules from
+`.cursor/rules/`. This checkout vendors pstack, the Recording Studio Cursor
+plugin, and account/team Cursor rules so cloud sessions do not depend on
+marketplace plugins. See [docs/cursor-skills.md](docs/cursor-skills.md).
+
 ## Validation
 
 Run validation from the repository root:

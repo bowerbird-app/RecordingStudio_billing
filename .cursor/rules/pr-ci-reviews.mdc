@@ -1,0 +1,13 @@
+---
+description: Wait for CI and PR reviews; fix until they pass
+alwaysApply: true
+---
+
+After every code push on a PR:
+
+1. Wait for GitHub CI/checks to finish.
+2. Read any PR review comments (human, Bugbot, Copilot, and similar).
+3. Fix failures and address review feedback; push again and repeat.
+4. Do not consider the task complete until checks are green and outstanding review issues are resolved (or explicitly deferred by Nic).
+
+PR reviews run automatically on GitHub. The task is not complete until those reviews pass. If they do not pass, read the errors on GitHub and fix until they do.
