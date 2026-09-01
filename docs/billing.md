@@ -386,9 +386,26 @@ plan, not copies of the key.
 
 Commercial publication still writes `rs_v3_commercial_configurations`. Capability checks use `commercial_configuration`, not a catalogue capability.
 
+## JSON API
+
+This gem does not depend on `recording_studio_api`. Checkout, plan changes, and
+settings are mounted HTML plus the public execute helpers. Accessible roles
+come from `AccessActions`.
+
+Adding the API engine here would pull a second mount, its migrations, a dummy
+install, and named user vs operations APIs into a commercial-contract wave that
+does not yet need a JSON surface. That is a later dedicated PR: register
+capability actions 1:1 with `AccessActions::CUSTOMER` on the user API and
+`AccessActions::SITE` on an operations API, with handlers that call the same
+public helpers the UI uses.
+
+Until then, hosts that need JSON add `recording_studio_api` in the host
+application and wrap those helpers. Do not invent `app/controllers/api`
+billing endpoints that skip Accessible.
+
 ## What V1 does not include
 
-Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, graduated pricing, public usage HTTP ingest, or a customer self-serve portal that changes plans. The restricted provider portal above is the V1 payment-details surface. See `README.md`.
+Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, graduated pricing, public usage HTTP ingest, a customer self-serve portal that changes plans, or a billing JSON surface until `recording_studio_api` is a real dependency. The restricted provider portal above is the V1 payment-details surface. See `README.md`.
 
 ## Host layouts
 
