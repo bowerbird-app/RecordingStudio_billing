@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.9.4", RecordingStudioBilling::VERSION
+    assert_equal "0.9.5", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_uses_default_layout_entry_buttons
@@ -84,6 +84,8 @@ class RecordingStudioBillingTest < Minitest::Test
     assert_includes structure, "('20260816000001')"
     assert_includes structure, "('20260817000001')"
     assert_includes structure, "('20260822000001')"
+    assert_includes structure, "('20260901000001')"
+    assert_includes structure, "CREATE UNIQUE INDEX idx_rs_billing_invoice_command"
     assert_includes structure, "recording_studio_billing_products"
     assert_match(/CREATE TABLE public\.recording_studio_billing_products[\s\S]*name character varying NOT NULL/, structure)
     assert_match(/CREATE TABLE public\.recording_studio_billing_billing_options[\s\S]*name character varying NOT NULL/, structure)
