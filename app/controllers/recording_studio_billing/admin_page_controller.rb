@@ -2,6 +2,6 @@
 
 module RecordingStudioBilling
   class AdminPageController < ApplicationController
-    skip_before_action :load_root_recording!
+    # Subclasses that authorize against an Admin root skip the customer Account loader themselves.
   end
 end

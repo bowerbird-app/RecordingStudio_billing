@@ -13,7 +13,8 @@ New product is a billing page. Admin `screens/show` is no longer shadowed.
   `/billing/admin/products/new` with the BillingAdmin parent id. The GET
   validates that parent, then authorizes against a request-local Admin
   surface for that Admin root. Save still posts to `create_draft_product`.
-  Accessible still authorizes `billing_products` create.
+  Accessible still authorizes `billing_products` create. Only the product
+  new controller skips the customer Account loader.
 
 ### Upgrade notes
 

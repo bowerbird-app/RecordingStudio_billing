@@ -2,6 +2,7 @@
 
 module RecordingStudioBilling
   class AdminProductsController < AdminPageController
+    skip_before_action :load_root_recording!
     before_action :load_new_product_scope!
 
     rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
