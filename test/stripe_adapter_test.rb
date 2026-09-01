@@ -259,7 +259,8 @@ class StripeAdapterTest < Minitest::Test
     sessions.define_singleton_method(:retrieve) do |_reference, _params = {}, *_rest|
       {
         "object" => "checkout.session", "payment_status" => "paid", "amount_subtotal" => 1_000,
-        "amount_discount" => 0, "amount_tax" => 90, "amount_total" => 1_090, "currency" => "usd",
+        "amount_total" => 1_090, "currency" => "usd",
+        "total_details" => { "amount_discount" => 0, "amount_tax" => 90 },
         "client_secret" => "must-not-persist", "url" => "https://checkout.stripe.com/session",
         "line_items" => { "data" => [{ "quantity" => 1, "amount_subtotal" => 1_000, "amount_discount" => 0,
                                        "amount_tax" => 90, "amount_total" => 1_090, "currency" => "usd",

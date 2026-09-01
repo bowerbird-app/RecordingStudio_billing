@@ -389,7 +389,7 @@ module RecordingStudioBilling
       page = session["line_items"]
       data = Array(page.is_a?(Hash) ? page["data"] : nil)
       listed_has_more = page.is_a?(Hash) && page["has_more"] == true
-      if checkout_line_items_incomplete?(page, data) && checkout_line_items_listable?(client)
+      if checkout_line_items_incomplete?(page, data)
         listed = stripe_hash(
           client.v1.checkout.sessions.line_items.list(
             reference,
@@ -412,10 +412,6 @@ module RecordingStudioBilling
 
     def checkout_line_items_incomplete?(page, data)
       data.empty? || (page.is_a?(Hash) && page["has_more"] == true)
-    end
-
-    def checkout_line_items_listable?(client)
-      client.v1.checkout.sessions.respond_to?(:line_items)
     end
 
     def stripe_outcome(remote)
@@ -558,8 +554,8 @@ module RecordingStudioBilling
       details = {} unless details.is_a?(Hash)
       {
         "amount_subtotal" => remote["amount_subtotal"],
-        "amount_discount" => checkout_integer_amount(details["amount_discount"], remote["amount_discount"], default: 0),
-        "amount_tax" => checkout_integer_amount(details["amount_tax"], remote["amount_tax"]),
+        "amount_discount" => checkout_integer_amount(details["amount_discount"], default: 0),
+        "amount_tax" => checkout_integer_amount(details["amount_tax"]),
         "amount_total" => remote["amount_total"],
         "currency" => remote["currency"],
         "payment_status" => remote["payment_status"]
