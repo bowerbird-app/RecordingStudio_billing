@@ -739,6 +739,14 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal "cancelled", subscription.current.state
   end
 
+  test "checkout command items carry the product name for Stripe line items" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "named-item").intent
+    item = intent.financial_command.canonical_request.dig("request", "checkout_items").values.first
+
+    assert_equal "Catalogue product", item.fetch("product_name")
+  end
+
   test "projects every supported commercial lifecycle mode from frozen completed checkout terms" do
     cases = {
       ["plan", "recurring", "month", 0, 0] => "free_plan",

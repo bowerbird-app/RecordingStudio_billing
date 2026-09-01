@@ -443,7 +443,7 @@ module RecordingStudioBilling
         quantity = item["quantity"] || item[:quantity]
         raise ArgumentError unless amount.is_a?(Integer) && amount >= 0 && quantity.is_a?(Integer) && quantity.positive?
 
-        product = { "name" => "Recording Studio billing item",
+        product = { "name" => stripe_product_name(item),
                     "metadata" => { "recording_studio_billing_item" => item.fetch("checkout_intent_item_id", item[:checkout_intent_item_id]).to_s,
                                     "recording_studio_billing_manifest" => item.fetch("manifest_digest",
                                                                                       item[:manifest_digest]).to_s }.compact }
@@ -454,6 +454,13 @@ module RecordingStudioBilling
                                                                         false) && tax.fetch("behavior") != "provider_default"
         { "price_data" => price_data, "quantity" => quantity }
       end
+    end
+
+    def stripe_product_name(item)
+      name = item["product_name"] || item[:product_name]
+      raise ArgumentError unless name.is_a?(String) && name.present?
+
+      name
     end
 
     def recurring_item?(item)

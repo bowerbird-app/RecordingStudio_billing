@@ -4,7 +4,7 @@ require "test_helper"
 
 class RecordingStudioBillingTest < Minitest::Test
   def test_version_matches_the_current_release
-    assert_equal "0.9.6", RecordingStudioBilling::VERSION
+    assert_equal "0.9.7", RecordingStudioBilling::VERSION
   end
 
   def test_dummy_home_uses_default_layout_entry_buttons
@@ -51,6 +51,14 @@ class RecordingStudioBillingTest < Minitest::Test
     refute_includes helper, "recording_studio_root_switch_dropdown"
     refute_includes helper, "Sign out"
     refute_includes helper, "Sign in"
+  end
+
+  def test_settings_is_a_default_layout_form_not_a_card
+    view = File.read(File.expand_path("../app/components/recording_studio_billing/settings_component.html.erb", __dir__))
+
+    refute_includes view, "FlatPack::Card::Component"
+    assert_includes view, 'text: @presenter.copy("settings_save", "Save")'
+    assert_includes view, "page_title.slot"
   end
 
   def test_dummy_runs_flatpack_rounded_button_rebinds

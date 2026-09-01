@@ -68,7 +68,7 @@ module RecordingStudioBilling
     end
 
     def pending_copy
-      presenter.copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.")
+      presenter.copy("checkout_pending", "Payment is still being prepared.")
     end
 
     def render_action(action)

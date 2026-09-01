@@ -36,7 +36,7 @@ class StripeAdapterTest < Minitest::Test
     request = {
       "request" => {
         "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
-        "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "recurrence" => "one_time" } }
+        "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "product_name" => "Studio Pro", "recurrence" => "one_time" } }
       }
     }
     captured = nil
@@ -64,8 +64,34 @@ class StripeAdapterTest < Minitest::Test
     assert_equal "cs_test_123", response.provider_reference
     assert_equal "test-key", captured.fetch(:options).fetch(:idempotency_key)
     assert_equal 1_200, captured.fetch(:params).fetch("line_items").first.dig("price_data", "unit_amount")
+    assert_equal "Studio Pro", captured.fetch(:params).fetch("line_items").first.dig("price_data", "product_data", "name")
+    refute_equal "Recording Studio billing item", captured.fetch(:params).fetch("line_items").first.dig("price_data", "product_data", "name")
     assert defined?(Stripe)
     refute_includes [response.result, response.error_details, response.metadata].to_s, credential
+  end
+
+  def test_checkout_line_items_require_a_product_name_before_constructing_stripe
+    client_calls = 0
+    adapter = RecordingStudioBilling::StripeAdapter.new(
+      credential_resolver: -> { "sk_test" },
+      client_factory: lambda { |_secret|
+        client_calls += 1
+        raise "Stripe client should not be constructed"
+      }
+    )
+    command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
+    request = {
+      "request" => {
+        "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
+        "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "recurrence" => "one_time" } }
+      }
+    }
+
+    response = adapter.call(command:, request:, idempotency_key: "missing-name")
+
+    assert_equal "invalid", response.status
+    assert_equal "checkout_request_invalid", response.result.fetch("reason")
+    assert_equal 0, client_calls
   end
 
   def test_subscription_checkout_sends_recurring_price_terms
@@ -86,7 +112,7 @@ class StripeAdapterTest < Minitest::Test
         "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
         "checkout_items" => {
           "item-1" => {
-            "amount_minor" => 100, "quantity" => 1, "recurrence" => "recurring",
+            "amount_minor" => 100, "quantity" => 1, "product_name" => "Studio Pro", "recurrence" => "recurring",
             "interval" => "month", "interval_count" => 1
           }
         }
@@ -116,7 +142,7 @@ class StripeAdapterTest < Minitest::Test
         "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
         "checkout_items" => {
           "item-1" => {
-            "amount_minor" => 100, "quantity" => 1, "recurrence" => "recurring",
+            "amount_minor" => 100, "quantity" => 1, "product_name" => "Studio Pro", "recurrence" => "recurring",
             "interval" => "fortnight", "interval_count" => 1
           }
         }
@@ -148,7 +174,7 @@ class StripeAdapterTest < Minitest::Test
        })
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     request = { "request" => { "presentation" => "payment_link", "currency" => "USD", "collection_method" => "automatic",
-                               "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "recurrence" => "one_time" } } } }
+                               "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "product_name" => "Studio Pro", "recurrence" => "one_time" } } } }
 
     response = adapter.call(command:, request:, idempotency_key: "durable-key")
 
@@ -180,6 +206,7 @@ class StripeAdapterTest < Minitest::Test
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     request = { "request" => { "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
                                "checkout_items" => { "frozen-item" => { "amount_minor" => 1_200, "quantity" => 1,
+                                                                        "product_name" => "Studio Pro",
                                                                         "recurrence" => "one_time", "card_number" => "ignored" } } } }
 
     response = adapter.call(command:, request:, idempotency_key: "durable-key")
@@ -213,6 +240,7 @@ class StripeAdapterTest < Minitest::Test
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     request = { "request" => { "presentation" => "redirect", "currency" => "USD", "collection_method" => "automatic",
                                "checkout_items" => { "item-1" => { "amount_minor" => 100, "quantity" => 1,
+                                                                   "product_name" => "Studio Pro",
                                                                    "recurrence" => "one_time" } } } }
 
     response = adapter.call(command:, request:, idempotency_key: "durable-key")
@@ -236,7 +264,7 @@ class StripeAdapterTest < Minitest::Test
     )
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     base = { "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
-             "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1 } } }
+             "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "product_name" => "Studio Pro" } } }
 
     adapter.call(command:, request: { "request" => base.merge("tax" => { "enabled" => false }) },
                  idempotency_key: "disabled")
@@ -473,7 +501,7 @@ class StripeAdapterTest < Minitest::Test
        })
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     base = { "presentation" => "embedded", "currency" => "USD", "collection_method" => "automatic",
-             "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1 } } }
+             "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "product_name" => "Studio Pro" } } }
 
     %w[JPY].each do |currency|
       response = adapter.call(command:, request: { "request" => base.merge("currency" => currency) },
@@ -510,7 +538,7 @@ class StripeAdapterTest < Minitest::Test
     command = Struct.new(:command_type, :operation_id).new("checkout", "operation-1")
     request = { "request" => { "presentation" => "invoice", "currency" => "USD", "collection_method" => "send_invoice",
                                "payment_terms_days" => 14,
-                               "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1 } } } }
+                               "checkout_items" => { "item-1" => { "amount_minor" => 1_200, "quantity" => 1, "product_name" => "Studio Pro" } } } }
 
     response = adapter.call(command:, request:, idempotency_key: "durable-invoice")
 
