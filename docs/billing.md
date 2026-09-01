@@ -28,7 +28,8 @@ The SQL file is the source of truth for tables, functions, and triggers. It begi
 `SET check_function_bodies = false` so PL/pgSQL functions that use `%ROWTYPE` can be
 created before their tables. Later schema changes should be new engine migrations plus
 an updated install snapshot for fresh hosts. Existing hosts keep the incremental
-migrations; they do not re-run the snapshot.
+migrations; they do not re-run the snapshot. Payments are unique per financial command.
+Invoices are unique per financial command too.
 
 Webhook tables come from `recording_studio_webhooks`. Billing inbound-event tables store the webhook event id without a foreign key, so billing can install after the webhooks gem.
 

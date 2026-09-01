@@ -2945,10 +2945,10 @@ CREATE INDEX idx_on_financial_command_id_2a8556545f ON public.recording_studio_b
 
 CREATE INDEX idx_on_financial_command_id_3a27e3d203 ON public.recording_studio_billing_financial_adjustments USING btree (financial_command_id);
 
--- Name: idx_on_financial_command_id_48ec1b5e2a; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_rs_billing_invoice_command; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_on_financial_command_id_48ec1b5e2a ON public.recording_studio_billing_invoices USING btree (financial_command_id);
+CREATE UNIQUE INDEX idx_rs_billing_invoice_command ON public.recording_studio_billing_invoices USING btree (financial_command_id);
 
 -- Name: idx_on_financial_command_id_6b7f641e35; Type: INDEX; Schema: public; Owner: -
 --

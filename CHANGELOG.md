@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.9.5
+
+Invoices are unique per financial command, matching payments.
+
+### Added
+
+- Install SQL and an incremental migration give `recording_studio_billing_invoices.financial_command_id` a unique index.
+
+### Upgrade notes
+
+- Run engine migrations. Fresh installs pick this up from the install snapshot.
+- If a host already has two invoices for one financial command, delete or merge the extras before migrating:
+
+```sql
+SELECT financial_command_id, COUNT(*)
+FROM recording_studio_billing_invoices
+GROUP BY financial_command_id
+HAVING COUNT(*) > 1;
+```
+
 ## 0.9.4
 
 Payment state is `paid` everywhere. Dummy retrieve and refunds use that same contract. Dummy seed always reconciles through the paid gate instead of skipping when a payment_state key is already present.
