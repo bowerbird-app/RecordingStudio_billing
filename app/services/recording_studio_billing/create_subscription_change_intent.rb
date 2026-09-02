@@ -31,7 +31,7 @@ module RecordingStudioBilling
     end
 
     def call
-      SubscriptionChangeIntent.transaction do
+      result = SubscriptionChangeIntent.transaction do
         subscription_recording = Subscription.recording_for(subscription_input, root_recording: root_recording_input)
         RecordingStudio::Recording.lock_ids!([subscription_recording.id]).load
         subscription = subscription_recording.reload.recordable
@@ -69,12 +69,22 @@ module RecordingStudioBilling
         end
         Result.new(status: :created, intent:)
       end
+      announce_pending_command!(result.intent) if result.created?
+      result
     end
 
     private
 
     attr_reader :change_kind, :change_set, :effective_at, :local_idempotency_key, :proposed_manifest, :root_recording_input, :source,
                 :subscription_input, :trusted_context
+
+    def announce_pending_command!(intent)
+      command = intent.financial_command
+      return unless command&.state == "pending"
+      return unless intent.state == "pending_provider"
+
+      RecordingStudioBilling::Hooks.trigger(:financial_command_pending, command)
+    end
 
     def create_command!(intent, subscription)
       line = current_lines(intent.subscription).first

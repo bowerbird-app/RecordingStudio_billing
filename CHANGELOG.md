@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.9.6
+
+Checkout and subscription-change intents bind a pending financial command. They do not call a provider and they do not pretend a worker ran. Hosts enqueue `execute_checkout_intent` or `execute_subscription_change_intent` from their own job after the `:financial_command_pending` hook. A `no_charge` checkout completes its commercial lifecycle after execute without a webhook. Retrying the same checkout key attaches a command if the first bind failed. The dummy app ships `ExecuteFinancialCommandJob` as the reference worker.
+
+### Added
+
+- `RecordingStudioBilling.execute_subscription_change_intent` executes an already-bound subscription-change command.
+- Host hook `:financial_command_pending` fires after a pending command is bound.
+- Dummy `ExecuteFinancialCommandJob` executes checkout commands and execute-then-applies subscription changes.
+
+### Changed
+
+- `CreateCheckoutIntent` attaches the pending command on create and on retry of a `validated` orphan. The old `enqueue_command!` name is gone.
+
+### Upgrade notes
+
+- Register a worker on `:financial_command_pending` and call the execute helpers from that job. The dummy initializer shows the pattern.
+- `no_charge` checkouts become `completed` after execute. Do not wait for a Stripe webhook.
+- Paid Stripe checkout still waits for webhook or reconcile. Browser return is still not confirmation.
+
 ## 0.9.5
 
 Invoices are unique per financial command, matching payments.

@@ -88,6 +88,7 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
 
     assert_equal "embedded", hybrid.items.first.presentation
     assert_equal "no_charge", free.items.first.presentation
+    assert_equal "completed", free.state
     assert_equal "redirect", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-redirect").items.first.presentation
     assert_equal "payment_link", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-payment-link").items.first.presentation
     assert_equal "invoice", RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:checkout-invoice").items.first.presentation

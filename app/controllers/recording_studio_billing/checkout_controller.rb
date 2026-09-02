@@ -9,8 +9,8 @@ module RecordingStudioBilling
       @presenter = checkout_presenter(checkout_presentation)
     end
 
-    # A browser return is informative only. Provider webhook/reconciliation work
-    # remains the sole path that can complete a CheckoutIntent.
+    # A browser return is informative only. Paid checkout still completes through
+    # webhook or reconcile. no_charge completes inside execute_checkout_intent.
     def return
       @presenter = checkout_presenter({})
       render :show

@@ -73,6 +73,10 @@ Rails.application.configure do
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
 
+  # Run billing command jobs in-process so dummy checkout and subscription
+  # changes finish without an extra worker process.
+  config.active_job.queue_adapter = :inline
+
   # Codespaces environment configuration
   if ENV["CODESPACES"] == "true"
     # Relax CSRF origin check

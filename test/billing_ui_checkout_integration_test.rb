@@ -8,6 +8,7 @@ require "devise/test/integration_helpers"
 
 class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
+  include ActiveJob::TestHelper
 
   self.use_transactional_tests = false
   parallelize(workers: 1)
@@ -208,7 +209,10 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       assert_equal "awaiting_confirmation", intent.reload.state
     end
 
-    free_root, free_option = published_checkout_option(adapter_key: "fake", amount_minor: 0)
+    free_root, free_option = published_checkout_option(
+      adapter_key: "fake", amount_minor: 0, product_kind: "plan",
+      recurrence: "recurring", interval: "month"
+    )
     switch_root(free_root)
     free = create_presented_checkout_intent(free_root, free_option, presentation: "no_charge")
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: free, root_recording: free_root)
@@ -216,6 +220,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     get "/billing/checkout/#{free.id}", params: { root_recording_id: free_root.id }
 
     assert_response :success
+    assert_select "[data-checkout-intent-state=completed]"
     assert_includes response.body, "No payment is due for this plan."
     refute_includes response.body, "Continue to secure checkout"
   end
@@ -326,6 +331,23 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     post "/billing/subscriptions/#{subscription.id}/cancel", params: { root_recording_id: other_root.id }
     assert_response :not_found
+  end
+
+  test "cancelling a plan executes then applies through the dummy job" do
+    root, option = published_checkout_option(recurrence: "recurring", interval: "month", product_kind: "plan")
+    subscription = project_recurring_subscription(root, option)
+    subscription_recording = subscription.recording
+    use_subscription_change_adapter!
+    switch_root(root)
+
+    perform_enqueued_jobs only: ExecuteFinancialCommandJob do
+      post "/billing/subscriptions/#{subscription.id}/cancel", params: { root_recording_id: root.id }
+    end
+
+    assert_redirected_to %r{/billing/subscription_changes/}
+    change = RecordingStudioBilling::SubscriptionChangeIntent.where(subscription_recording: subscription_recording).sole
+    assert_equal "applied", change.reload.state
+    assert_equal "cancelled", subscription.current.state
   end
 
   test "addons route renders a projected credit pack effect from the selected root only" do

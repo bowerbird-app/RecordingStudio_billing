@@ -36,7 +36,7 @@ Webhook tables come from `recording_studio_webhooks`. Billing inbound-event tabl
 ## Adapters
 
 - **Stripe** (`RecordingStudioBilling::StripeAdapter`) is the production adapter. Invoice presentation uses hosted Stripe Checkout with invoice creation. `send_invoice` maps to Stripe subscription/invoice collection with `days_until_due`. Checkout Session retrieve expands `line_items.data.price.product` and `subscription`. If that retrieve still omits line items or reports `has_more`, the adapter lists line items once with a limit of 100. Tax and discount come from `total_details`. If the list still has more than 100 items, retrieve withholds the financial payload so projection fail-closes instead of inventing totals. Listing uses Stripe's `sessions.line_items` API. The client must expose that surface. Paid retrieve also copies opaque Stripe identities (`sub_`, `si_`, `pi_`, `in_`) into the financial payload. `PersistCheckoutProviderIdentities` stores those rows so a later `invoice.paid` can resolve the original checkout command through the subscription when the new invoice id is unknown. Already-projected checkout money is not rewritten. Identities persist only after the first successful Checkout retrieve. An `invoice.paid` that arrives first stays unknown until Stripe retries.
-- **Dummy** (`DummyFinancialAdapter` in the test app) supports the same checkout presentations and collection methods. Seeded Plan-page journeys stay on this local adapter. When Stripe *test* keys are present outside the Rails test environment, the dummy also installs `stripe_credential_resolver` from `stripe_test_secret_key` / `stripe_test_publishable_key` (or `STRIPE_TEST_*` / `STRIPE_*` aliases) so `bin/rails stripe:ping` can call the Stripe test account. Live keys are ignored.
+- **Dummy** (`DummyFinancialAdapter` in the test app) supports the same checkout presentations and collection methods. Seeded Plan-page journeys stay on this local adapter. When Stripe *test* keys are present outside the Rails test environment, the dummy also installs `stripe_credential_resolver` from `stripe_test_secret_key` / `stripe_test_publishable_key` (or `STRIPE_TEST_*` / `STRIPE_*` aliases) so `bin/rails stripe:ping` can call the Stripe test account. Live keys are ignored. Dummy development runs `ExecuteFinancialCommandJob` inline after `:financial_command_pending`. That job calls `execute_checkout_intent` or execute-then-apply for subscription changes. The checkout controller does not call the adapter; development runs the job in-process so you do not need a worker.
 - **Fake** (`RecordingStudioBilling::FakeFinancialAdapter`) is for engine tests. Its default checkout and collection contract matches Stripe. Extra usage operations exist only so isolated usage tests can run without a live provider.
 
 Do not introduce a second production checkout vocabulary in the dummy app.
@@ -44,9 +44,10 @@ Do not introduce a second production checkout vocabulary in the dummy app.
 Stripe subscription Checkout uses inline recurring price terms from the frozen
 billing option (`interval` and `interval_count`). In dummy development, valid
 Stripe test credentials also add a separate Stripe Test Workspace and $1 monthly
-plan. Its controller executes only Stripe test checkouts inline so a developer
-can complete the embedded browser flow; production hosts keep provider
-execution in their own job system.
+plan. Dummy development runs `ExecuteFinancialCommandJob` inline after
+`:financial_command_pending` so a developer can complete the embedded browser
+flow without a separate worker. The checkout controller does not call the
+adapter. Production hosts keep provider execution in their own job system.
 
 The dummy seed is the V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets with distinct Italy vs Germany euro plan prices, free / monthly / annual (trial) / add-on / credit-pack / metered-service products, published manifests, checkout presentations (`embedded`, `redirect`, `payment_link`, `invoice`, `no_charge`), Italy and Germany euro checkout intents, hybrid subscription journeys, usage with allowance and overage, refunds and adjustments, and at least one reconciliation issue. Fake tax calculators are registered. Tax stays off until a later tax-demo pass.
 

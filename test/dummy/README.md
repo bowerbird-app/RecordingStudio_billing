@@ -93,8 +93,10 @@ probe unless those test keys are in the environment.
 
 With Stripe test keys present, development seeds a **Stripe Test Workspace** and
 a **Stripe test monthly plan** at $1/month. Sign in, switch to that workspace,
-open **Plan**, and choose the Stripe plan. The dummy executes this test checkout
-inline and renders Stripe's embedded Checkout form.
+open **Plan**, and choose the Stripe plan. Dummy development runs
+`ExecuteFinancialCommandJob` inline after the pending-command hook, then
+renders Stripe's embedded Checkout form. The checkout controller does not call
+the adapter; the in-process job does.
 
 Use Stripe's test card `4242 4242 4242 4242`, any future expiry, and any CVC.
 The completed payment, customer, and subscription appear only in Stripe test

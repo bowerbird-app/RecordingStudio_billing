@@ -25,35 +25,38 @@ module RecordingStudioBilling
 
     def call
       intent = nil
-      created = false
+      outcome = :created
       root = canonical_root
       account = direct_account(root)
       fingerprint = request_fingerprint(root)
       CheckoutIntent.transaction do
         existing = CheckoutIntent.lock.find_by(root_recording_id: root.id, local_idempotency_key:)
         if existing
-          return Result.new(status: existing.request_fingerprint == fingerprint ? :existing : :conflict,
-                            intent: existing)
-        end
+          return Result.new(status: :conflict, intent: existing) unless existing.request_fingerprint == fingerprint
 
-        resolved = resolved_items(root, account)
-        intent = CheckoutIntent.create!(root_recording: root, account_recording: account.recording,
-                                        local_idempotency_key:, request_fingerprint: fingerprint,
-                                        state: "validated", advisory_country_code: normalized_country,
-                                        advisory_currency_code: normalized_currency, presentation_preference: presentation)
-        validate_composition!(resolved)
-        resolved.each do |item|
-          intent.items.create!(item.attributes.except("id", "checkout_intent_id", "created_at", "updated_at"))
+          intent = existing
+          outcome = :existing
+        else
+          resolved = resolved_items(root, account)
+          intent = CheckoutIntent.create!(root_recording: root, account_recording: account.recording,
+                                          local_idempotency_key:, request_fingerprint: fingerprint,
+                                          state: "validated", advisory_country_code: normalized_country,
+                                          advisory_currency_code: normalized_currency, presentation_preference: presentation)
+          validate_composition!(resolved)
+          resolved.each do |item|
+            intent.items.create!(item.attributes.except("id", "checkout_intent_id", "created_at", "updated_at"))
+          end
         end
-        created = true
       end
-      enqueue_command!(intent) if created
-      Result.new(status: :created, intent: intent.reload)
+      bind_and_announce!(intent)
+      Result.new(status: outcome, intent: intent.reload)
     rescue ActiveRecord::RecordNotUnique
       existing = CheckoutIntent.find_by(root_recording_id: root.id, local_idempotency_key:)
       raise unless existing
+      return Result.new(status: :conflict, intent: existing) unless existing.request_fingerprint == fingerprint
 
-      Result.new(status: existing.request_fingerprint == fingerprint ? :existing : :conflict, intent: existing)
+      bind_and_announce!(existing)
+      Result.new(status: :existing, intent: existing.reload)
     end
 
     def verify_final_market!(intent:, account_country: nil, provider_country: nil, host_country: nil)
@@ -265,7 +268,17 @@ module RecordingStudioBilling
       end
     end
 
-    def enqueue_command!(intent)
+    def bind_and_announce!(intent)
+      return if intent.financial_command_id.present?
+
+      attach_pending_command!(intent)
+      command = intent.reload.financial_command
+      return unless command&.state == "pending"
+
+      RecordingStudioBilling::Hooks.trigger(:financial_command_pending, command)
+    end
+
+    def attach_pending_command!(intent)
       CheckoutIntent.transaction do
         intent.lock!
         items = intent.items.lock.to_a

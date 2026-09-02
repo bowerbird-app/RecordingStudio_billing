@@ -7,6 +7,8 @@ require_relative "dummy/config/environment"
 require "rails/test_help"
 
 class CheckoutIntentTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   self.use_transactional_tests = false
   parallelize(workers: 1)
 
@@ -685,6 +687,56 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     assert_equal "validated", intent.state
     assert_nil intent.financial_command_id
     refute RecordingStudioBilling::CheckoutIntent.where(state: "pending_provider", financial_command_id: nil).exists?
+
+    recovered = create_intent(graph, country: "IT", key: "command-failure")
+    assert recovered.existing?
+    assert_equal "pending_provider", recovered.intent.state
+    assert recovered.intent.financial_command_id
+    source = File.read(Rails.root.join("../../app/services/recording_studio_billing/create_checkout_intent.rb"))
+    refute_includes source, "enqueue_command!"
+    assert_includes source, "attach_pending_command!"
+  end
+
+  test "no_charge checkout completes without webhook or financial projection" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month", amount: 0,
+                                checkout_modes: %w[embedded redirect no_charge])
+    intent = create_intent(graph, country: "IT", key: "no-charge-complete").intent
+    assert_equal "no_charge", intent.items.first.presentation
+
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+    assert_equal "completed", intent.reload.state
+    assert_equal "succeeded", intent.financial_command.state
+    refute RecordingStudioBilling::Payment.exists?(financial_command: intent.financial_command)
+    assert RecordingStudioBilling::SubscriptionLine.exists?(checkout_intent_id: intent.id)
+  end
+
+  test "dummy job executes a pending checkout command" do
+    graph = published_catalogue
+    intent = create_intent(graph, country: "IT", key: "dummy-job").intent
+    assert_equal "pending_provider", intent.state
+
+    perform_enqueued_jobs only: ExecuteFinancialCommandJob
+
+    assert_equal "awaiting_confirmation", intent.reload.state
+  end
+
+  test "execute then apply subscription change through the public helpers" do
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
+    subscription = project_subscription!(graph, key: "change-execute")
+    use_subscription_change_adapter!
+    intent = create_subscription_change!(subscription, graph, key: "cancel-via-helpers", kind: "cancellation")
+    assert_equal "pending_provider", intent.state
+
+    RecordingStudioBilling.execute_subscription_change_intent(
+      subscription_change_intent: intent, root_recording: graph[:customer_root]
+    )
+    RecordingStudioBilling.apply_subscription_change_intent(
+      subscription_change_intent: intent, root_recording: graph[:customer_root]
+    )
+
+    assert_equal "applied", intent.reload.state
+    assert_equal "cancelled", subscription.current.state
   end
 
   test "projects every supported commercial lifecycle mode from frozen completed checkout terms" do
