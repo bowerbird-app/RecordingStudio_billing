@@ -122,16 +122,16 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     workspace_recording = RecordingStudio::Recording.find_by!(recordable: workspace)
     admin_root_recording = RecordingStudio::Recording.find_by!(recordable: admin_root)
     account_recording = RecordingStudio::Recording.find_by!(root_recording: workspace_recording,
-                                parent_recording: workspace_recording,
-                                recordable_type: "RecordingStudioBilling::Account")
+                                                            parent_recording: workspace_recording,
+                                                            recordable_type: "RecordingStudioBilling::Account")
     billing_admin_recording = RecordingStudio::Recording.find_by!(root_recording: admin_root_recording,
-                                    parent_recording: admin_root_recording,
-                                    recordable_type: "RecordingStudioBilling::BillingAdmin")
+                                                                  parent_recording: admin_root_recording,
+                                                                  recordable_type: "RecordingStudioBilling::BillingAdmin")
     account = account_recording.recordable
     billing_admin = billing_admin_recording.recordable
     catalogue = lambda do |model|
       model.where(id: RecordingStudio::Recording.where(root_recording: admin_root_recording,
-                                                        recordable_type: model.name).select(:recordable_id))
+                                                       recordable_type: model.name).select(:recordable_id))
     end
 
     assert_nil Current.actor
@@ -196,19 +196,19 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
         assert_no_difference -> { AdminRoot.count } do
           assert_no_difference -> { RecordingStudioBilling::Account.count } do
             assert_no_difference -> { RecordingStudioBilling::BillingAdmin.count } do
-                assert_no_difference -> { RecordingStudioBilling::ProviderAccount.count } do
-                  assert_no_difference -> { RecordingStudioBilling::Product.count } do
-                    assert_no_difference -> { RecordingStudioBilling::Price.count } do
-                      assert_no_difference -> { RecordingStudioBilling::UsageUnit.count } do
-                        assert_no_difference -> { RecordingStudioBilling::OveragePrice.count } do
-                          assert_no_difference -> { RecordingStudioBilling::PlanUpdate.count } do
-                            load Rails.root.join("db/seeds.rb").to_s
-                          end
+              assert_no_difference -> { RecordingStudioBilling::ProviderAccount.count } do
+                assert_no_difference -> { RecordingStudioBilling::Product.count } do
+                  assert_no_difference -> { RecordingStudioBilling::Price.count } do
+                    assert_no_difference -> { RecordingStudioBilling::UsageUnit.count } do
+                      assert_no_difference -> { RecordingStudioBilling::OveragePrice.count } do
+                        assert_no_difference -> { RecordingStudioBilling::PlanUpdate.count } do
+                          load Rails.root.join("db/seeds.rb").to_s
                         end
                       end
                     end
                   end
                 end
+              end
             end
           end
         end

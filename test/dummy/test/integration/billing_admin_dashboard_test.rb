@@ -258,15 +258,15 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_select "a[href*='/billing/admin/'][href*='/#{record.id}/edit']", text: "Edit"
       assert_select "a[href*='/billing/admin/operations/retire_'][data-turbo-method=post]" do |links|
-        assert links.any? { |link| link.text.strip == "Retire" }
-        assert links.any? { |link| link["data-turbo-confirm"] == "Retire this from the catalogue?" }
+        assert(links.any? { |link| link.text.strip == "Retire" })
+        assert(links.any? { |link| link["data-turbo-confirm"] == "Retire this from the catalogue?" })
       end
     end
   end
 
   test "new product GET authorizes against the scoped Admin root when the host resolver is silent" do
     original_resolver = RecordingStudioAdmin.configuration.access_recording_resolver
-    RecordingStudioAdmin.configuration.access_recording_resolver = ->(_context) { nil }
+    RecordingStudioAdmin.configuration.access_recording_resolver = ->(_context) {}
     get "/billing/admin/products/new", params: { parent_recording_id: billing_admin_recording.id }
     assert_response :success
     assert_includes response.body, "New product"
@@ -299,7 +299,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
 
   def seeded_row_label_for(key)
     case key
-    when "billing"
+    when "billing", "billing_products"
       RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
     when "billing_commercial", "billing_manifests"
       RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first.manifest_digest.first(12)
@@ -307,8 +307,6 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       RecordingStudioBilling::FinancialCommand.order(created_at: :desc).first.command_type
     when "billing_operations", "billing_reconciliation_issues"
       RecordingStudioBilling::ReconciliationIssue.order(created_at: :desc).first.kind
-    when "billing_products"
-      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
     when "billing_plans"
       RecordingStudioBilling::Product.with_current_recording.where(kind: "plan").order(created_at: :desc).first.name
     when "billing_addons"

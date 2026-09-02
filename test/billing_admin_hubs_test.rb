@@ -110,7 +110,7 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
       /admin/screens/billing_plans
       /admin/screens/billing_addons
     ], links.first(3).map(&:url)
-    assert_equal %w[Billing\ options Prices\ and\ publication Invoices Payments Subscriptions],
+    assert_equal ["Billing options", "Prices and publication", "Invoices", "Payments", "Subscriptions"],
                  links.drop(3).map(&:text)
   end
 

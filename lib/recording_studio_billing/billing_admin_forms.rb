@@ -206,7 +206,7 @@ module RecordingStudioBilling
 
     def product_options_for(billing_admin_recording)
       product_scope(billing_admin_recording).order(:name, :key)
-                                              .map { |product| [label_with_key(product), product.recording.id] }
+                                            .map { |product| [label_with_key(product), product.recording.id] }
     end
 
     def billing_option_options_for(billing_admin_recording)
