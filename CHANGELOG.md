@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.9.13
+
+Cloud Agent install no longer fails a warm environment rebuild. Skills still
+fetch at Build.
+
+### Fixed
+
+- `.cursor/install.sh` skips apt, ruby-build, db:prepare, and tailwind when
+  Ruby, bundle, and Postgres are already usable. A skippable provision
+  failure no longer fails the Build. Fetch-skills always runs last.
+
+### Upgrade notes
+
+- No host or schema changes. Rebuild the Cloud Agent environment with Draft
+  off so Build loads the pack.
+
 ## 0.9.12
 
 Cloud Agents fetch Cursor skills at Build instead of reading a vendored pack.
