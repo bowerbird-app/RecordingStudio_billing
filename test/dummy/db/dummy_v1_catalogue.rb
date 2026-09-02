@@ -322,7 +322,7 @@ class DummyV1Catalogue
       },
       "demo_monthly_plan" => {
         amount: 4_900, recurrence: "recurring", interval: "month", kind: "plan",
-        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 10 }
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_projects" => 10, "demo_api_calls" => 5 }
       },
       "demo_annual_plan" => {
         amount: 49_000, recurrence: "recurring", interval: "year", kind: "plan",
@@ -413,6 +413,11 @@ class DummyV1Catalogue
       parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
       kind: "limit", definition: {}, unique_by: :product
     )
+    monthly_api = find_or_record(
+      RecordingStudioBilling::Feature, "demo_api_calls",
+      parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
+      kind: "allowance", definition: {}, unique_by: :product
+    )
     annual = @catalogue.fetch("demo_annual_plan")
     find_or_record(
       RecordingStudioBilling::Feature, "demo_projects",
@@ -435,7 +440,7 @@ class DummyV1Catalogue
       parent: credit_pack.fetch(:product), product_recording: credit_pack.fetch(:product).recording,
       kind: "allowance", definition: {}, unique_by: :product
     )
-    unpublished = [@priority_feature, @usage_feature, @projects_feature].reject { |feature| feature.state == "published" }
+    unpublished = [@priority_feature, @usage_feature, @projects_feature, monthly_api].reject { |feature| feature.state == "published" }
     return if unpublished.empty?
 
     [[monthly.fetch(:us_price)], [free.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|

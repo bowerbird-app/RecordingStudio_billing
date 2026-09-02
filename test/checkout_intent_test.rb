@@ -995,6 +995,13 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "projects")
     end
     assert_match(/replace values conflict/, error.message)
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.effective_entitlements(root_recording: graph[:customer_root])
+    end
+
+    readable = RecordingStudioBilling.entitlement_access(root_recording: graph[:customer_root]).readable_entitlements
+    refute readable.key?("projects")
+    assert_equal true, readable.fetch("enabled")
   end
 
   test "one-off purchases record under the account, stay immutable, and replay without duplicating" do

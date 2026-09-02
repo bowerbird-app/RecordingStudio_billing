@@ -13,9 +13,10 @@ can actually charge: subscriptions, standalone purchases, and metered usage.
   is plan allowance plus purchase allowances minus recorded usage.
 - `record_usage` against that key burns the combined cap. API credits and AI
   credits stay on separate meters.
-- Show combined credits left on the customer Usage screen.
+- Show combined credits left on the customer Usage screen. Conflicting
+  replace limits stay off that page so Credits left still renders.
 - Dummy catalogue nominates `demo_api_calls`. After seed usage of 11 calls,
-  combined remaining is 994 (5 on the live metered line plus 1000 from the pack).
+  combined remaining is 994 (5 on the live Pro plan plus 1000 from the pack).
   The gem suite covers a second isolated meter.
 
 ### Changed

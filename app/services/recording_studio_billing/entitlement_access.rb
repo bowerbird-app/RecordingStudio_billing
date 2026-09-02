@@ -80,14 +80,28 @@ module RecordingStudioBilling
     end
 
     def to_h
-      effective_grants.distinct.pluck(:feature_key).sort.to_h do |feature_key|
-        [feature_key, feature_value(feature_key)]
+      feature_keys.to_h { |feature_key| [feature_key, feature_value(feature_key)] }
+    end
+
+    def readable_entitlements
+      feature_keys.each_with_object({}) do |feature_key, hash|
+        hash[feature_key] = feature_value(feature_key)
+      rescue ArgumentError => e
+        raise unless merge_conflict?(e)
       end
     end
 
     private
 
     attr_reader :account_recording, :root_recording, :at
+
+    def feature_keys
+      effective_grants.distinct.pluck(:feature_key).sort
+    end
+
+    def merge_conflict?(error)
+      error.message.match?(/conflict|ambiguous/i)
+    end
 
     def verify_authority!
       unless account_recording.recordable_type == "RecordingStudioBilling::Account" &&

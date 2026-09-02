@@ -11,6 +11,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
   setup do
     acquire_database_lock!
+    BillingTestDatabaseCleanup.clear!
     load Rails.root.join("db/seeds.rb").to_s
     @user = User.find_by!(email: "admin@admin.com")
     @workspace = Workspace.find_by!(name: "Studio Workspace")

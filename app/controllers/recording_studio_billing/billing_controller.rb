@@ -38,7 +38,8 @@ module RecordingStudioBilling
     end
 
     def usage
-      @entitlements = RecordingStudioBilling.effective_entitlements(root_recording:)
+      access = RecordingStudioBilling.entitlement_access(root_recording:)
+      @entitlements = access.readable_entitlements
       scope = { root_recording:, account_recording: }
       @presenter = billing_presenter(
         :usage, entitlements: @entitlements,
@@ -46,7 +47,7 @@ module RecordingStudioBilling
                 credit_grants: UsageCreditGrant.where(scope).order(effective_at: :desc),
                 allocations: UsageAllocation.where(scope).includes(:usage_period, :overage_calculation,
                                                                    :usage_credit_allocations).order(created_at: :desc),
-                meters: RecordingStudioBilling.entitlement_access(root_recording:).nominated_meter_credits
+                meters: access.nominated_meter_credits
       )
     end
 
