@@ -13,4 +13,9 @@ To use the engine:
 1. Start your Rails server
 2. Visit http://localhost:3000/recording_studio_billing
 
+To use the Billing Admin hub, add these routes in this order:
+
+    draw_recording_studio_billing_admin
+    recording_studio_admin_for :admin, at: "/admin", root_section: :billing
+
 ===============================================================================

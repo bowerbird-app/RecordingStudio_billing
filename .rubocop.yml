@@ -41,6 +41,7 @@ Metrics/AbcSize:
 Metrics/BlockLength:
   Exclude:
     - 'test/**/*'
+    - 'lib/recording_studio_billing/billing_operations_section.rb'
 
 # Allow empty blocks in tests (common for stubs/mocks)
 Lint/EmptyBlock:

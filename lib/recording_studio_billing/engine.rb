@@ -112,6 +112,7 @@ module RecordingStudioBilling
       next unless defined?(RecordingStudioAdmin)
 
       [
+        RecordingStudioBilling::BillingSection,
         RecordingStudioBilling::BillingCommercialSection,
         RecordingStudioBilling::BillingFinancialSection,
         RecordingStudioBilling::BillingOperationsSection,
@@ -119,6 +120,8 @@ module RecordingStudioBilling
       ].each { |section| RecordingStudioAdmin.register_section(section) }
 
       [
+        RecordingStudioBilling::BillingScreen,
+        *RecordingStudioBilling::BillingAdminForms.kind_screen_classes,
         RecordingStudioBilling::BillingCommercialScreen,
         RecordingStudioBilling::BillingFinancialScreen,
         RecordingStudioBilling::BillingOperationsScreen,
@@ -126,6 +129,7 @@ module RecordingStudioBilling
       ].each { |screen| RecordingStudioAdmin.register_screen(screen) }
 
       [
+        RecordingStudioBilling::BillingResource,
         RecordingStudioBilling::BillingCommercialResource,
         RecordingStudioBilling::BillingFinancialResource,
         RecordingStudioBilling::BillingOperationsResource,
@@ -140,6 +144,11 @@ module RecordingStudioBilling
     config.to_prepare do
       RecordingStudioBilling.register_builtin_providers!
       RecordingStudioBilling.register_webhook_actions!
+      if defined?(RecordingStudioAdmin::ApplicationController)
+        RecordingStudioAdmin::ApplicationController.prepend_view_path(
+          RecordingStudioBilling::Engine.root.join("app/views")
+        )
+      end
     end
 
     initializer "recording_studio_billing.view_helpers" do

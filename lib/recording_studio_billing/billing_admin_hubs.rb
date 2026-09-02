@@ -3,12 +3,17 @@
 module RecordingStudioBilling
   module BillingAdminHubs
     HIGH_SIGNAL_SCREEN_KEYS = {
+      "billing" => %w[billing_products billing_plans billing_addons],
       "billing_commercial" => %w[billing_products billing_prices billing_manifests],
       "billing_financial" => %w[billing_invoices billing_payments billing_financial_commands],
       "billing_operations" => %w[billing_subscriptions billing_plan_updates billing_reconciliation_issues]
     }.freeze
 
     HUB_TABLES = {
+      "billing" => {
+        title: "Products",
+        columns: %i[name key kind state]
+      },
       "billing_commercial" => {
         title: "Published manifests",
         columns: %i[manifest_digest used_at created_at]
@@ -23,10 +28,29 @@ module RecordingStudioBilling
       }
     }.freeze
 
+    STAFF_LINKS = {
+      "billing" => %w[
+        billing_products
+        billing_plans
+        billing_addons
+        billing_options
+        billing_prices
+        billing_invoices
+        billing_payments
+        billing_subscriptions
+      ]
+    }.freeze
+
     WIDGET_SPECS = [
       { key: "widgets.billing.products", title: "Products", screen: "billing_products",
-        description: "Current products in the published and draft commercial graph.",
-        model: "Product", scope: :current, text: :key, trailing: :kind },
+        description: "Current products in the catalogue.",
+        model: "Product", scope: :current, text: :name, trailing: :kind },
+      { key: "widgets.billing.plans", title: "Plans", screen: "billing_plans",
+        description: "Current plans in the catalogue.",
+        model: "Product", scope: :current, kind: "plan", text: :name, trailing: :state },
+      { key: "widgets.billing.addons", title: "Add-ons", screen: "billing_addons",
+        description: "Current add-ons in the catalogue.",
+        model: "Product", scope: :current, kind: "addon", text: :name, trailing: :state },
       { key: "widgets.billing.prices", title: "Prices", screen: "billing_prices",
         description: "Current prices across markets and publication states.",
         model: "Price", scope: :current, text: :key, trailing: :money },
@@ -96,7 +120,7 @@ module RecordingStudioBilling
         section_class.widget widget_key_for(screen_key), view_variant: :card
       end
       inventory_screen_keys_for(section_key).each do |screen_key|
-        title = ADMIN_OPERATION_AREAS.fetch(screen_key.to_sym).fetch(:title)
+        title = inventory_link_title(screen_key)
         section_class.link screen_key.to_sym, text: title, url: lambda { |context|
           context.admin_screen_path(screen_key)
         }
@@ -118,13 +142,21 @@ module RecordingStudioBilling
 
     def inventory_screen_keys_for(section_key)
       high_signal = HIGH_SIGNAL_SCREEN_KEYS.fetch(section_key)
+      staff_links = STAFF_LINKS.fetch(section_key, high_signal)
       remaining = ADMIN_OPERATION_AREAS.filter_map do |key, definition|
         next if key.to_s == "billing_feature_overrides"
-        next unless definition.fetch(:section) == section_key
+        next unless section_key == "billing" || definition.fetch(:section) == section_key
 
         key.to_s
       end
-      (high_signal + (remaining - high_signal)).uniq
+      (staff_links + (remaining - staff_links)).uniq
+    end
+
+    def inventory_link_title(screen_key)
+      kind_screen = BillingAdminForms::KIND_SCREENS[screen_key.to_s]
+      return kind_screen.fetch(:title) if kind_screen
+
+      ADMIN_OPERATION_AREAS.fetch(screen_key.to_sym).fetch(:title)
     end
 
     def widget_items(spec, context)
@@ -148,6 +180,7 @@ module RecordingStudioBilling
     def widget_scope(spec)
       model = "RecordingStudioBilling::#{spec.fetch(:model)}".constantize
       relation = spec[:scope] == :current ? model.with_current_recording : model.all
+      relation = relation.where(kind: spec[:kind]) if spec[:kind]
       relation.order(created_at: :desc)
     end
 
@@ -169,6 +202,7 @@ module RecordingStudioBilling
 
     def section_class_for(section_key)
       {
+        "billing" => BillingSection,
         "billing_commercial" => BillingCommercialSection,
         "billing_financial" => BillingFinancialSection,
         "billing_operations" => BillingOperationsSection
@@ -178,6 +212,7 @@ module RecordingStudioBilling
 
     def screen_class_for(section_key)
       {
+        "billing" => BillingScreen,
         "billing_commercial" => BillingCommercialScreen,
         "billing_financial" => BillingFinancialScreen,
         "billing_operations" => BillingOperationsScreen

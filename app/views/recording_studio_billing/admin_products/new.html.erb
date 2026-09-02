@@ -1,24 +1,28 @@
-<% billing_page_nav(title: "New product", back_url: @page.cancel_path, back_label: "Products") %>
+<% billing_page_nav(title: @page.title, back_url: @page.cancel_path, back_label: "Products") %>
 <% recording_studio_page_nav_right do %>
   <%= recording_studio_accessible_avatars(@page.access_recording, button_style: :ghost, button_size: :md) %>
 <% end %>
 
-<%= render FlatPack::PageTitle::Component.new(title: "New product") %>
+<%= render FlatPack::PageTitle::Component.new(title: @page.title) %>
 
 <%= form_with url: @page.create_path, method: :post do %>
   <%= hidden_field_tag :parent_recording_id, @page.parent_recording_id %>
-  <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md, class: "mt-6") do %>
-    <div class="space-y-4">
+  <%= hidden_field_tag "attributes[kind]", @page.kind if @page.kind_locked? %>
+  <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md) do %>
+    <%= render FlatPack::Grid::Component.new(cols: 1, gap: :md) do %>
       <%= render FlatPack::TextInput::Component.new(name: "attributes[name]", label: "Name", required: true) %>
       <%= render FlatPack::TextInput::Component.new(name: "attributes[key]", label: "Key", required: true) %>
-      <%= render FlatPack::Select::Component.new(name: "attributes[kind]", label: "Kind", required: true,
-            options: @page.kind_options, placeholder: false) %>
+      <% unless @page.kind_locked? %>
+        <%= render FlatPack::Select::Component.new(name: "attributes[kind]", label: "Kind", required: true,
+              options: @page.kind_options, value: @page.value(:kind), placeholder: false) %>
+      <% end %>
       <%= render FlatPack::Select::Component.new(name: "attributes[provider_account_recording_id]", label: "Provider",
-            required: true, options: @page.provider_options, placeholder: false) %>
-      <div class="flex flex-wrap items-center gap-3">
+            required: true, options: @page.provider_options, value: @page.value(:provider_account_recording_id),
+            placeholder: false) %>
+      <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md) do %>
         <%= render FlatPack::Button::Component.new(text: "Cancel", href: @page.cancel_path, style: :secondary) %>
         <%= render FlatPack::Button::Component.new(text: "Save", type: :submit, style: :primary) %>
-      </div>
-    </div>
+      <% end %>
+    <% end %>
   <% end %>
 <% end %>
