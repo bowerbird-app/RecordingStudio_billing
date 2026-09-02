@@ -208,8 +208,10 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     assert_response :success, response.body
     assert_includes response.body, "Credits left"
     assert_includes response.body, "API calls"
+    assert_includes response.body, "5 on the plan"
     assert_includes response.body, "1000 from packs"
     refute_includes response.body, "demo_api_calls"
+    refute_includes response.body, "1000 of 1000 available"
   end
 
   test "usage is recorded rated allocated closed and charged as overage" do

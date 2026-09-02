@@ -14,8 +14,9 @@ can actually charge: subscriptions, standalone purchases, and metered usage.
 - `record_usage` against that key burns the combined cap. API credits and AI
   credits stay on separate meters.
 - Show combined credits left on the customer Usage screen.
-- Dummy catalogue nominates `demo_api_calls`. The gem suite covers a second
-  isolated meter.
+- Dummy catalogue nominates `demo_api_calls`. After seed usage of 11 calls,
+  combined remaining is 994 (5 on the live metered line plus 1000 from the pack).
+  The gem suite covers a second isolated meter.
 
 ### Changed
 

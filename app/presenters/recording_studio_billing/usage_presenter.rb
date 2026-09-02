@@ -61,7 +61,9 @@ module RecordingStudioBilling
     end
 
     def grant_rows
-      Array(credit_grants).map do |grant|
+      Array(credit_grants).filter_map do |grant|
+        next if nominated_meter_key?(grant.credit_key)
+
         {
           key: usage_label(grant.credit_key),
           available: grant.remaining_quantity,
