@@ -206,13 +206,14 @@ or historical recordables in place. Publication remains exclusively with
 the section key remains `billing_commercial`.
 
 Products inventory (`/admin/screens/billing_products`) has a primary New
-button. That opens the Admin create screen (`billing_product_new`) on the same
-section. The form asks for Name, Key, Kind, and Provider. Save posts to the
-existing `create_draft_product` operation, which writes a draft with
-`RecordingStudio.record!`. The button and screen authorize
-`billing_products` `create` (`required_role :admin`, site blast radius,
-Accessible grant on the Admin root) the same way other billing admin_actions
-do. View-only actors do not see New and receive 403 on the create screen.
+button. That opens the billing create page at `/billing/admin/products/new`
+with the BillingAdmin parent id. The form asks for Name, Key, Kind, and
+Provider. Save posts to the existing `create_draft_product` operation,
+which writes a draft with `RecordingStudio.record!`. The button and page
+authorize `billing_products` `create` (`required_role :admin`, site blast
+radius, Accessible grant on the Admin root) the same way other billing
+admin_actions do. View-only actors do not see New and receive 403 on the
+create page. A missing or wrongly shaped parent returns 404.
 
 `key` stays the stable catalogue id (`demo_monthly_plan`). `name` is the
 required label people read (`Monthly plan`). Product and BillingOption both

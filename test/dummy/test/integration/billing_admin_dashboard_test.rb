@@ -41,7 +41,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     )
 
     site_screens = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) - %w[billing_feature_overrides]
-    (HUB_SECTIONS + site_screens + [RecordingStudioBilling::BillingAdminProductNew::SCREEN_KEY]).each do |key|
+    (HUB_SECTIONS + site_screens).each do |key|
       assert RecordingStudioAdmin.screen_enabled?(key:, recording: @admin_root, context:), key
     end
     refute RecordingStudioAdmin.screen_enabled?(
@@ -131,11 +131,12 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "products inventory New opens the Admin create-draft screen" do
+  test "products inventory New opens the billing create-draft page" do
+    billing_admin = billing_admin_recording
     get "/admin/screens/billing_products"
     assert_response :success
     assert_admin_shell
-    assert_select "a[href='/admin/screens/billing_product_new']", text: "New"
+    assert_select "a[href*='/billing/admin/products/new'][href*='parent_recording_id=#{billing_admin.id}']", text: "New"
     refute_includes response.body, "[&>*]:rounded-none"
     get "/admin/screens/billing_products/table"
     assert_response :success
@@ -143,11 +144,15 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     assert_includes response.body, product.name
     assert_includes response.body, product.key
 
-    get "/admin/screens/billing_product_new"
+    get "/billing/admin/products/new", params: {
+      parent_recording_id: billing_admin.id,
+      return_to: "/admin/screens/billing_products"
+    }
     assert_response :success
     assert_admin_shell
     assert_includes response.body, "New product"
     assert_select "form[action^='/billing/admin/operations/create_draft_product']"
+    assert_select "input[name='parent_recording_id'][value='#{billing_admin.id}']"
     assert_select "input[name='attributes[name]']"
     assert_select "input[name='attributes[key]']"
     assert_select "select[name='attributes[kind]']"
@@ -155,6 +160,17 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Select an option"
     refute_includes response.body, "Sign out"
     refute_includes response.body, "recording_studio_root_switch_dropdown"
+    assert_admin_access_avatars
+  end
+
+  test "new product GET authorizes against the scoped Admin root when the host resolver is silent" do
+    original_resolver = RecordingStudioAdmin.configuration.access_recording_resolver
+    RecordingStudioAdmin.configuration.access_recording_resolver = ->(_context) { nil }
+    get "/billing/admin/products/new", params: { parent_recording_id: billing_admin_recording.id }
+    assert_response :success
+    assert_includes response.body, "New product"
+  ensure
+    RecordingStudioAdmin.configuration.access_recording_resolver = original_resolver
   end
 
   private
@@ -207,6 +223,15 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
   def seeded_row_count_for(key)
     spec = RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.find { |entry| entry.fetch(:screen) == key }
     RecordingStudioBilling::BillingAdminHubs.widget_scope(spec).count
+  end
+
+  def billing_admin_recording
+    RecordingStudio::Recording.unscoped.find_by!(
+      root_recording_id: @admin_root.id,
+      parent_recording_id: @admin_root.id,
+      recordable_type: "RecordingStudioBilling::BillingAdmin",
+      trashed_at: nil
+    )
   end
 
   def select_admin_root

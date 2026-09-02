@@ -3,6 +3,7 @@
 RecordingStudioBilling::Engine.routes.draw do
   root "billing#index"
 
+  get "admin/products/new", to: "admin_products#new", as: :new_admin_product
   post "admin/operations/:operation", to: "admin_operations#perform", as: :admin_operations_create
   post "admin/operations/:operation/:id", to: "admin_operations#perform", as: :admin_operation
 

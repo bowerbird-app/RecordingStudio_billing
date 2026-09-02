@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.9.10
+
+New product is a billing page. Admin `screens/show` is no longer shadowed.
+
+### Fixed
+
+- Billing no longer `prepend_view_path`s a fork of
+  `recording_studio_admin/screens/show.html.erb`. Products New opens
+  `/billing/admin/products/new` with the BillingAdmin parent id. The GET
+  validates that parent, then authorizes against a request-local Admin
+  surface for that Admin root. Save still posts to `create_draft_product`.
+  Accessible still authorizes `billing_products` create. Only the product
+  new controller skips the customer Account loader.
+
+### Upgrade notes
+
+- Replace hard-coded `/admin/screens/billing_product_new` links with
+  `BillingAdminProductNew.new_url_for`. That helper adds
+  `parent_recording_id` and a safe Products return path. A GET without a
+  valid BillingAdmin parent returns 404.
+- No schema changes. Bump the gem if you pin `recording_studio_billing` by
+  version.
+
 ## 0.9.9
 
 JSON API capability actions are deferred. This gem does not depend on `recording_studio_api`. `AccessActions` stays the domain catalog a later PR will register.
