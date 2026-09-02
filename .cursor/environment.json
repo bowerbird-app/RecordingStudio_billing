@@ -1,0 +1,20 @@
+{
+  "name": "Recording Studio Billing",
+  "install": ".cursor/install.sh",
+  "start": ".cursor/start.sh",
+  "terminals": [
+    {
+      "name": "rails-server",
+      "command": "cd test/dummy && bin/rails server -b 0.0.0.0 -p 3000",
+      "description": "Billing dummy app (sign in at /users/sign_in with admin@admin.com / Password)."
+    },
+    {
+      "name": "tailwind-watch",
+      "command": "cd test/dummy && bin/rails tailwindcss:watch",
+      "description": "Rebuilds Tailwind/FlatPack CSS on change."
+    }
+  ],
+  "ports": [
+    { "name": "Rails Server", "port": 3000 }
+  ]
+}

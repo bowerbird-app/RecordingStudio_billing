@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Remove vendored Cursor skills, rules, and agents. Cloud Agent Builds now
+  fetch the plugin pack through `.cursor/fetch-skills.sh`. This does not change
+  the gem version, host setup, or schema.
+
 ## 0.9.11
 
 Staff now land on a Billing hub with direct catalogue links and engine-owned

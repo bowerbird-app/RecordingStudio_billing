@@ -1,63 +1,30 @@
-# Cursor agent skills
+# Cursor skills in Cloud Agents
 
-Cloud Agents and local Cursor chats load project skills from `.cursor/skills/`.
-This repository vendors two packs there so Cloud Agents can use them without
-relying on marketplace plugins (which are not always injected into cloud
-sessions):
+Cloud Agent Builds fetch the project skill pack. The repository does not vendor
+the generated `SKILL.md` or plugin `*.mdc` files.
 
-- [pstack](https://github.com/cursor/plugins/tree/main/pstack) — `/poteto-mode`
-  and related engineering workflows
-- [Recording Studio Cursor plugin](https://github.com/bowerbird-app/RecordingStudio_cursor_plugin)
-  — Recording Studio, Flatpack, and gem-building skills
+The repository tracks four boot files:
 
-The billing gem itself does not ship these files. The gemspec only packages
-`app`, `config`, `db`, and `lib`.
+- `.cursor/environment.json` defines the Build hooks, terminals, and port.
+- `.cursor/install.sh` provisions Ruby, PostgreSQL, dependencies, the dummy
+  database, and CSS. It then runs `.cursor/fetch-skills.sh`.
+- `.cursor/fetch-skills.sh` downloads the current skill and rule pack.
+- `.cursor/start.sh` starts PostgreSQL on each environment boot.
 
-## How to use them
+At Build time, `.cursor/install.sh` runs `.cursor/fetch-skills.sh`. Cloud Agents
+then load skills from `.cursor/skills/` and rules from `.cursor/rules/`. Both
+directories are gitignored Build output.
 
-For a non-trivial engineering task, start with a goal and a check:
+The next Cloud Agent environment rebuild with Draft off runs this Build path
+and loads the fetched pack. The hook fetches
+[RecordingStudio_cursor_plugin](https://github.com/bowerbird-app/RecordingStudio_cursor_plugin)
+and its configured skill sources. It never clones that repository into this
+checkout.
 
-```text
-/poteto-mode the export writes duplicate rows when a retry lands mid-run. repro first, then fix and verify.
-```
-
-`/poteto-mode` picks a playbook and calls other pstack skills as steps need
-them. Direct commands (`/how`, `/why`, `/architect`, `/arena`, `/interrogate`,
-`/tdd`) still work when you want one pstack skill only.
-
-For Recording Studio work, name the skill or describe the job. Examples:
-
-```text
-Use recording-studio-flatpack for this screen.
-```
-
-```text
-Follow recording-studio-tests while adding coverage for this service.
-```
-
-Useful Recording Studio skills here: `recording-studio-getting-started`,
-`recording-studio-gems`, `recording-studio-saving`, `recording-studio-ui`,
-`recording-studio-flatpack`, `recording-studio-admin`, `recording-studio-access`,
-`recording-studio-tests`. Specialists live in `.cursor/agents/`
-(`rails-expert`, `ui-style-expert`, `minitest-coverage`, and others).
-
-Standing rules live in `.cursor/rules/`. Plugin rules cover Recording Studio
-constraints, Flatpack-only UI, and user-facing copy. Account and team rules
-(browser verification, screenshots, gem versioning, CI, secrets, and similar)
-are listed in [`.cursor/rules/README.md`](../.cursor/rules/README.md).
-
-Origin and refresh steps: [`.cursor/SOURCE.md`](../.cursor/SOURCE.md).
-The pstack guide is upstream:
-[pstack/docs/guide](https://github.com/cursor/plugins/blob/main/pstack/docs/guide/README.md).
+The gemspec packages only `app`, `config`, `db`, and `lib`, plus the license,
+Rakefile, and README. Cursor boot files and generated pack files do not ship in
+the gem.
 
 Repo-specific test guidance also lives in
 [`.github/skills/minitest-workflow`](../.github/skills/minitest-workflow/SKILL.md).
-That is a GitHub skill path; Cursor Cloud Agents load `.cursor/skills/` instead.
-
-## What is not vendored
-
-- pstack guide images and automations
-- Recording Studio plugin slash commands (`/add-skill`, `/add-agent`) — those
-  author the plugin repo, not this gem
-- `cursor-team-kit` skills that pstack mentions (`deslop`, `control-cli`,
-  `control-ui`). Install that plugin locally if you want them.
+That path is a GitHub skill. It is not part of the Cursor pack.
