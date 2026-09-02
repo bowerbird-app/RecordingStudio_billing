@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.9.14
+
+Document what V1 can actually charge: subscriptions, standalone purchases, and
+metered usage.
+
+### Changed
+
+- Add a capability map to `docs/billing.md` for subscriptions, catalogue
+  kinds that complete checkout, and local vs Stripe metered billing.
+
+### Upgrade notes
+
+- No host or schema changes. Read the capability map before assuming Stripe
+  will settle usage or that a one-time `service` product becomes a purchase.
+
 ## 0.9.13
 
 Cloud Agent install no longer fails a warm environment rebuild. Skills still

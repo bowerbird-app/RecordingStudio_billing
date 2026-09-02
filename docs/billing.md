@@ -4,6 +4,43 @@ This engine owns commercial configuration, checkout, subscriptions, usage, tax, 
 
 User-facing screens should talk about **products, prices, and checkout**. Developer terms such as recordings and recordables stay in code and this document.
 
+## Capability map
+
+Use this when asking whether V1 covers a commercial shape. The dummy catalogue is the working demonstration: plans, add-ons, credit packs, and a metered service, with Stripe as the production adapter and a local fake adapter in dummy.
+
+### Subscriptions
+
+Yes. Recurring checkout projects a `Subscription` under the billing account, with a `SubscriptionLine` per commercial item (plan or recurring add-on). Customer checkout, hybrid carts (plan plus add-on), trials, free $0 plans, cancel, and resume are first-class. Stripe Checkout uses `mode: subscription` and inline recurring `price_data` from the frozen billing option.
+
+Customer plan, interval, add-on, and quantity changes go through `CreateSubscriptionChangeIntent` and the gem's own Plan screens, not the Stripe Customer Portal. The portal is restricted to payment methods, address, tax IDs, and invoice history.
+
+Stripe follow-up mutations are narrower than local lifecycle. Checkout persist `sub_` / `si_` / `pi_` / `in_` on the financial command. It does not copy those onto the subscription recordable, and it does not persist a durable Stripe `price_` id (checkout creates ephemeral `price_data`). Cancel and resume against Stripe need a `sub_` on `Subscription#provider_reference`. Plan, interval, add-on, and quantity changes against Stripe also need `si_` and `price_` in the adapter change-set. Dummy / fake-provider journeys do not need those identities.
+
+### Standalone products
+
+The catalogue has four kinds: `plan`, `addon`, `credit_pack`, and `service`. Staff can create all four from Billing admin (`/billing/admin/products/new`). Products live in this gem, not in a Stripe product catalog. Checkout sends the frozen product name as Stripe `product_data.name`.
+
+One-time purchases that complete checkout become a `Purchase` beside the subscription, not under it:
+
+| Kind | Recurrence | After paid checkout |
+| --- | --- | --- |
+| `plan` | recurring | Subscription line (`monthly_subscription`, `annual_subscription`, `trial_subscription`, or `free_plan`) |
+| `addon` | recurring | Subscription line (`recurring_addon`) |
+| `addon` | one-time | Purchase (`one_off_addon`) |
+| `credit_pack` | one-time | Purchase (`one_off_credit_pack`) |
+| `service` | recurring | Treated as a subscription (monthly or annual) |
+| `service` | one-time | Checkout intent can be created. Lifecycle projection raises `unsupported commercial lifecycle mode`. Dummy uses this only for presentation fixtures. |
+
+The customer Add-ons screen offers published `addon` and `credit_pack` options. Product rules can require a live plan (the dummy quantity add-on does). Credit packs do not. There is no separate "one-off SKU" kind; a generic one-time product should be an add-on or a credit pack if it must complete as a purchase.
+
+### Metered billing
+
+Local metering works. Hosts call `record_usage` from application code. Meters aggregate `sum`, `count`, `maximum`, or `latest`. Rating, allocation, allowance policies, prepaid credits, overage prices, and usage corrections are engine services. The dummy seeds a `service` product with an API-call allowance, records usage, rates the window, and calculates overage. The customer Usage screen shows that meter.
+
+Charging that overage through a provider is adapter-specific. The fake adapter supports `usage_settlement` and `usage_correction`. The Stripe adapter does **not**: capability evaluation and `StripeAdapter#call` return `unsupported_operation` without a Stripe request. There is no Stripe Billing Meters or Metronome integration, and no public HTTP ingest for usage events.
+
+Pricing models are `flat`, `per_unit`, and `package`. Graduated, volume, and stairstep prices are out of scope.
+
 ## V1 vocabulary
 
 | Concept | Allowed values | Notes |
@@ -430,7 +467,7 @@ billing endpoints that skip Accessible.
 
 ## What V1 does not include
 
-Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, graduated pricing, public usage HTTP ingest, a customer self-serve portal that changes plans, or a billing JSON surface until `recording_studio_api` is a real dependency. The restricted provider portal above is the V1 payment-details surface. See `README.md`.
+Do not add these in this gem: quotes, coupons, cash credits, dunning, retries, graduated pricing, public usage HTTP ingest, Stripe meter-event settlement, a provider portal that changes plans, or a billing JSON surface until `recording_studio_api` is a real dependency. Plan changes stay on the gem's own Plan screens. The restricted provider portal is the V1 payment-details surface. See the capability map above and `README.md`.
 
 ## Host layouts
 

@@ -25,6 +25,12 @@ terms. Canonical V1 values are price scope `market`, checkout presentations
 methods `automatic` / `send_invoice`, and tax policies `exclusive` / `inclusive`
 / `provider_default`. See [docs/billing.md](docs/billing.md).
 
+Subscriptions, one-time add-ons and credit packs, and local metered usage are
+in V1. A generic one-time `service` product does not complete as a purchase.
+Stripe checkout can create a subscription; Stripe does not settle usage or
+corrections. The capability map in [docs/billing.md](docs/billing.md) is the
+yes / no / caveat list.
+
 ## Customer billing surface
 
 Mount the engine in the host application and include Root Switchable controller

@@ -780,6 +780,21 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
   end
 
+  test "one-time service checkout does not project a purchase or subscription" do
+    graph = published_catalogue(kind: "service", recurrence: "one_time")
+    intent = create_intent(graph, country: "IT", key: "one-time-service").intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                               root_recording: graph[:customer_root])
+    end
+
+    assert_equal "unsupported commercial lifecycle mode", error.message
+    assert_equal 0, RecordingStudioBilling::Purchase.for_root(graph[:customer_root]).count
+    assert_equal 0, RecordingStudioBilling::Subscription.for_root(graph[:customer_root]).count
+  end
+
   test "lifecycle projection is root isolated, idempotent, append-only, and provider neutral" do
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
     intent = create_intent(graph, country: "IT", key: "project-idempotently").intent
