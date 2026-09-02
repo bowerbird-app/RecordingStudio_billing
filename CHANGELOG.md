@@ -4,20 +4,37 @@
 
 ## 0.9.14
 
-Document what V1 can actually charge: subscriptions, standalone purchases, and
-metered usage.
+Nominated meters combine a plan allocation with credit packs. Document what V1
+can actually charge: subscriptions, standalone purchases, and metered usage.
+
+### Added
+
+- Add `remaining_credits` and `meter_credits` for a nominated meter key. Remaining
+  is plan allowance plus purchase allowances minus recorded usage.
+- `record_usage` against that key burns the combined cap. API credits and AI
+  credits stay on separate meters.
+- Show combined credits left on the customer Usage screen.
+- Dummy catalogue nominates `demo_api_calls` and `demo_ai_credits`.
 
 ### Changed
 
 - Add a capability map to `docs/billing.md` for subscriptions, catalogue
-  kinds that complete checkout, prepaid credit packs vs plan allowances, and
-  local vs Stripe metered billing.
+  kinds that complete checkout, nominated meters, and local vs Stripe metered
+  billing.
+- Metered allowance grants on the same key add together. `meter_key` must match
+  the feature key.
 
 ### Upgrade notes
 
-- No host or schema changes. Read the capability map before assuming Stripe
-  will settle usage, that a one-time `service` product becomes a purchase, or
-  that a credit pack adds onto a plan allowance.
+- Register each meter as an allowance feature whose key equals `meter_key`.
+  Put that feature on the plan (included amount) and on a `credit_pack` (sold
+  amount). Call `remaining_credits(root_recording:, meter_key:)` for the combined
+  leftover. `credit_balance(root_recording:, product_recording:)` remains the
+  pack SKU ledger and does not add the plan allocation.
+- Stripe still does not settle usage. Combined remaining is local. It is not a
+  Stripe overage invoice.
+- No schema changes. Read the capability map before assuming a one-time
+  `service` product becomes a purchase.
 
 ## 0.9.13
 

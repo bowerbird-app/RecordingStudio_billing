@@ -1233,6 +1233,53 @@ class CheckoutIntentTest < ActiveSupport::TestCase
                                                        product_recording: purchase.product_recording_id)
   end
 
+  test "remaining credits combine a plan allocation with packs on the same nominated meter" do
+    RecordingStudioBilling.configuration.feature_definitions = metered_features
+    graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month",
+                                feature_keys: ["api_credits"], product_feature_values: { "api_credits" => 10 })
+    project_subscription!(graph, key: "meter-plan")
+    complete_pack_checkout!(graph, key: "meter-api-pack", feature_key: "api_credits", amount: 25)
+    complete_pack_checkout!(graph, key: "meter-ai-pack", feature_key: "ai_credits", amount: 40)
+
+    api = RecordingStudioBilling.meter_credits(root_recording: graph[:customer_root], meter_key: "api_credits")
+    ai = RecordingStudioBilling.meter_credits(root_recording: graph[:customer_root], meter_key: "ai_credits")
+
+    assert_equal 10, api.included
+    assert_equal 25, api.purchased
+    assert_equal 0, api.used
+    assert_equal 35, api.remaining
+    assert_equal 35, RecordingStudioBilling.remaining_credits(root_recording: graph[:customer_root], meter_key: "api_credits")
+    assert_equal 0, ai.included
+    assert_equal 40, ai.purchased
+    assert_equal 40, ai.remaining
+    assert_equal 35, RecordingStudioBilling.feature_value(root_recording: graph[:customer_root], feature_key: "api_credits")
+
+    used = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "api_credits",
+                                               quantity: 12, idempotency_key: "meter-api-use")
+    isolated = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "ai_credits",
+                                                   quantity: 3, idempotency_key: "meter-ai-use")
+    exhausted = RecordingStudioBilling.record_usage(root_recording: graph[:customer_root], usage_key: "api_credits",
+                                                    quantity: 24, idempotency_key: "meter-api-over")
+
+    assert used.created?
+    assert isolated.created?
+    assert exhausted.denied?
+    assert_equal :exhausted_allowance, exhausted.reason
+    assert_equal 23, RecordingStudioBilling.remaining_credits(root_recording: graph[:customer_root], meter_key: "api_credits")
+    assert_equal 37, RecordingStudioBilling.remaining_credits(root_recording: graph[:customer_root], meter_key: "ai_credits")
+    assert_raises(RecordingStudioBilling::EntitlementAccess::UnknownMeter) do
+      RecordingStudioBilling.remaining_credits(root_recording: graph[:customer_root], meter_key: "seats")
+    end
+  end
+
+  test "a nominated meter_key must match its feature key" do
+    assert_raises(ArgumentError) do
+      RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+        "api_credits" => entitlement_features.fetch("seats").merge(meter_key: "other_meter", type: "allowance")
+      )
+    end
+  end
+
   test "public entitlement APIs normalize an account child recording and fail closed across roots" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
@@ -1670,7 +1717,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def published_catalogue(kind: "service", recurrence: "one_time", interval: nil, trial_days: 0, amount: 1_000,
                           account_country: "IT", checkout_policy: "allowed", germany_verification_policy: "requote",
-                          checkout_modes: ["redirect"])
+                          checkout_modes: ["redirect"], feature_keys: nil, product_feature_values: {})
     provider_root = RecordingStudio.root_recording_for(AdminRoot.create!(name: "Provider #{SecureRandom.hex(4)}"))
     admin = RecordingStudioBilling.ensure_billing_admin(root_recording: provider_root,
                                                         key: "billing_#{SecureRandom.hex(4)}")
@@ -1684,7 +1731,8 @@ class CheckoutIntentTest < ActiveSupport::TestCase
                             germany_verification_policy)
     graph = { provider_root:, admin:, provider_recording:, italy_market:, germany_market: }
     option, published_italy_price, published_germany_price = published_option(graph, kind:, recurrence:, interval:,
-                                                                                     trial_days:, amount:, checkout_policy:)
+                                                                                     trial_days:, amount:, checkout_policy:,
+                                                                                     feature_keys:, product_feature_values:)
     adapter = RecordingStudioBilling::FakeFinancialAdapter.new(outcome: :success,
                                                                capabilities: RecordingStudioBilling::ProviderCapabilities.new(operations: ["checkout"], currencies: ["EUR"],
                                                                                                                               markets: %w[IT DE], collection_methods: ["automatic"], checkout_modes:, quantities: ["fixed"], composition: ["single"]))
@@ -1704,18 +1752,21 @@ class CheckoutIntentTest < ActiveSupport::TestCase
   end
 
   def published_option(graph, kind:, recurrence:, interval:, product_recording: nil, trial_days: 0, amount: 1_000,
-                       option_feature_values: {}, price_feature_values: {}, checkout_policy: "allowed")
+                       option_feature_values: {}, price_feature_values: {}, checkout_policy: "allowed",
+                       feature_keys: nil, product_feature_values: {})
     product_recording ||= record_child(
       RecordingStudioBilling::Product.new(provider_account_recording: graph[:provider_recording],
                                           key: "product_#{SecureRandom.hex(4)}", name: "Catalogue product",
-                                          kind:, feature_values: {}), graph[:provider_root], graph[:admin].recording
+                                          kind:, feature_values: product_feature_values), graph[:provider_root], graph[:admin].recording
     )
     option_recording = record_child(
       RecordingStudioBilling::BillingOption.new(product_recording: product_recording, key: "option_#{SecureRandom.hex(4)}",
                                                 name: "Catalogue option",
                                                 recurrence:, interval:, interval_count: interval && 1, quantity_mode: "fixed", default_quantity: 1, pricing_model: "flat", collection_method: "automatic", payment_terms_days: 0, trial_days:, proration_policy: "none", lifecycle_policy: "immediate", checkout_policy:, tax_policy: "exclusive", feature_values: option_feature_values), graph[:provider_root], product_recording
     )
-    RecordingStudioBilling.configuration.feature_definitions.each do |key, definition|
+    catalogue_keys = feature_keys || RecordingStudioBilling.configuration.feature_definitions.keys
+    catalogue_keys.each do |key|
+      definition = RecordingStudioBilling.configuration.feature_definitions.fetch(key.to_s)
       record_child(
         RecordingStudioBilling::Feature.new(product_recording:, key:, kind: definition.fetch("type"),
                                             definition: {}), graph[:provider_root], product_recording
@@ -1790,5 +1841,25 @@ class CheckoutIntentTest < ActiveSupport::TestCase
       "edition" => { source: "catalogue", merge_rule: "replace", default: "pro", type: "variant", meter_key: nil,
                      usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 4, validation: {} }
     }
+  end
+
+  def metered_features
+    {
+      "api_credits" => { source: "catalogue", merge_rule: "replace", default: 0, type: "allowance", meter_key: "api_credits",
+                         usage_unit_key: "api_call", replenishment: "period", lifecycle: "subscription", consumption: "metered",
+                         ordering: 1, validation: { "minimum" => 0 } },
+      "ai_credits" => { source: "catalogue", merge_rule: "replace", default: 0, type: "allowance", meter_key: "ai_credits",
+                        usage_unit_key: "ai_token", replenishment: "none", lifecycle: "purchase", consumption: "metered",
+                        ordering: 2, validation: { "minimum" => 0 } }
+    }
+  end
+
+  def complete_pack_checkout!(graph, key:, feature_key:, amount:)
+    option, = published_option(graph, kind: "credit_pack", recurrence: "one_time", interval: nil,
+                                     feature_keys: [feature_key], product_feature_values: { feature_key => amount })
+    intent = create_intent(graph, country: "IT", key:, option:).intent
+    RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
+    RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,
+                                                             root_recording: graph[:customer_root]).purchase
   end
 end

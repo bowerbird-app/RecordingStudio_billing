@@ -2,12 +2,25 @@
 
 module RecordingStudioBilling
   class UsagePresenter < BasePresenter
-    attr_accessor :entitlements, :periods, :credit_grants, :allocations
+    attr_accessor :entitlements, :periods, :credit_grants, :allocations, :meters
 
     def page = :usage
 
     def credits
       entitlements.fetch("credits", {})
+    end
+
+    def meter_rows
+      Array(meters).map do |meter|
+        cap = meter.included + meter.purchased
+        {
+          label: usage_label(meter.meter_key),
+          used: meter.used,
+          limit: cap.positive? ? cap : nil,
+          remaining: meter.remaining,
+          description: meter_description(meter)
+        }
+      end
     end
 
     def credit_rows
@@ -20,6 +33,8 @@ module RecordingStudioBilling
 
     def included_rows
       entitlements.except("credits").filter_map do |key, value|
+        next if nominated_meter_key?(key)
+
         display = included_usage_value(value)
         next if display.blank?
 
@@ -85,6 +100,18 @@ module RecordingStudioBilling
       else
         value.to_s.presence
       end
+    end
+
+    def meter_description(meter)
+      bits = []
+      bits << "#{meter.included} on the plan" if meter.included.positive?
+      bits << "#{meter.purchased} from packs" if meter.purchased.positive?
+      bits.join(", ")
+    end
+
+    def nominated_meter_key?(key)
+      definition = RecordingStudioBilling.configuration.feature_definitions[key.to_s]
+      definition && definition["meter_key"].present?
     end
   end
 end

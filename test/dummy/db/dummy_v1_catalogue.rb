@@ -43,6 +43,8 @@ class DummyV1Catalogue
     "demo_quantity_addon_option" => "Monthly add-on",
     "demo_credit_pack" => "Credit pack",
     "demo_credit_pack_option" => "One-time pack",
+    "demo_ai_credit_pack" => "AI credit pack",
+    "demo_ai_credit_pack_option" => "One-time AI pack",
     "stripe_test_monthly_plan" => "Starter",
     "stripe_test_monthly_plan_option" => "Monthly"
   }.freeze
@@ -240,6 +242,14 @@ class DummyV1Catalogue
       RecordingStudioBilling::Meter, "demo_api_calls",
       usage_unit_recording: @usage_unit.recording, aggregation: "sum"
     )
+    @ai_usage_unit = find_or_record(
+      RecordingStudioBilling::UsageUnit, "demo_ai_token",
+      provider_account_recording: @fake_provider.recording
+    )
+    @ai_meter = find_or_record(
+      RecordingStudioBilling::Meter, "demo_ai_credits",
+      usage_unit_recording: @ai_usage_unit.recording, aggregation: "sum"
+    )
     rate_card = find_or_record(
       RecordingStudioBilling::RateCard, "demo_usage_rates",
       provider_account_recording: @fake_provider.recording
@@ -336,6 +346,10 @@ class DummyV1Catalogue
       "demo_credit_pack" => {
         amount: 2_500, recurrence: "one_time", interval: nil, kind: "credit_pack",
         trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_api_calls" => 1_000 }
+      },
+      "demo_ai_credit_pack" => {
+        amount: 1_500, recurrence: "one_time", interval: nil, kind: "credit_pack",
+        trial_days: 0, quantity_mode: "fixed", feature_values: { "demo_ai_credits" => 200 }
       }
     }
   end
@@ -379,6 +393,8 @@ class DummyV1Catalogue
     @usage_option = refresh(@usage_option)
     @usage_unit = refresh(@usage_unit)
     @meter = refresh(@meter)
+    @ai_usage_unit = refresh(@ai_usage_unit)
+    @ai_meter = refresh(@ai_meter)
     @usage_price = refresh(@usage_price)
     @overage_price = refresh(@overage_price)
     @checkout_option = refresh(@checkout_option)
@@ -398,6 +414,7 @@ class DummyV1Catalogue
     free = @catalogue.fetch("demo_free_plan")
     addon = @catalogue.fetch("demo_quantity_addon")
     credit_pack = @catalogue.fetch("demo_credit_pack")
+    ai_credit_pack = @catalogue.fetch("demo_ai_credit_pack")
     @priority_feature = find_or_record(
       RecordingStudioBilling::Feature, "demo_priority_support",
       parent: monthly.fetch(:product), product_recording: monthly.fetch(:product).recording,
@@ -435,10 +452,16 @@ class DummyV1Catalogue
       parent: credit_pack.fetch(:product), product_recording: credit_pack.fetch(:product).recording,
       kind: "allowance", definition: {}, unique_by: :product
     )
-    unpublished = [@priority_feature, @usage_feature, @projects_feature].reject { |feature| feature.state == "published" }
+    @ai_feature = find_or_record(
+      RecordingStudioBilling::Feature, "demo_ai_credits",
+      parent: ai_credit_pack.fetch(:product), product_recording: ai_credit_pack.fetch(:product).recording,
+      kind: "allowance", definition: {}, unique_by: :product
+    )
+    unpublished = [@priority_feature, @usage_feature, @projects_feature, @ai_feature].reject { |feature| feature.state == "published" }
     return if unpublished.empty?
 
-    [[monthly.fetch(:us_price)], [free.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)]].each do |prices|
+    [[monthly.fetch(:us_price)], [free.fetch(:us_price)], [@usage_price], [credit_pack.fetch(:us_price)],
+     [ai_credit_pack.fetch(:us_price)]].each do |prices|
       RecordingStudioBilling::CommercialPublisher.publish!(
         root_recording: @admin_root_recording,
         price_recording_ids: prices.map { |price| price.recording.id },

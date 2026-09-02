@@ -23,10 +23,15 @@ module RecordingStudioBilling
         raise ArgumentError, "unsupported feature type" unless TYPES.include?(type)
         raise ArgumentError, "unsupported feature merge rule" unless MERGE_RULES.include?(merge_rule)
 
-        definition.slice(
+        normalized = definition.slice(
           :source, :merge_rule, :default, :type, :meter_key, :usage_unit_key,
           :replenishment, :lifecycle, :consumption, :ordering, :validation
         ).transform_keys(&:to_s)
+        normalized["type"] = type
+        normalized["merge_rule"] = merge_rule
+        normalized["meter_key"] = normalized["meter_key"].presence&.to_s
+        normalized["usage_unit_key"] = normalized["usage_unit_key"].presence&.to_s
+        normalized
       end
 
       private

@@ -9,7 +9,8 @@ manager.
 
 Checkout completion and applied subscription changes project entitlement grants
 automatically. Hosts gate paid features with `entitled?` / `feature_value` on
-the workspace root (see [docs/billing.md](docs/billing.md)). People access is
+the workspace root, and check combined meter remaining with
+`remaining_credits` (see [docs/billing.md](docs/billing.md)). People access is
 still RecordingStudio Accessible on that root.
 
 Customer subscriptions and their plan lines are Recording Studio recordables:

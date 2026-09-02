@@ -1,10 +1,30 @@
 <%= render FlatPack::PageTitle::Component.new(
   title: @presenter.copy("usage_title", "Usage"),
-  subtitle: @presenter.copy("usage_subtitle", "Included usage and prepaid credits for this workspace."),
+  subtitle: @presenter.copy("usage_subtitle", "Credits left, included usage, and prepaid packs for this workspace."),
   variant: :h1
 ) %>
 <% header_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <div class="flex flex-col gap-6">
+  <% if @presenter.meter_rows.any? %>
+    <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
+      <% card.header do %>
+        <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_credits_left_title", "Credits left") %></h3>
+      <% end %>
+      <% card.body do %>
+        <div class="flex flex-col gap-6">
+          <% @presenter.meter_rows.each do |meter| %>
+            <%= render FlatPack::Billing::UsageMeter::Component.new(
+              label: meter[:label],
+              used: meter[:used],
+              limit: meter[:limit],
+              unit: nil,
+              description: meter[:description]
+            ) %>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  <% end %>
   <%= render FlatPack::Card::Component.new(style: :default) do |card| %>
     <% card.header do %>
       <h3 class="text-lg font-semibold"><%= @presenter.copy("usage_periods_title", "Usage this period") %></h3>

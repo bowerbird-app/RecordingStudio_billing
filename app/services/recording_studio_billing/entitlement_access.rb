@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
+  MeterCredits = Data.define(:meter_key, :included, :purchased, :used, :remaining)
+
   class EntitlementAccess
     class AmbiguousVariant < ArgumentError; end
+    class UnknownMeter < ArgumentError; end
 
     def self.for(...) = new(...)
 
@@ -36,6 +39,31 @@ module RecordingStudioBilling
     def credit_balance(credit_key)
       CreditLedgerEntry.where(root_recording: root_recording, account_recording:, product_recording_id: credit_key)
                        .where(effective_at: ..at).sum(:amount)
+    end
+
+    def remaining_credits(meter_key)
+      meter_credits(meter_key).remaining
+    end
+
+    def meter_credits(meter_key)
+      key = meter_key.to_s
+      raise UnknownMeter, "unknown meter: #{key}" unless nominated_meter?(key)
+
+      grants = grants_for(key, "allowance")
+      included = integer_grant_sum(grants.select { |grant| included_meter_source?(grant) })
+      purchased = integer_grant_sum(grants.select { |grant| grant.source_type == "RecordingStudioBilling::Purchase" })
+      used = usage_total(key)
+      remaining = [included + purchased - used, 0].max
+      MeterCredits.new(meter_key: key, included:, purchased:, used:, remaining:)
+    end
+
+    def nominated_meter_credits
+      RecordingStudioBilling.configuration.feature_definitions.keys.filter_map do |key|
+        next unless nominated_meter?(key)
+        next unless has_feature?(key) || usage_total(key).positive?
+
+        meter_credits(key)
+      end
     end
 
     def usage_total(usage_key, from: nil, to: nil)
@@ -75,12 +103,10 @@ module RecordingStudioBilling
       values = grants.map(&:value)
       return nil if values.empty?
 
+      numeric_values = integer_values!(values, kind)
+      return numeric_values.sum if kind == "allowance" && nominated_meter?(feature_key)
+
       rule = merge_rule_for!(grants, feature_key)
-      numeric_values = values.map do |value|
-        Integer(value)
-      rescue ArgumentError, TypeError
-        raise ArgumentError, "entitlement #{kind} must be an integer"
-      end
       case rule
       when "maximum" then numeric_values.max
       when "minimum" then numeric_values.min
@@ -93,6 +119,28 @@ module RecordingStudioBilling
         numeric_values.first
       else
         raise ArgumentError, "entitlement #{kind} does not support #{rule} merge for #{feature_key}"
+      end
+    end
+
+    def nominated_meter?(feature_key)
+      definition = RecordingStudioBilling.configuration.feature_definitions[feature_key.to_s]
+      definition && definition["type"] == "allowance" && definition["meter_key"].present?
+    end
+
+    def included_meter_source?(grant)
+      grant.source_type == "RecordingStudioBilling::SubscriptionLine" ||
+        grant.source_type == "RecordingStudioBilling::DefaultEntitlementBootstrap"
+    end
+
+    def integer_grant_sum(grants)
+      integer_values!(grants.map(&:value), "allowance").sum
+    end
+
+    def integer_values!(values, kind)
+      values.map do |value|
+        Integer(value)
+      rescue ArgumentError, TypeError
+        raise ArgumentError, "entitlement #{kind} must be an integer"
       end
     end
 

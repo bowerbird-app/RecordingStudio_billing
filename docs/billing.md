@@ -33,11 +33,11 @@ One-time purchases that complete checkout become a `Purchase` beside the subscri
 
 The customer Add-ons screen offers published `addon` and `credit_pack` options. Product rules can require a live plan (the dummy quantity add-on does). Credit packs do not. There is no separate "one-off SKU" kind; a generic one-time product should be an add-on or a credit pack if it must complete as a purchase.
 
-A prepaid credit pack is the usage-shaped purchase Stripe can charge. Checkout writes a `Purchase` and a credit-ledger credit of `allowance × quantity` (buy 200, or a 100-unit pack with quantity 2). Read remaining pack balance with `credit_balance(root_recording:, product_recording:)`. Burn it with `consume_credits` (`insufficient_credit_balance` when empty).
+A prepaid credit pack is the usage-shaped purchase Stripe can charge. Checkout writes a `Purchase` and a credit-ledger credit of `allowance × quantity` (buy 200, or a 100-unit pack with quantity 2). The pack ledger for that SKU is still `credit_balance(root_recording:, product_recording:)`. Burn that SKU ledger with `consume_credits` (`insufficient_credit_balance` when empty).
 
-A plan can include an allocated amount as an `allowance` (or a `limit` for inventory such as projects). Read it with `feature_value` / `entitled?`. `record_usage` denies with `exhausted_allowance` when that cap is gone.
+A plan or metered service can include an allocated amount as an `allowance` on a nominated meter. Put the same allowance feature key on a `credit_pack` to sell more of that meter. Combined remaining is `remaining_credits(root_recording:, meter_key:)`. `record_usage` with that key burns the combined cap and denies with `exhausted_allowance` when it is gone. Separate meters stay separate, so API credits and AI credits do not mix.
 
-A pack does not add onto the plan number. Entitlement merge is `replace`, `maximum`, or `minimum`, not sum. The pack ledger is keyed by the pack product, not pooled with the plan. Dummy seeds `UsageCreditGrant` rows that can burn plan allowance then pack credits; checkout does not write those automatically.
+`credit_balance` is the pack SKU ledger. Use `remaining_credits` when the host needs plan allocation plus packs on that meter. Dummy seeds `UsageCreditGrant` rows for rating and allocation. Checkout does not write those automatically. Combined remaining uses entitlement grants and usage events, not those seed grants.
 
 ### Metered billing
 
@@ -46,6 +46,37 @@ Local metering works. Hosts call `record_usage` from application code. Meters ag
 Charging that overage through a provider is adapter-specific. The fake adapter supports `usage_settlement` and `usage_correction`. The Stripe adapter does **not**: capability evaluation and `StripeAdapter#call` return `unsupported_operation` without a Stripe request. There is no Stripe Billing Meters or Metronome integration, and no public HTTP ingest for usage events.
 
 Pricing models are `flat`, `per_unit`, and `package`. Graduated, volume, and stairstep prices are out of scope.
+
+## Nominate a usage meter
+
+A meter is what the host measures. Register it as an allowance feature whose key, `meter_key`, and `record_usage` usage key are the same string. Create a Usage unit (the thing being counted) and a Meter (how it aggregates) in Billing admin. Attach that allowance to a plan or metered service for the included amount, and to a credit pack to sell more of the same pool.
+
+```ruby
+RecordingStudioBilling.configure do |config|
+  config.feature_definitions = {
+    "api_credits" => {
+      source: "catalogue", merge_rule: "replace", default: 0, type: "allowance",
+      meter_key: "api_credits", usage_unit_key: "api_call", replenishment: "period",
+      lifecycle: "subscription", consumption: "metered", ordering: 1, validation: { "minimum" => 0 }
+    },
+    "ai_credits" => {
+      source: "catalogue", merge_rule: "replace", default: 0, type: "allowance",
+      meter_key: "ai_credits", usage_unit_key: "ai_token", replenishment: "none",
+      lifecycle: "purchase", consumption: "metered", ordering: 2, validation: { "minimum" => 0 }
+    }
+  }
+end
+
+pool = RecordingStudioBilling.meter_credits(root_recording: workspace, meter_key: "api_credits")
+# pool.included, pool.purchased, pool.used, pool.remaining
+RecordingStudioBilling.remaining_credits(root_recording: workspace, meter_key: "api_credits")
+RecordingStudioBilling.record_usage(root_recording: workspace, usage_key: "api_credits",
+                                    quantity: 1, idempotency_key: "call-#{id}")
+```
+
+`meter_key` must match the feature key. Nominated meters must be allowances. Remaining sums every live plan or purchase allowance on that key, then subtracts `usage_total`. Inventory limits such as projects stay on `feature_value` / gates and do not use this pool.
+
+The dummy catalogue nominates `demo_api_calls` (plan allocation 5 plus a 1000-call pack) and `demo_ai_credits` (a 200-credit pack, not purchased in seed). After seed usage of 11 API calls, `remaining_credits` for `demo_api_calls` is 994.
 
 ## V1 vocabulary
 
@@ -231,7 +262,10 @@ Completed checkout and applied subscription changes project entitlement grants a
 ```ruby
 RecordingStudioBilling.entitled?(root_recording: workspace, feature_key: "projects")
 RecordingStudioBilling.feature_value(root_recording: workspace, feature_key: "seats")
+RecordingStudioBilling.remaining_credits(root_recording: workspace, meter_key: "api_credits")
 ```
+
+For a nominated meter, `feature_value` is the combined cap (plan plus packs). `remaining_credits` is what is left after `record_usage`. See [Nominate a usage meter](#nominate-a-usage-meter).
 
 ### App-owned gates
 
@@ -358,11 +392,19 @@ added by `draw_recording_studio_billing_plans` during install. The gem provides
 `PlanCardsComponent` (a Plan Picker). It renders in Recording Studio core's
 `recording_studio/default_layout` only — not the billing-engine sidebar shell.
 
+The customer **Plan** page lives at a host-nominated route (default `/plans`)
+added by `draw_recording_studio_billing_plans` during install. The gem provides
+`RecordingStudioBilling::PlansController`, `PlansPageComponent`, and
+`PlanCardsComponent` (a Plan Picker). It renders in Recording Studio core's
+`recording_studio/default_layout` only — not the billing-engine sidebar shell.
+
 The billing mount still exposes `GET /billing/plan`, which redirects to the host
 plans route when configured. **Plan requests** stays under billing
 (`/billing/plan_requests`). **Usage** is `/billing/usage` on the engine root
-(not `/billing/billing/usage`). Period usage is a Usage Meter; prepaid credits
-and charges are List rows; plan features are a named "On this plan" list.
+(not `/billing/billing/usage`). Nominated meters show combined credits left
+first (plan allocation plus packs). Period usage is a Usage Meter; prepaid
+credit grant rows and charges follow; other plan features stay in a named
+"On this plan" list.
 
 The Plan page shows a title, subtitle, and a three-column Plan Picker (Free
 plan, Pro, and Pro yearly in the dummy). Tiles show the resolved
