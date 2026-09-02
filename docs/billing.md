@@ -33,6 +33,12 @@ One-time purchases that complete checkout become a `Purchase` beside the subscri
 
 The customer Add-ons screen offers published `addon` and `credit_pack` options. Product rules can require a live plan (the dummy quantity add-on does). Credit packs do not. There is no separate "one-off SKU" kind; a generic one-time product should be an add-on or a credit pack if it must complete as a purchase.
 
+A prepaid credit pack is the usage-shaped purchase Stripe can charge. Checkout writes a `Purchase` and a credit-ledger credit of `allowance × quantity` (buy 200, or a 100-unit pack with quantity 2). Read remaining pack balance with `credit_balance(root_recording:, product_recording:)`. Burn it with `consume_credits` (`insufficient_credit_balance` when empty).
+
+A plan can include an allocated amount as an `allowance` (or a `limit` for inventory such as projects). Read it with `feature_value` / `entitled?`. `record_usage` denies with `exhausted_allowance` when that cap is gone.
+
+A pack does not add onto the plan number. Entitlement merge is `replace`, `maximum`, or `minimum`, not sum. The pack ledger is keyed by the pack product, not pooled with the plan. Dummy seeds `UsageCreditGrant` rows that can burn plan allowance then pack credits; checkout does not write those automatically.
+
 ### Metered billing
 
 Local metering works. Hosts call `record_usage` from application code. Meters aggregate `sum`, `count`, `maximum`, or `latest`. Rating, allocation, allowance policies, prepaid credits, overage prices, and usage corrections are engine services. The dummy seeds a `service` product with an API-call allowance, records usage, rates the window, and calculates overage. The customer Usage screen shows that meter.

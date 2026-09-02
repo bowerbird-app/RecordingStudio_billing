@@ -10,12 +10,14 @@ metered usage.
 ### Changed
 
 - Add a capability map to `docs/billing.md` for subscriptions, catalogue
-  kinds that complete checkout, and local vs Stripe metered billing.
+  kinds that complete checkout, prepaid credit packs vs plan allowances, and
+  local vs Stripe metered billing.
 
 ### Upgrade notes
 
 - No host or schema changes. Read the capability map before assuming Stripe
-  will settle usage or that a one-time `service` product becomes a purchase.
+  will settle usage, that a one-time `service` product becomes a purchase, or
+  that a credit pack adds onto a plan allowance.
 
 ## 0.9.13
 
