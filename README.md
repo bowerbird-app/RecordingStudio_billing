@@ -58,6 +58,12 @@ Customer billing authorizes through RecordingStudio Accessible role grants on
 the workspace root (`view` to read, `edit` to checkout or change a plan).
 Including `RecordingStudioBilling::Billable` enables `:accessible` on that
 root so hosts can grant access with `RecordingStudioAccessible.grant_access`.
+This gem does not depend on `recording_studio_api`. Customer mutations stay on
+the mounted HTML screens and the public execute helpers. Hosts that need JSON
+add that gem themselves and wrap `AccessActions`; do not invent a host
+`app/controllers/api` for checkout or plan changes. See
+[docs/billing.md](docs/billing.md) (JSON API).
+
 Checkout return pages show the durable intent state only. They never fulfil an
 intent: completion remains provider-webhook and reconciliation work.
 

@@ -44,6 +44,20 @@ class BillingUiAccessActionsTest < Minitest::Test
     assert_raises(KeyError) { RecordingStudioBilling::AccessActions.role_for(:record_usage) }
   end
 
+  def test_this_gem_does_not_depend_on_recording_studio_api
+    root = File.expand_path("..", __dir__)
+    gemspec = File.read(File.join(root, "recording_studio_billing.gemspec"))
+    dummy_gemfile = File.read(File.join(root, "test/dummy/Gemfile"))
+    billing = File.read(File.join(root, "docs/billing.md"))
+
+    refute_includes gemspec, "recording_studio_api"
+    refute_includes dummy_gemfile, "recording_studio_api"
+    assert_empty Dir.glob(File.join(root, "app/controllers/**/api/**/*.rb"))
+    assert_includes billing, "recording_studio_api"
+    assert_includes billing, "AccessActions::CUSTOMER"
+    assert_includes billing, "Do not invent `app/controllers/api`"
+  end
+
   def test_billable_roots_opt_into_accessible_grants
     assert RecordingStudio.capability_enabled?(:accessible, for: Workspace)
     assert_includes RecordingStudio.capability_child_recordables_for(:accessible), "RecordingStudio::Access"

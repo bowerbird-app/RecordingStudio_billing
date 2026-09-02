@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.9.9
+
+JSON API capability actions are deferred. This gem does not depend on `recording_studio_api`. `AccessActions` stays the domain catalog a later PR will register.
+
+### Changed
+
+- Host docs record the architect skip: do not add `recording_studio_api` in this commercial-contract wave. Hosts that need JSON add that gem themselves and call the same public billing helpers. Do not invent a host `app/controllers/api` for checkout or plan changes.
+
+### Upgrade notes
+
+- Bump the gem if you pin `recording_studio_billing` by version.
+- No schema or host-install change.
+- If you need a billing JSON surface now, add `recording_studio_api` in the host and wrap `AccessActions` with capability actions that call `create_checkout_intent`, `execute_checkout_intent`, `execute_subscription_change_intent`, and the other public helpers. Authorize with Accessible.
+
 ## 0.9.8
 
 Host production setup is documented: workers, restricted Stripe keys, a pinned Stripe API version, and tax registration that fail-closes. Leftover gem-template docs are gone.
