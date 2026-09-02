@@ -312,8 +312,9 @@ module RecordingStudioBilling
                               end
                  "#{mount_path.to_s.chomp('/')}#{engine_path}"
                }
-        actions = {}
-        actions[:revise] = { operation: "revise_#{operation_name}", text: "Revise" } unless form_resource
+        actions = {
+          revise: { operation: "revise_#{operation_name}", text: "Revise" }
+        }
         actions[:retire] = { operation: "retire_#{operation_name}", text: "Retire" }
         actions.each do |action_name, operation|
           retire_catalogue_item = form_resource && action_name == :retire
