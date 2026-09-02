@@ -608,14 +608,11 @@ Sign in with `admin@admin.com` / `Password`.
 
 ## Cloud Agent boot
 
-Cloud Agent Builds run `.cursor/install.sh`, which provisions the development
-environment and calls `.cursor/fetch-skills.sh`. The fetch hook downloads the
-current project skills and plugin rules into gitignored `.cursor/skills/` and
-`.cursor/rules/`.
-
-The tracked `.cursor/environment.json` defines the Build hooks, terminals, and
-port. `.cursor/start.sh` starts PostgreSQL on each boot. Rebuild the Cloud
-Agent environment with Draft off to load a new pack. See
+Cloud Agent Builds run `.cursor/install.sh`, then `.cursor/fetch-skills.sh`.
+The install hook provisions a cold image. On a warm snapshot it skips apt,
+ruby-build, db:prepare, and tailwind when Ruby, bundle, and Postgres are
+already usable. Fetch-skills always runs last. `.cursor/start.sh` starts
+PostgreSQL on each boot. Rebuild with Draft off to load a new pack. See
 [Cursor skills in Cloud Agents](docs/cursor-skills.md).
 
 ## Validation
