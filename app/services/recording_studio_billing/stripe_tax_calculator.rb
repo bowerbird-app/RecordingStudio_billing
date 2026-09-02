@@ -20,7 +20,7 @@ module RecordingStudioBilling
 
         @credential_resolver = credential_resolver
         @tax_code_resolver = tax_code_resolver
-        @client_factory = client_factory || ->(secret_key) { Stripe::StripeClient.new(secret_key) }
+        @client_factory = client_factory || StripeAdapter.default_client_factory
         @clock = clock
         @capabilities = CAPABILITIES
       end

@@ -10,7 +10,7 @@ test keys are present, the dummy can also call the Stripe test account.
 - Devise authentication with a seeded admin user who is the first Accessible owner of Studio Workspace and Billing Administration
 - One Workspace billing root, one AdminRoot billing-admin root, and their child records
 - SQL schema dumps that reproduce the PostgreSQL functions and triggers
-- FlatPack UI: sign-in uses the gem-template `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use a thin dummy `recording_studio/default_layout` that puts the same theme on `html` and `body` (PageNav back/close, no left sidebar, no Sign out or Root Switchable control in that slot). Dummy pins Flatpack #159 so rounded buttons get charcoal primary and 1rem radius from Flatpack tokens, not a Billing CSS fork.
+- FlatPack UI: sign-in uses the host `application` layout with `html data-theme="rounded"`; signed-in dummy and billing pages use a thin dummy `recording_studio/default_layout` that puts the same theme on `html` and `body` (PageNav back/close, no left sidebar, no Sign out or Root Switchable control in that slot). Dummy pins Flatpack #159 so rounded buttons get charcoal primary and 1rem radius from Flatpack tokens, not a Billing CSS fork.
 - Tailwind source scanning for dummy views, billing views/components, and bundled FlatPack/Recording Studio gems (`bin/rails tailwindcss:build` writes those gem paths first)
 - Mounted customer billing at `/billing` and staff admin at `/admin`. RecordingStudioAdmin **Products and pricing** is registered on the Admin root
 - V1 demonstration catalogue: one Workspace, one Admin root, Fake and Stripe-test providers, US/UK/Italy/Germany/global markets, distinct Italy vs Germany euro plan prices, free / $49 monthly / $490 annual with a trial, quantity add-on, prepaid credit pack, metered API-call service with allowance and overage caps
@@ -79,14 +79,14 @@ Stripe *test* keys and the dummy installs a credential resolver:
 # stripe_test_publishable_key
 #
 # Local shells can use the same names or:
-export STRIPE_TEST_SECRET_KEY=sk_test_...
+export STRIPE_TEST_SECRET_KEY=sk_test_... # or rk_test_...
 export STRIPE_TEST_PUBLISHABLE_KEY=pk_test_...
 cd test/dummy
 bin/rails stripe:ping
 ```
 
 `stripe:ping` opens a $1 Checkout session on the Stripe test account and expires
-it. Live `sk_live` keys are ignored. The dummy test suite skips the live Stripe
+it. Live `sk_live` / `rk_live` keys are ignored. The dummy test suite skips the live Stripe
 probe unless those test keys are in the environment.
 
 ### Test a subscription in the browser

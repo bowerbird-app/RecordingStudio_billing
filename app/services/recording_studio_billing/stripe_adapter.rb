@@ -18,6 +18,10 @@ module RecordingStudioBilling
     DOWNLOAD_READ_TIMEOUT = 15
     CHECKOUT_LINE_ITEM_LIMIT = 100
     CHECKOUT_SESSION_EXPAND = ["line_items.data.price.product", "subscription"].freeze
+    # Pin the Stripe request version. Hosts must pin the same version on the
+    # Stripe Dashboard so webhook payloads match retrieve payloads. Bump this
+    # constant deliberately when adopting a new Stripe API version.
+    STRIPE_API_VERSION = "2026-07-29.dahlia"
     CHECKOUT_IDENTITY_PREFIXES = {
       "subscription" => "sub_",
       "payment_intent" => "pi_",
@@ -37,8 +41,12 @@ module RecordingStudioBilling
       @credential_resolver = credential_resolver
       @trusted_origins_resolver = trusted_origins_resolver || -> { [] }
       @tax_code_resolver = tax_code_resolver
-      @client_factory = client_factory || ->(secret_key) { Stripe::StripeClient.new(secret_key) }
+      @client_factory = client_factory || self.class.default_client_factory
       @capabilities = CAPABILITIES
+    end
+
+    def self.default_client_factory
+      ->(secret_key) { Stripe::StripeClient.new(secret_key, stripe_version: STRIPE_API_VERSION) }
     end
 
     def call(command:, request:, idempotency_key:)
@@ -143,8 +151,10 @@ module RecordingStudioBilling
       { outcome: "unknown", remote_type: command.command_type, remote_id: command.provider_reference.to_s, payload: {} }
     end
 
-    # This method receives a host-verified Stripe event envelope. Signature
-    # verification belongs at the HTTP boundary, where the raw body exists.
+    # Identity check on an already-verified Stripe event envelope. Signature
+    # verification belongs at the RecordingStudioWebhooks HTTP boundary, where
+    # the raw body exists. This method does not construct a Stripe Event or
+    # check a signing secret.
     def verify_webhook(provider_account_recording_id:, environment:, event_id:, remote_type:, remote_id:, payload:)
       event = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
       raise ArgumentError, "Stripe webhook payload is invalid" unless event["id"].to_s == event_id.to_s

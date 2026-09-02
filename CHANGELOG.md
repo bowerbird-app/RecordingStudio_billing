@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.9.8
+
+Host production setup is documented: workers, restricted Stripe keys, a pinned Stripe API version, and tax registration that fail-closes. Leftover gem-template docs are gone.
+
+### Added
+
+- `StripeAdapter::STRIPE_API_VERSION` (`2026-07-29.dahlia`) is sent on every built-in Stripe client.
+- Host docs cover `:financial_command_pending` workers, `rk_` keys, Dashboard API-version pinning, Stripe Tax registrations, and `StripeAdapter#verify_webhook` as an identity check.
+
+### Changed
+
+- Dummy development accepts `rk_test` as well as `sk_test`. Live keys stay ignored.
+- `docs/gem_template/` and other GemTemplate leftover identity are removed. Host setup lives in `docs/billing.md` and `README.md`.
+
+### Upgrade notes
+
+- Bump the gem if you pin `recording_studio_billing` by version.
+- Register a worker on `:financial_command_pending` if you have not already (see 0.9.6).
+- Replace full-account `sk_live` keys with restricted `rk_live` / `rk_test` keys that cover Checkout, Subscriptions, Invoices, Refunds, Credit notes, Billing Portal, and Tax Calculations if you use Stripe Tax.
+- Pin Stripe-Version `2026-07-29.dahlia` on the Stripe Dashboard and webhook endpoint.
+- Enable `tax_policy` only after Stripe Tax registrations exist for each charging country. Missing tax stays fail-closed.
+- `StripeAdapter#verify_webhook` is unchanged: signature verification stays on `RecordingStudioWebhooks`.
+
 ## 0.9.7
 
 Settings is a default-layout form. Checkout copy talks about payment landing, not provider reconciliation. Stripe Checkout `product_data.name` is the frozen product name.

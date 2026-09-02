@@ -30,6 +30,25 @@ class DummyStripeTestCredentialsTest < ActiveSupport::TestCase
     assert_equal "#{DummyStripeTestCredentials::RETURN_ORIGIN}/billing", credentials.fetch(:success_url)
   end
 
+  test "accepts restricted Stripe test keys" do
+    DummyStripeTestCredentials.env = {
+      "stripe_test_secret_key" => "rk_test_dummy_secret",
+      "stripe_test_publishable_key" => "pk_test_dummy_publishable"
+    }
+
+    assert DummyStripeTestCredentials.present?
+    assert_equal "rk_test_dummy_secret", DummyStripeTestCredentials.to_h.fetch(:secret_key)
+  end
+
+  test "ignores live restricted Stripe keys" do
+    DummyStripeTestCredentials.env = {
+      "stripe_test_secret_key" => "rk_live_not_for_dummy",
+      "stripe_test_publishable_key" => "pk_test_dummy_publishable"
+    }
+
+    refute DummyStripeTestCredentials.present?
+  end
+
   test "the dummy test environment does not install a Stripe credential resolver" do
     assert Rails.env.test?
     refute DummyStripeTestCredentials.user_flow_enabled?
