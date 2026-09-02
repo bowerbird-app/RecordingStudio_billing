@@ -11,6 +11,11 @@ Cloud Agents fetch Cursor skills at Build instead of reading a vendored pack.
 - Remove vendored Cursor skills, rules, and agents. Cloud Agent Builds fetch
   RecordingStudio_cursor_plugin through `.cursor/fetch-skills.sh`.
 
+### Fixed
+
+- Dummy billing journeys bind the selected workspace through the request
+  cookie instead of a hardcoded device key.
+
 ### Upgrade notes
 
 - No host or schema changes. Rebuild the Cloud Agent environment with Draft
