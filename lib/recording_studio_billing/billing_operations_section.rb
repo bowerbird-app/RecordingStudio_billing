@@ -280,12 +280,7 @@ module RecordingStudioBilling
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                    operation: operation.fetch(:operation), id: record.id
                  )
-                 mount_path = if context.controller.respond_to?(:main_app)
-                                context.controller.main_app.recording_studio_billing_path
-                              else
-                                "/billing"
-                              end
-                 "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                 BillingAdminForms.mounted_operation_url(context, engine_path)
                }
       end
       if (operation_name = ADMIN_COMMERCIAL_OPERATION_NAMES[key.to_s])
@@ -305,12 +300,7 @@ module RecordingStudioBilling
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(
                    operation: "create_draft_#{operation_name}", parent_recording_id:
                  )
-                 mount_path = if context.controller.respond_to?(:main_app)
-                                context.controller.main_app.recording_studio_billing_path
-                              else
-                                "/billing"
-                              end
-                 "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                 BillingAdminForms.mounted_operation_url(context, engine_path)
                }
         actions = {
           revise: { operation: "revise_#{operation_name}", text: "Revise" }
@@ -329,12 +319,7 @@ module RecordingStudioBilling
                    operation_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                      operation: operation.fetch(:operation), id: record.id
                    )
-                   mount_path = if context.controller.respond_to?(:main_app)
-                                  context.controller.main_app.recording_studio_billing_path
-                                else
-                                  "/billing"
-                                end
-                   "#{mount_path.to_s.chomp('/')}#{operation_path}"
+                   BillingAdminForms.mounted_operation_url(context, operation_path)
                  }
         end
       end
@@ -345,8 +330,7 @@ module RecordingStudioBilling
                           engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(
                             operation: "create_feature_override", account_recording_id: context.params.fetch("account_recording_id")
                           )
-                          mount_path = context.controller.respond_to?(:main_app) ? context.controller.main_app.recording_studio_billing_path : "/billing"
-                          "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                          BillingAdminForms.mounted_operation_url(context, engine_path)
                         }
         {
           revise: { operation: "revise_feature_override", text: "Revise" },
@@ -358,8 +342,7 @@ module RecordingStudioBilling
                                 engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                                   operation: operation.fetch(:operation), id: record.id
                                 )
-                                mount_path = context.controller.respond_to?(:main_app) ? context.controller.main_app.recording_studio_billing_path : "/billing"
-                                "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                                BillingAdminForms.mounted_operation_url(context, engine_path)
                               }
         end
       end
@@ -375,12 +358,7 @@ module RecordingStudioBilling
                                            engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                                              operation: operation.fetch(:operation), id: record.id
                                            )
-                                           mount_path = if context.controller.respond_to?(:main_app)
-                                                          context.controller.main_app.recording_studio_billing_path
-                                                        else
-                                                          "/billing"
-                                                        end
-                                           "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                                           BillingAdminForms.mounted_operation_url(context, engine_path)
                                          }
       end
     end

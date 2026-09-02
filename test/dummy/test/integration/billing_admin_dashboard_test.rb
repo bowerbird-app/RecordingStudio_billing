@@ -260,6 +260,8 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       assert_select "a[href*='/billing/admin/operations/retire_'][data-turbo-method=post]" do |links|
         assert(links.any? { |link| link.text.strip == "Retire" })
         assert(links.any? { |link| link["data-turbo-confirm"] == "Retire this from the catalogue?" })
+        assert(links.none? { |link| link["href"].start_with?("/billing/billing/") })
+        assert(links.any? { |link| link["href"].end_with?("/#{record.id}") })
       end
     end
   end
