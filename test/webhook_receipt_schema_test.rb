@@ -42,10 +42,12 @@ class WebhookReceiptSchemaTest < ActiveSupport::TestCase
     assert_equal [
       "20260816000001_install_recording_studio_billing.rb",
       "20260820000001_add_default_entitlement_bootstrap.rb",
-      "20260822000001_add_name_to_products_and_billing_options.rb"
+      "20260822000001_add_name_to_products_and_billing_options.rb",
+      "20260901000001_add_unique_invoice_financial_command.rb"
     ], migrations
     schema = File.read(File.expand_path("../db/schema/install_recording_studio_billing.sql", __dir__))
     assert_includes schema, "recording_studio_billing_default_entitlement_bootstraps"
+    assert_includes schema, "idx_rs_billing_invoice_command"
     assert_match(/CREATE TABLE public\.recording_studio_billing_products[\s\S]*name character varying NOT NULL/, schema)
     assert_match(/CREATE TABLE public\.recording_studio_billing_billing_options[\s\S]*name character varying NOT NULL/, schema)
     assert_includes schema, "RecordingStudioBilling::DefaultEntitlementBootstrap"

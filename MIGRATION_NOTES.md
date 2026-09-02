@@ -2,6 +2,14 @@
 
 RecordingStudio Billing is a **clean-install** engine. Hosts apply the current engine migrations once. There is no supported upgrade from earlier experimental schemas in this repository.
 
+## 0.9.5 — unique invoice per financial command
+
+Adds unique index `idx_rs_billing_invoice_command` on
+`recording_studio_billing_invoices.financial_command_id`, matching payments.
+Fresh installs pick it up from install SQL. Existing hosts run
+`20260901000001_add_unique_invoice_financial_command`. If two invoice rows
+already share a command, merge or delete the extras before migrating.
+
 ## 0.9.0 — product and billing option names
 
 Adds required `name` on `recording_studio_billing_products` and

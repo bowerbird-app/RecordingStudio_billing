@@ -330,6 +330,12 @@ class LifecycleCoverageTest < ActiveSupport::TestCase
     assert_equal root.id, account.recording.root_recording_id
   end
 
+  test "invoices are unique per financial command" do
+    root, account, command = command_authority
+    insert_invoice(root:, account:, command:)
+    assert_raises(ActiveRecord::RecordNotUnique) { insert_invoice(root:, account:, command:) }
+  end
+
   test "provider references scope remote identities to provider account and environment" do
     _root, _account, command = command_authority
     attributes = {

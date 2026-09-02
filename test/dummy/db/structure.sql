@@ -3655,10 +3655,10 @@ CREATE INDEX idx_on_financial_command_id_3a27e3d203 ON public.recording_studio_b
 
 
 --
--- Name: idx_on_financial_command_id_48ec1b5e2a; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_rs_billing_invoice_command; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_on_financial_command_id_48ec1b5e2a ON public.recording_studio_billing_invoices USING btree (financial_command_id);
+CREATE UNIQUE INDEX idx_rs_billing_invoice_command ON public.recording_studio_billing_invoices USING btree (financial_command_id);
 
 
 --
@@ -6827,6 +6827,7 @@ ALTER TABLE ONLY public.recording_studio_billing_commercial_manifests
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260901000001'),
 ('20260822000001'),
 ('20260820010001'),
 ('20260820000001'),
