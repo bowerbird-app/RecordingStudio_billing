@@ -20,6 +20,7 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
 
   setup do
     acquire_database_lock!
+    BillingTestDatabaseCleanup.clear!
     load Rails.root.join("db/seeds.rb").to_s
     @user = User.find_by!(email: "admin@admin.com")
     @admin_root = RecordingStudio.root_recording_for(AdminRoot.find_by!(name: "Billing Administration"))
