@@ -14,7 +14,7 @@ Yes. Recurring checkout projects a `Subscription` under the billing account, wit
 
 Customer plan, interval, add-on, and quantity changes go through `CreateSubscriptionChangeIntent` and the gem's own Plan screens, not the Stripe Customer Portal. The portal is restricted to payment methods, address, tax IDs, and invoice history.
 
-Stripe follow-up mutations are narrower than local lifecycle. Checkout persist `sub_` / `si_` / `pi_` / `in_` on the financial command. It does not copy those onto the subscription recordable, and it does not persist a durable Stripe `price_` id (checkout creates ephemeral `price_data`). Cancel and resume against Stripe need a `sub_` on `Subscription#provider_reference`. Plan, interval, add-on, and quantity changes against Stripe also need `si_` and `price_` in the adapter change-set. Dummy / fake-provider journeys do not need those identities.
+Stripe follow-up mutations are narrower than local lifecycle. Checkout persists `sub_` / `si_` / `pi_` / `in_` on the financial command. It does not copy those onto the subscription recordable, and it does not persist a durable Stripe `price_` id (checkout creates ephemeral `price_data`). Cancel and resume against Stripe need a `sub_` on `Subscription#provider_reference`. Plan, interval, add-on, and quantity changes against Stripe also need `si_` and `price_` in the adapter change-set. Dummy / fake-provider journeys do not need those identities.
 
 ### Standalone products
 
