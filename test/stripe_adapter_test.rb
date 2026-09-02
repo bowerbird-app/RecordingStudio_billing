@@ -319,6 +319,8 @@ class StripeAdapterTest < Minitest::Test
     assert retrieve_calls.one?
     assert_includes Array(retrieve_calls.first.fetch(:params)[:expand] || retrieve_calls.first.fetch(:params)["expand"]),
                     "line_items.data.price.product"
+    assert_includes Array(retrieve_calls.first.fetch(:params)[:expand] || retrieve_calls.first.fetch(:params)["expand"]),
+                    "subscription"
     assert list_calls.one?
     assert_equal 100, list_calls.first.fetch(:params)[:limit] || list_calls.first.fetch(:params)["limit"]
     assert_equal "succeeded", response.fetch(:outcome)
@@ -337,6 +339,92 @@ class StripeAdapterTest < Minitest::Test
     assert_equal 1_090, response.fetch(:payload).fetch("subtotal_minor") -
                         response.fetch(:payload).fetch("discount_minor") +
                         response.fetch(:payload).fetch("tax_minor")
+  end
+
+  def test_retrieve_copies_prefixed_checkout_identities_and_ignores_the_rest
+    retrieve_calls = []
+    list_calls = []
+    session = JSON.parse(File.read(File.expand_path("fixtures/stripe_checkout_session_default.json", __dir__)))
+    listed = JSON.parse(File.read(File.expand_path("fixtures/stripe_checkout_session_line_items.json", __dir__)))
+    session = session.merge(
+      "subscription" => {
+        "id" => "sub_test_paid",
+        "object" => "subscription",
+        "items" => { "object" => "list", "data" => [{ "id" => "si_from_subscription", "object" => "subscription_item" }] }
+      },
+      "payment_intent" => "pi_test_paid",
+      "invoice" => "in_test_paid",
+      "customer" => "cus_must_not_copy",
+      "url" => "https://checkout.stripe.com/c/pay/cs_test_default"
+    )
+    listed["data"][0]["subscription_item"] = "si_from_line"
+    sessions = Object.new
+    sessions.define_singleton_method(:retrieve) do |reference, params = {}, *_rest|
+      retrieve_calls << { reference:, params: }
+      session.merge("id" => reference)
+    end
+    line_items = Object.new
+    line_items.define_singleton_method(:list) do |reference, params = {}, *_rest|
+      list_calls << { reference:, params: }
+      listed.merge("url" => "/v1/checkout/sessions/#{reference}/line_items")
+    end
+    sessions.define_singleton_method(:line_items) { line_items }
+    client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
+    adapter = RecordingStudioBilling::StripeAdapter.new(credential_resolver: lambda {
+      "sk_test"
+    }, client_factory: lambda { |_secret|
+         client
+       })
+    command = Struct.new(:command_type, :provider_reference, :canonical_request).new(
+      "checkout", "cs_test_identities", { "request" => { "tax" => { "enabled" => false } } }
+    )
+
+    response = adapter.retrieve(command:)
+    payload = response.fetch(:payload)
+
+    assert retrieve_calls.one?
+    assert list_calls.one?
+    assert_equal "sub_test_paid", payload.fetch("subscription")
+    assert_equal "pi_test_paid", payload.fetch("payment_intent")
+    assert_equal "in_test_paid", payload.fetch("invoice")
+    assert_equal %w[si_from_subscription si_from_line], payload.fetch("subscription_items")
+    assert_equal "si_from_line", payload.fetch("lines").sole.fetch("subscription_item")
+    refute payload.key?("customer")
+    refute payload.key?("url")
+    refute_match(/cus_must_not_copy|client_secret|checkout\.stripe\.com|sk_test/, payload.inspect)
+  end
+
+  def test_retrieve_omits_checkout_identities_when_prefixes_do_not_match
+    session = JSON.parse(File.read(File.expand_path("fixtures/stripe_checkout_session_default.json", __dir__)))
+    listed = JSON.parse(File.read(File.expand_path("fixtures/stripe_checkout_session_line_items.json", __dir__)))
+    session = session.merge("subscription" => "cus_wrong", "payment_intent" => "in_wrong", "invoice" => "pi_wrong")
+    listed["data"][0]["subscription_item"] = "sub_wrong"
+    sessions = Object.new
+    sessions.define_singleton_method(:retrieve) do |reference, _params = {}, *_rest|
+      session.merge("id" => reference)
+    end
+    line_items = Object.new
+    line_items.define_singleton_method(:list) do |reference, _params = {}, *_rest|
+      listed.merge("url" => "/v1/checkout/sessions/#{reference}/line_items")
+    end
+    sessions.define_singleton_method(:line_items) { line_items }
+    client = Struct.new(:v1).new(Struct.new(:checkout).new(Struct.new(:sessions).new(sessions)))
+    adapter = RecordingStudioBilling::StripeAdapter.new(credential_resolver: lambda {
+      "sk_test"
+    }, client_factory: lambda { |_secret|
+         client
+       })
+    command = Struct.new(:command_type, :provider_reference, :canonical_request).new(
+      "checkout", "cs_test_bad_ids", { "request" => { "tax" => { "enabled" => false } } }
+    )
+
+    payload = adapter.retrieve(command:).fetch(:payload)
+
+    refute payload.key?("subscription")
+    refute payload.key?("payment_intent")
+    refute payload.key?("invoice")
+    refute payload.key?("subscription_items")
+    refute payload.fetch("lines").sole.key?("subscription_item")
   end
 
   def test_retrieve_withholds_checkout_payload_when_line_item_list_exceeds_the_bound

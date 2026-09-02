@@ -468,7 +468,11 @@ persisting the receipt, deduplicating it, and dispatching verified context.
 Billing registers the `recording_studio_billing.provider_event.v1` action and
 consumes that verified dispatch context. Billing then verifies the normalized
 provider object identity, reconciles provider-authoritative command state, and
-projects a completed checkout only when reconciliation succeeds.
+projects a completed checkout only when reconciliation succeeds. After a paid
+Checkout retrieve, Billing stores opaque Stripe identities (`sub_`, `si_`,
+`pi_`, `in_`) on that command. A later `invoice.paid` receipt can resolve
+through the stored subscription when the new invoice id is unknown. Already
+projected checkout money is not rewritten.
 
 Configure the Webhooks endpoint with the provider name and these non-secret
 endpoint identity fields:

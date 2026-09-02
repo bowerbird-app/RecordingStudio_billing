@@ -74,6 +74,13 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
       payload = { "subtotal_minor" => lines.sum { |line| line.fetch("subtotal_minor") }, "discount_minor" => 0,
                   "tax_minor" => lines.sum { |line| line.fetch("tax_minor") }, "total_minor" => lines.sum { |line| line.fetch("total_minor") },
                   "currency" => lines.first.fetch("currency"), "payment_state" => next_payment_state, lines: lines }
+      suffix = command.operation_id.to_s.delete("-")
+      payload = payload.merge(
+        "subscription" => "sub_#{suffix}",
+        "payment_intent" => "pi_#{suffix}",
+        "invoice" => "in_#{suffix}",
+        "subscription_items" => ["si_#{suffix}"]
+      )
       return @checkout_payload_mutator ? @checkout_payload_mutator.call(payload) : payload unless tax_policy["enabled"]
 
       payload = payload.merge("behavior" => tax_policy.fetch("behavior"),
@@ -161,6 +168,43 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     assert_equal 1, RecordingStudioBilling::Invoice.where(financial_command: checkout.command).count
     assert_equal 1, RecordingStudioBilling::Payment.where(financial_command: checkout.command).count
     assert_equal "completed", checkout.intent.reload.state
+    suffix = checkout.command.operation_id.delete("-")
+    { "subscription" => "sub_#{suffix}", "subscription_item" => "si_#{suffix}",
+      "payment_intent" => "pi_#{suffix}", "invoice" => "in_#{suffix}" }.each do |remote_type, remote_id|
+      assert RecordingStudioBilling::ProviderReference.exists?(financial_command: checkout.command,
+                                                               remote_type:, remote_id:), remote_type
+    end
+  end
+
+  test "recurring invoice.paid resolves the checkout command through the subscription identity" do
+    RecordingStudioBilling.configuration.billing_location_context_resolver = lambda do |**|
+      { host_country: RecordingStudioBilling::MarketResolver::VerifiedCountryEvidence.new("IT", :host) }
+    end
+    adapter = Adapter.new
+    RecordingStudioBilling.configuration.provider_registry.reset!
+    RecordingStudioBilling.register_provider(:stripe, adapter)
+    checkout = real_checkout(adapter_key: "stripe")
+    first = dispatch_webhook(checkout, event_id: "evt_checkout_paid")
+    suffix = checkout.command.operation_id.delete("-")
+    renewal_invoice = "in_renewal_#{suffix}"
+
+    result = dispatch_invoice_paid(
+      checkout, event_id: "evt_invoice_paid", invoice_id: renewal_invoice, subscription_id: "sub_#{suffix}"
+    )
+    unknown = dispatch_invoice_paid(
+      checkout, event_id: "evt_invoice_unknown", invoice_id: "in_unknown_#{suffix}", subscription_id: "sub_missing_#{suffix}"
+    )
+
+    assert first.accepted?
+    assert result.accepted?
+    assert unknown.rejected?
+    assert_equal checkout.command.id, result.effect.financial_command_id
+    assert RecordingStudioBilling::ProviderReference.exists?(financial_command: checkout.command,
+                                                             remote_type: "invoice", remote_id: renewal_invoice)
+    assert_equal 1, RecordingStudioBilling::Invoice.where(financial_command: checkout.command).count
+    assert_equal 1, RecordingStudioBilling::Payment.where(financial_command: checkout.command).count
+    assert_equal "completed", checkout.intent.reload.state
+    assert RecordingStudioBilling::ReconciliationIssue.exists?(kind: "unknown_provider_reference")
   end
 
   test "mixed Checkout native tax uses one immutable manifest-set calculation and replays once" do
@@ -467,7 +511,21 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
     )
   end
 
-  def receipt_for(command, event_id:, remote_id: command.command.provider_reference)
+  def dispatch_invoice_paid(command, event_id:, invoice_id:, subscription_id:)
+    RecordingStudioBilling.apply_provider_webhook(
+      inbound_event: receipt_for(
+        command,
+        event_id:,
+        remote_id: invoice_id,
+        event_type: "invoice.paid",
+        object: { "id" => invoice_id, "object" => "invoice", "subscription" => subscription_id }
+      ),
+      remote_type: "invoice",
+      remote_id: invoice_id
+    )
+  end
+
+  def receipt_for(command, event_id:, remote_id: command.command.provider_reference, event_type: "checkout.completed", object: nil)
     endpoint = RecordingStudioWebhooks::EndpointLifecycle.create!(
       endpoint: RecordingStudioWebhooks::Endpoint.new(
         recording_studio_recording_id: command.command.root_recording_id, label: "Billing receipt #{SecureRandom.hex(4)}",
@@ -480,10 +538,10 @@ class ProviderReconciliationTest < ActiveSupport::TestCase
       ), actor: nil
     )
     issuance = endpoint.issue_token!
-    payload = { "id" => event_id, "data" => { "object" => { "id" => remote_id, "object" => "operation" } } }
+    payload = { "id" => event_id, "data" => { "object" => object || { "id" => remote_id, "object" => "operation" } } }
     RecordingStudioWebhooks::InboundEvent.create!(
       endpoint:, endpoint_token: issuance.endpoint_token, provider_name: endpoint.provider_name,
-      event_type: "checkout.completed", provider_event_id: event_id, payload_digest: "a" * 64,
+      event_type:, provider_event_id: event_id, payload_digest: "a" * 64,
       deduplication_key: SecureRandom.uuid, payload:, provenance: {}, endpoint_snapshot: endpoint.snapshot,
       token_snapshot: issuance.endpoint_token.snapshot, policy_snapshot: {}, received_at: Time.current, status: "accepted"
     )

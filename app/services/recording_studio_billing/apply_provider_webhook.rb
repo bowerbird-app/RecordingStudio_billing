@@ -44,9 +44,9 @@ module RecordingStudioBilling
       return reject!("provider_verification_rejected") unless trusted_identity?(trusted, provider_account_id,
                                                                                 environment, receipt.provider_event_id)
 
-      reference = ProviderReference.find_by!(
-        provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:, remote_type:, remote_id:
-      )
+      reference = resolve_provider_reference(provider_adapter_key:, provider_account_id:, environment:)
+      return reject!("unknown_provider_reference") unless reference
+
       existing = WebhookEffect.find_by(
         inbound_event_id: receipt.id, provider_account_recording_id: provider_account_id, environment:,
         handler_name:, action_version:
@@ -57,9 +57,10 @@ module RecordingStudioBilling
       ReconcileProviderCommand.call(command:) if command.command_type == "checkout" || !command.reload.state.in?(%w[
                                                                                                                    succeeded failed cancelled
                                                                                                                  ])
+      PersistCheckoutProviderIdentities.call(command: command.reload)
       return reject!("checkout_reconciliation_pending") if command.command_type == "checkout" && !paid_checkout_result?(command)
       return reject!("checkout_projection_incomplete") if command.command_type == "checkout" &&
-                                                          !project_checkout!(command, verified: true)
+                                                          !checkout_ready_for_webhook?(command)
 
       WebhookEffect.transaction(requires_new: true) do
         reference = ProviderReference.lock.find_by!(
@@ -192,6 +193,8 @@ module RecordingStudioBilling
     end
 
     def checkout_projection_complete?(intent, command)
+      return false unless intent
+
       invoice = Invoice.find_by(financial_command: command)
       payment = Payment.find_by(financial_command: command)
       return false unless invoice && payment&.invoice_id == invoice.id && intent.reload.state == "completed"
@@ -203,6 +206,56 @@ module RecordingStudioBilling
     def native_tax_checkout?(command)
       tax = command.canonical_request.dig("request", "tax").to_h
       tax["enabled"] == true && tax["mode"] == "provider_native"
+    end
+
+    def resolve_provider_reference(provider_adapter_key:, provider_account_id:, environment:)
+      exact = ProviderReference.find_by(
+        provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:, remote_type:, remote_id:
+      )
+      return exact if exact
+
+      resolve_invoice_via_subscription(provider_adapter_key:, provider_account_id:, environment:)
+    end
+
+    def resolve_invoice_via_subscription(provider_adapter_key:, provider_account_id:, environment:)
+      return unless remote_type == "invoice"
+
+      subscription_id = invoice_subscription_id
+      return unless subscription_id
+
+      parent = ProviderReference.find_by(
+        provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:,
+        remote_type: "subscription", remote_id: subscription_id
+      )
+      return unless parent&.financial_command&.command_type == "checkout"
+
+      PersistCheckoutProviderIdentities.persist(
+        command: parent.financial_command, remote_type: "invoice", remote_id:
+      )
+      ProviderReference.find_by(
+        provider_adapter_key:, provider_account_recording_id: provider_account_id, environment:, remote_type:, remote_id:
+      )
+    end
+
+    def invoice_subscription_id
+      object = webhook_event_object
+      value = object["subscription"] || object.dig("parent", "subscription_details", "subscription")
+      id = value.is_a?(Hash) ? value["id"] : value
+      id if id.is_a?(String) && id.start_with?("sub_") && id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._:-]*\z/)
+    end
+
+    def webhook_event_object
+      payload = trusted_receipt&.payload
+      event = payload.respond_to?(:to_h) ? payload.to_h : {}
+      event = event.deep_stringify_keys if event.respond_to?(:deep_stringify_keys)
+      (event.dig("data", "object") || {}).to_h.stringify_keys
+    end
+
+    def checkout_ready_for_webhook?(command)
+      intent = CheckoutIntent.find_by(financial_command: command)
+      return true if intent && checkout_projection_complete?(intent, command)
+
+      project_checkout!(command, verified: true)
     end
   end
 end
