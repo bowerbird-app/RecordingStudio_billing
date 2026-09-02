@@ -124,8 +124,9 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
     command = RecordingStudioBilling::CheckoutIntent.find_by!(local_idempotency_key: "seed:hybrid-checkout").financial_command
     payment = RecordingStudioBilling::Payment.find_by!(financial_command: command)
 
-    assert_equal "captured", payment.state
-    assert_equal "captured", payment.invoice.state
+    assert_equal "paid", payment.state
+    assert_equal "paid", payment.invoice.state
+    assert_equal "paid", command.normalized_result["payment_state"]
     assert_equal 200, RecordingStudioBilling::Refund.find_by!(refund_intent: RecordingStudioBilling::RefundIntent.find_by!(local_idempotency_key: "seed:refund")).amount_minor
     assert_equal "credit", RecordingStudioBilling::FinancialAdjustment.find_by!(adjustment_intent: RecordingStudioBilling::AdjustmentIntent.find_by!(local_idempotency_key: "seed:adjustment")).kind
     assert_equal "requires_reconciliation", RecordingStudioBilling::RefundIntent.find_by!(local_idempotency_key: "seed:uncertain-refund").financial_command.state

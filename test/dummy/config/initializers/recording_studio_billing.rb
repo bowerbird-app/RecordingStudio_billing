@@ -124,7 +124,7 @@ module RecordingStudioBilling
                           result: { "status" => status, "subtotal_minor" => lines.sum { _1.fetch("subtotal_minor") },
                                     "discount_minor" => 0, "tax_minor" => 0,
                                     "total_minor" => lines.sum { _1.fetch("total_minor") },
-                                    "currency" => intent.items.first.currency_code, "payment_state" => "captured", "lines" => lines },
+                                    "currency" => intent.items.first.currency_code, "payment_state" => "paid", "lines" => lines },
                           metadata: { "adapter" => "dummy" }, allow_authoritative_totals: true)
     end
 

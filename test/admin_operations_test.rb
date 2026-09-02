@@ -505,7 +505,7 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
     now = Time.current
     payment = RecordingStudioBilling::Payment.create!(root_recording: root, account_recording: account.recording, financial_command: command,
                                                       provider_reference: "payment-#{SecureRandom.uuid}", currency_code: "USD", amount_minor: 100,
-                                                      state: "captured", safe_snapshot: {}, recorded_at: now)
+                                                      state: "paid", safe_snapshot: {}, recorded_at: now)
     invoice = RecordingStudioBilling::Invoice.create!(root_recording: root, account_recording: account.recording, financial_command: command,
                                                       provider_reference: "invoice-#{SecureRandom.uuid}", currency_code: "USD", total_minor: 100,
                                                       state: "issued", safe_snapshot: {}, issued_at: now)

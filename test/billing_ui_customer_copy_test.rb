@@ -170,9 +170,9 @@ class BillingUiCustomerCopyTest < Minitest::Test
   def test_invoice_and_payment_copy_avoids_ids_and_snapshot_dumps
     invoice = Invoice.new(
       id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", total_minor: 1_000, currency_code: "USD",
-      state: "captured", issued_at: Time.utc(2026, 8, 16)
+      state: "paid", issued_at: Time.utc(2026, 8, 16)
     )
-    payment = Payment.new(amount_minor: 1_000, currency_code: "USD", state: "captured",
+    payment = Payment.new(amount_minor: 1_000, currency_code: "USD", state: "paid",
                           financial_command: Command.new("succeeded"),
                           safe_snapshot: { "source" => "card", "tax" => { "status" => "final" } })
     payment.define_singleton_method(:[]) do |key|
