@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.9.12
+
+Cloud Agents fetch Cursor skills at Build instead of reading a vendored pack.
+
+### Changed
+
+- Remove vendored Cursor skills, rules, and agents. Cloud Agent Builds fetch
+  RecordingStudio_cursor_plugin through `.cursor/fetch-skills.sh`.
+
+### Fixed
+
+- Dummy billing journeys bind the selected workspace through the request
+  cookie instead of a hardcoded device key. The first journey test asserts
+  that workspace on `/billing`, not which current-plan card the overview
+  picks.
+
+### Upgrade notes
+
+- No host or schema changes. Rebuild the Cloud Agent environment with Draft
+  off so Build loads the pack.
+
 ## 0.9.11
 
 Staff now land on a Billing hub with direct catalogue links and engine-owned

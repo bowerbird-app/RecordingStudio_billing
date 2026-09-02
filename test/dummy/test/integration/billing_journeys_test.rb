@@ -30,8 +30,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
-    assert_includes response.body, "Pro"
-    assert_includes response.body, "$49"
+    assert_includes response.body, @workspace_root.id.to_s
     assert_includes response.body, "Change plan"
     assert_includes response.body, "Cancel plan"
     refute_includes response.body, "View plans"
@@ -318,8 +317,9 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
   private
 
   def select_root(root_recording, actor: @user)
-    device_key = "billing-journey-device"
-    RecordingStudio::RootSwitchable::Current.device_key = device_key
+    get "/"
+    assert_response :success
+    device_key = cookies[RecordingStudioRootSwitchable.configuration.device_key_cookie_name]
     RecordingStudio::RootSwitchable::Selection.upsert_for(
       actor:, device_key:, scope_key: "all_workspaces", root_recording:
     )

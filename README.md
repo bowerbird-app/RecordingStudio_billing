@@ -606,12 +606,17 @@ bin/dev
 
 Sign in with `admin@admin.com` / `Password`.
 
-## Cursor agent skills
+## Cloud Agent boot
 
-Cloud Agents load project skills from `.cursor/skills/` and standing rules from
-`.cursor/rules/`. This checkout vendors pstack, the Recording Studio Cursor
-plugin, and account/team Cursor rules so cloud sessions do not depend on
-marketplace plugins. See [docs/cursor-skills.md](docs/cursor-skills.md).
+Cloud Agent Builds run `.cursor/install.sh`, which provisions the development
+environment and calls `.cursor/fetch-skills.sh`. The fetch hook downloads the
+current project skills and plugin rules into gitignored `.cursor/skills/` and
+`.cursor/rules/`.
+
+The tracked `.cursor/environment.json` defines the Build hooks, terminals, and
+port. `.cursor/start.sh` starts PostgreSQL on each boot. Rebuild the Cloud
+Agent environment with Draft off to load a new pack. See
+[Cursor skills in Cloud Agents](docs/cursor-skills.md).
 
 ## Validation
 
