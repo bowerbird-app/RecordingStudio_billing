@@ -144,19 +144,27 @@ class BillingUiCustomerCopyTest < Minitest::Test
       state: "open", usage_allowance_policies: [Policy.new(consumed_quantity: 5, limit_quantity: 10)]
     )
     grant = Grant.new(credit_key: "demo_api_calls", remaining_quantity: 5, quantity: 5, expires_at: nil)
+    extra = Grant.new(credit_key: "demo_studio_hours", remaining_quantity: 3, quantity: 3, expires_at: nil)
+    meter = RecordingStudioBilling::MeterCredits.new(
+      meter_key: "demo_api_calls", included: 5, purchased: 1_000, used: 11, remaining: 994
+    )
     html = render_component(
       RecordingStudioBilling::UsageComponent,
       RecordingStudioBilling::UsagePresenter.new(
         root_recording: root,
         entitlements: { "credits" => { "demo_api_calls" => 3 }, "demo_priority_support" => true, "demo_projects" => 10 },
-        periods: [period], credit_grants: [grant], allocations: []
+        periods: [period], credit_grants: [grant, extra], allocations: [], meters: [meter]
       )
     )
 
     assert_includes html, "API calls"
+    assert_includes html, "Credits left"
+    assert_includes html, "5 on the plan"
+    assert_includes html, "1000 from packs"
     assert_includes html, "5 of 10"
-    assert_includes html, "5 of 5 available"
+    assert_includes html, "3 of 3 available"
     assert_includes html, "No expiry"
+    refute_includes html, "5 of 5 available"
     assert_includes html, "On this plan"
     assert_includes html, "Priority support"
     assert_includes html, "Yes"

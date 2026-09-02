@@ -9,7 +9,8 @@ manager.
 
 Checkout completion and applied subscription changes project entitlement grants
 automatically. Hosts gate paid features with `entitled?` / `feature_value` on
-the workspace root (see [docs/billing.md](docs/billing.md)). People access is
+the workspace root, and check combined meter remaining with
+`remaining_credits` (see [docs/billing.md](docs/billing.md)). People access is
 still RecordingStudio Accessible on that root.
 
 Customer subscriptions and their plan lines are Recording Studio recordables:
@@ -24,6 +25,12 @@ terms. Canonical V1 values are price scope `market`, checkout presentations
 `embedded` / `redirect` / `payment_link` / `invoice` / `no_charge`, collection
 methods `automatic` / `send_invoice`, and tax policies `exclusive` / `inclusive`
 / `provider_default`. See [docs/billing.md](docs/billing.md).
+
+Subscriptions, one-time add-ons and credit packs, and local metered usage are
+in V1. A generic one-time `service` product does not complete as a purchase.
+Stripe checkout can create a subscription; Stripe does not settle usage or
+corrections. The capability map in [docs/billing.md](docs/billing.md) is the
+yes / no / caveat list.
 
 ## Customer billing surface
 

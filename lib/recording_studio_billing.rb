@@ -171,6 +171,14 @@ module RecordingStudioBilling
       entitlement_access(root_recording:).credit_balance(product_id)
     end
 
+    def remaining_credits(root_recording:, meter_key:)
+      entitlement_access(root_recording:).remaining_credits(meter_key)
+    end
+
+    def meter_credits(root_recording:, meter_key:)
+      entitlement_access(root_recording:).meter_credits(meter_key)
+    end
+
     def usage_total(root_recording:, usage_key:, from: nil, to: nil)
       entitlement_access(root_recording:).usage_total(usage_key.to_s, from:, to:)
     end

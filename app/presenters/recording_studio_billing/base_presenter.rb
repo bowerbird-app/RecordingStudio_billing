@@ -163,6 +163,7 @@ module RecordingStudioBilling
     def human_usage_key(key)
       stripped = key.delete_prefix("demo_")
       return copy("usage_api_calls", "API calls") if stripped.match?(/api.?calls/i)
+      return copy("usage_ai_credits", "AI credits") if stripped.match?(/ai.?credits/i)
 
       stripped.tr("_", " ").capitalize
     end

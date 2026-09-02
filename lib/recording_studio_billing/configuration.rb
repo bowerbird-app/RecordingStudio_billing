@@ -121,7 +121,14 @@ module RecordingStudioBilling
         normalized_key = key.to_s
         raise ArgumentError, "feature key is invalid" unless normalized_key.match?(/\A[a-z][a-z0-9_]*\z/)
 
-        result[normalized_key] = FeatureDefinitionRegistry.normalize(definition).freeze
+        normalized = FeatureDefinitionRegistry.normalize(definition)
+        meter_key = normalized["meter_key"].presence
+        if meter_key
+          raise ArgumentError, "meter_key must match the feature key" unless meter_key == normalized_key
+          raise ArgumentError, "nominated meters must be allowance features" unless normalized["type"] == "allowance"
+        end
+
+        result[normalized_key] = normalized.freeze
       end.freeze
     end
 

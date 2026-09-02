@@ -123,10 +123,9 @@ Recurring dummy checkouts share one execution group, so the cancelled hybrid
 journey is history on that same plan. Overview uses Plan Summary. Usage uses
 Usage Meter, List rows, and Status Alert. Add-ons, Invoices, Payments, Billing
 settings, checkout, invoice detail, and the demonstration payment portal stay on
-cards, lists, badges, and buttons. The seeded Usage page calls
-`effective_entitlements`, which raises when the live usage allowance (5) and
-prepaid credit pack (1000) both grant `demo_api_calls` with `replace`. That is
-catalogue data, not a layout bug. When Stripe test keys are present, a $1 Stripe
+cards, lists, badges, and buttons. Usage shows combined credits left for
+nominated meters. Inventory limits that conflict under `replace` are omitted
+from that page. `effective_entitlements` still raises for those keys. When Stripe test keys are present, a $1 Stripe
 test plan named **Starter** is also published on the shared catalogue and can
 take one of the Plan page's three tiles.
 

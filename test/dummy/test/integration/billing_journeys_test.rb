@@ -11,6 +11,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
   setup do
     acquire_database_lock!
+    BillingTestDatabaseCleanup.clear!
     load Rails.root.join("db/seeds.rb").to_s
     @user = User.find_by!(email: "admin@admin.com")
     @workspace = Workspace.find_by!(name: "Studio Workspace")
@@ -198,6 +199,20 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_equal true, override.value
     assert_equal "published", override.state
+  end
+
+  test "usage shows combined credits left for the nominated API meter" do
+    select_root(@workspace_root)
+
+    get "/billing/usage", params: { root_recording_id: @workspace_root.id }
+
+    assert_response :success, response.body
+    assert_includes response.body, "Credits left"
+    assert_includes response.body, "API calls"
+    assert_includes response.body, "5 on the plan"
+    assert_includes response.body, "1000 from packs"
+    refute_includes response.body, "demo_api_calls"
+    refute_includes response.body, "1000 of 1000 available"
   end
 
   test "usage is recorded rated allocated closed and charged as overage" do
