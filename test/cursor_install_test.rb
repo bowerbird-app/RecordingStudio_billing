@@ -88,7 +88,7 @@ class CursorInstallTest < Minitest::Test
   private
 
   def run_sandbox(mode)
-    output = IO.popen(["bash", SANDBOX, mode], err: [:child, :out], &:read)
+    output = IO.popen(["bash", SANDBOX, mode], err: %i[child out], &:read)
     parsed = {}
     output.each_line do |line|
       key, value = line.chomp.split("=", 2)
