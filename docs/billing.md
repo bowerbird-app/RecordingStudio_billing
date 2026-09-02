@@ -76,7 +76,7 @@ RecordingStudioBilling.record_usage(root_recording: workspace, usage_key: "api_c
 
 `meter_key` must match the feature key. Nominated meters must be allowances. Remaining sums every live plan or purchase allowance on that key, then subtracts `usage_total`. Inventory limits such as projects stay on `feature_value` / gates and do not use this pool.
 
-The dummy catalogue nominates `demo_api_calls` (plan allocation 5 plus a 1000-call pack) and `demo_ai_credits` (a 200-credit pack, not purchased in seed). After seed usage of 11 API calls, `remaining_credits` for `demo_api_calls` is 994.
+The dummy catalogue nominates `demo_api_calls` (a 1000-call pack plus a metered service with 5 included) and `demo_ai_credits` (a 200-credit pack, not purchased in seed). After seed usage of 11 API calls, `remaining_credits` for `demo_api_calls` is the live pack leftover (989). The gem suite covers a live plan allocation plus packs on the same meter.
 
 ## V1 vocabulary
 

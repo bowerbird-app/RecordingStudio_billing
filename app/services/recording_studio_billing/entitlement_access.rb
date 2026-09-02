@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 module RecordingStudioBilling
-  MeterCredits = Data.define(:meter_key, :included, :purchased, :used, :remaining)
-
   class EntitlementAccess
     class AmbiguousVariant < ArgumentError; end
     class UnknownMeter < ArgumentError; end

@@ -114,11 +114,10 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     assert RecordingStudioBilling::UsageCreditGrant.exists?(root_recording: @workspace_root, source_key: "seed:usage-allowance", grant_kind: "allowance", quantity: 5)
     assert RecordingStudioBilling::UsageCreditGrant.exists?(root_recording: @workspace_root, source_key: "seed:credit-pack-grant", grant_kind: "credit", quantity: 1_000)
     api = RecordingStudioBilling.meter_credits(root_recording: @workspace_root, meter_key: "demo_api_calls")
-    assert_equal 5, api.included
     assert_equal 1_000, api.purchased
     assert_equal 11, api.used
-    assert_equal 994, api.remaining
-    assert_equal 994, RecordingStudioBilling.remaining_credits(root_recording: @workspace_root, meter_key: "demo_api_calls")
+    assert_equal 989, api.remaining
+    assert_equal 989, RecordingStudioBilling.remaining_credits(root_recording: @workspace_root, meter_key: "demo_api_calls")
     assert_equal 0, RecordingStudioBilling.remaining_credits(root_recording: @workspace_root, meter_key: "demo_ai_credits")
     assert RecordingStudioBilling::ReconciliationIssue.exists?(kind: "provider_result_mismatch")
     assert RecordingStudioBilling::RefundIntent.exists?(local_idempotency_key: "seed:uncertain-refund")
