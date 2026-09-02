@@ -18,7 +18,7 @@ module RecordingStudioBilling
     }.freeze
 
     ACTION_COPY = {
-      "embedded" => ["checkout_pending", "Your payment is being prepared or is awaiting provider confirmation."],
+      "embedded" => ["checkout_pending", "Payment is still being prepared."],
       "redirect" => ["checkout_continue", "Continue to secure checkout"],
       "payment_link" => ["checkout_payment_link", "Open payment link"],
       "invoice" => ["checkout_invoice", "Continue to invoice"],
@@ -60,7 +60,7 @@ module RecordingStudioBilling
       if %w[redirect payment_link invoice].include?(presentation_mode)
         return { kind: :button, text:, url: presentation_url } if presentation_url.present?
 
-        { kind: :notice, text: copy("checkout_pending", "Your payment is being prepared or is awaiting provider confirmation.") }
+        { kind: :notice, text: copy("checkout_pending", "Payment is still being prepared.") }
       else
         { kind: :notice, text: }
       end
@@ -71,6 +71,12 @@ module RecordingStudioBilling
         item.commercial_manifest.fetch("canonical_data", {}).slice("product", "billing_option", "price", "tax",
                                                                    "benefits", "overage")
       end
+    end
+
+    def checkout_notice
+      return if checkout_intent.state == "completed" && no_charge?
+
+      copy("checkout_notice", "Payment is confirmed only after it lands. Leaving this page does not finish it.")
     end
 
     def frozen_line_rows

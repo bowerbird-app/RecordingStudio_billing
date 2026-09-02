@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.9.7
+
+Settings is a default-layout form. Checkout copy talks about payment landing, not provider reconciliation. Stripe Checkout `product_data.name` is the frozen product name.
+
+### Changed
+
+- Billing settings no longer wrap the one-action form in a card. Payment portal is a PageTitle action.
+- Checkout notice: "Payment is confirmed only after it lands. Leaving this page does not finish it." Completed no-charge checkouts omit that notice.
+- `CreateCheckoutIntent` copies the product name onto each checkout command item. `StripeAdapter` sends that as `product_data.name` and rejects a blank name.
+
+### Upgrade notes
+
+- Bump the gem if you pin `recording_studio_billing` by version.
+- Hosts that call `StripeAdapter` with handmade checkout requests must set `product_name` on each checkout item.
+
 ## 0.9.6
 
 Checkout and subscription-change intents bind a pending financial command. They do not call a provider and they do not pretend a worker ran. Hosts enqueue `execute_checkout_intent` or `execute_subscription_change_intent` from their own job after the `:financial_command_pending` hook. A `no_charge` checkout completes its commercial lifecycle after execute without a webhook. Retrying the same checkout key attaches a command if the first bind failed. The dummy app ships `ExecuteFinancialCommandJob` as the reference worker.

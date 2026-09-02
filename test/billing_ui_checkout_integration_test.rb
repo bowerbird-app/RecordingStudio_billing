@@ -200,6 +200,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
       assert_includes response.body, copy
       assert_includes response.body, "https://checkout.example.test/#{presentation}"
       assert_includes response.body, "Tax is calculated at checkout"
+      refute_includes response.body, "provider reconciliation"
       refute_includes response.body, "Market:"
       refute_includes response.body, "Overage policy"
 
@@ -223,6 +224,7 @@ class BillingUiCheckoutIntegrationTest < ActionDispatch::IntegrationTest
     assert_select "[data-checkout-intent-state=completed]"
     assert_includes response.body, "No payment is due for this plan."
     refute_includes response.body, "Continue to secure checkout"
+    refute_includes response.body, "provider reconciliation"
   end
 
   test "missing malformed and client-authoritative selection input redirects safely" do

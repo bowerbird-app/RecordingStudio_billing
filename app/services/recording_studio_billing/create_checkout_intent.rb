@@ -310,6 +310,7 @@ module RecordingStudioBilling
         quantity: item.quantity,
         manifest_digest: item.manifest_digest,
         amount_minor: item.commercial_manifest.dig("canonical_data", "price", "amount_minor"),
+        product_name: item.product_recording.recordable.name,
         recurrence: billing_option.fetch("recurrence"),
         interval: billing_option["interval"],
         interval_count: billing_option["interval_count"]

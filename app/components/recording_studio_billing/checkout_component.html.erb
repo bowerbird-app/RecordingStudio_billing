@@ -33,10 +33,9 @@
   <% unless checkout_action_button? %>
     <%= render_checkout_action %>
   <% end %>
-  <%= render FlatPack::Alert::Component.new(
-    description: @presenter.copy("checkout_notice", "Your payment is confirmed only after provider reconciliation. Browser completion does not confirm a purchase."),
-    style: :info
-  ) %>
+  <% if (notice = @presenter.checkout_notice).present? %>
+    <%= render FlatPack::Alert::Component.new(description: notice, style: :info) %>
+  <% end %>
 </div>
 <% body_extensions.each { |extension| %><%= render_extension(extension) %><% } %>
 <% @presenter.page_contents(:checkout).each { |content| %><%= render_extension(content) %><% } %>

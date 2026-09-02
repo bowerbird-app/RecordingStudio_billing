@@ -95,7 +95,7 @@ class BillingUiConfigurationTest < Minitest::Test
     refute_includes html, "data-stripe-publishable-key"
     refute_includes html, "https://js.stripe.com/v3/"
     refute_includes html, "recording_studio_billing/stripe_checkout"
-    assert_includes html, "Your payment is being prepared or is awaiting provider confirmation."
+    assert_includes html, "Payment is still being prepared."
   end
 
   def test_checkout_component_renders_plan_price_and_tax_at_checkout_without_authoritative_completion_claim
@@ -124,7 +124,8 @@ class BillingUiConfigurationTest < Minitest::Test
     refute_includes html, "Overage policy"
     refute_includes html, "Market:"
     refute_includes html, "Benefits:"
-    assert_includes html, "Browser completion does not confirm a purchase."
+    assert_includes html, "Payment is confirmed only after it lands. Leaving this page does not finish it."
+    refute_includes html, "provider reconciliation"
   end
 
   class CheckoutRenderingPresenter
@@ -142,6 +143,10 @@ class BillingUiConfigurationTest < Minitest::Test
     def frozen_lines = []
 
     def copy(_key, default) = default
+
+    def checkout_notice
+      copy("checkout_notice", "Payment is confirmed only after it lands. Leaving this page does not finish it.")
+    end
 
     def page_contents(_page) = []
   end
