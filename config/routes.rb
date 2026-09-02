@@ -4,6 +4,11 @@ RecordingStudioBilling::Engine.routes.draw do
   root "billing#index"
 
   get "admin/products/new", to: "admin_products#new", as: :new_admin_product
+  get "admin/products/:id/edit", to: "admin_products#edit", as: :edit_admin_product
+  get "admin/options/new", to: "admin_options#new", as: :new_admin_option
+  get "admin/options/:id/edit", to: "admin_options#edit", as: :edit_admin_option
+  get "admin/prices/new", to: "admin_prices#new", as: :new_admin_price
+  get "admin/prices/:id/edit", to: "admin_prices#edit", as: :edit_admin_price
   post "admin/operations/:operation", to: "admin_operations#perform", as: :admin_operations_create
   post "admin/operations/:operation/:id", to: "admin_operations#perform", as: :admin_operation
 

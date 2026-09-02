@@ -1,0 +1,50 @@
+<%= form_with url: page.submit_path, method: :post do %>
+  <% if select_parent %>
+    <%= hidden_field_tag "attributes[version]", page.value(:version) %>
+    <%= hidden_field_tag "attributes[scope]", page.value(:scope) %>
+  <% end %>
+  <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md) do %>
+    <%= render FlatPack::Grid::Component.new(cols: 1, gap: :md) do %>
+      <% if select_parent %>
+        <%= render FlatPack::Select::Component.new(
+              name: "parent_recording_id",
+              label: "Billing option",
+              required: true,
+              options: page.billing_option_options,
+              placeholder: "Select a billing option"
+            ) %>
+      <% end %>
+      <%= render FlatPack::TextInput::Component.new(
+            name: "attributes[key]", value: page.value(:key), label: "Key", required: true
+          ) %>
+      <%= render FlatPack::Select::Component.new(
+            name: "attributes[market_recording_id]",
+            value: page.value(:market_recording_id),
+            label: "Market",
+            required: true,
+            options: page.market_options,
+            placeholder: "Select a market"
+          ) %>
+      <%= render FlatPack::TextInput::Component.new(
+            name: "attributes[amount_minor]", value: page.value(:amount_minor), label: "Amount", required: true
+          ) %>
+      <%= render FlatPack::TextInput::Component.new(
+            name: "attributes[currency_code]", value: page.value(:currency_code), label: "Currency", required: true,
+            max_characters: 3
+          ) %>
+      <%= render FlatPack::TextInput::Component.new(
+            name: "attributes[currency_exponent]", value: page.value(:currency_exponent),
+            label: "Currency exponent", required: true
+          ) %>
+      <%= render FlatPack::Select::Component.new(
+            name: "attributes[pricing_model]", value: page.value(:pricing_model), label: "Pricing model", required: true,
+            options: RecordingStudioBilling::Price::PRICING_MODELS.map { |value| [value.humanize, value] },
+            placeholder: false
+          ) %>
+      <%= render FlatPack::Grid::Component.new(cols: 2, gap: :md) do %>
+        <%= render FlatPack::Button::Component.new(text: "Cancel", href: page.cancel_path, style: :secondary) %>
+        <%= render FlatPack::Button::Component.new(text: "Save", type: :submit, style: :primary) %>
+      <% end %>
+    <% end %>
+  <% end %>
+<% end %>

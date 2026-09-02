@@ -48,8 +48,15 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
 
   test "billing does not fork Admin screens show" do
     refute File.exist?(RecordingStudioBilling::Engine.root.join("app/views/recording_studio_admin/screens/show.html.erb"))
-    refute Dir.exist?(RecordingStudioBilling::Engine.root.join("app/views/recording_studio_admin"))
-    refute RecordingStudioAdmin.screen_for("billing_product_new")
+    assert File.exist?(RecordingStudioBilling::Engine.root.join("app/views/recording_studio_admin/sections/show.html.erb"))
+    %w[
+      billing_product_new
+      billing_product_edit
+      billing_option_new
+      billing_option_edit
+      billing_price_new
+      billing_price_edit
+    ].each { |key| refute RecordingStudioAdmin.screen_for(key) }
 
     admin_show = RecordingStudioAdmin::Engine.root.join("app/views/recording_studio_admin/screens/show.html.erb")
     assert File.exist?(admin_show)
@@ -90,6 +97,54 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
     refute RecordingStudioAdmin.screen_for("billing_product_new")
     assert_equal %i[name key kind state],
                  RecordingStudioBilling::ADMIN_OPERATION_AREAS.fetch(:billing_products).fetch(:columns)
+  end
+
+  test "billing hub starts with working catalogue screen links" do
+    section = RecordingStudioAdmin.section_for("billing")
+    context = admin_context
+    links = section.links.first(8).map { |link| link.resolve(context) }
+
+    assert_equal %w[Products Plans Add-ons], links.first(3).map(&:text)
+    assert_equal %w[
+      /admin/screens/billing_products
+      /admin/screens/billing_plans
+      /admin/screens/billing_addons
+    ], links.first(3).map(&:url)
+    assert_equal ["Billing options", "Prices and publication", "Invoices", "Payments", "Subscriptions"],
+                 links.drop(3).map(&:text)
+  end
+
+  test "plan and add-on inventories open product forms with locked kinds" do
+    {
+      "billing_plans" => "plan",
+      "billing_addons" => "addon"
+    }.each do |screen_key, kind|
+      screen = RecordingStudioAdmin.screen_for(screen_key)
+      button = screen.buttons_value.find { |entry| entry.name == :new_product }
+      url = with_stubbed_billing_admin_parent { button.url.call(admin_context) }
+
+      assert_includes url, "/billing/admin/products/new"
+      assert_includes url, "kind=#{kind}"
+      assert_includes url, screen_key
+    end
+  end
+
+  test "catalogue rows edit with GET pages and retire with destructive POST actions" do
+    {
+      "billing_products" => [Struct.new(:id).new("product-1"), "/billing/admin/products/product-1/edit"],
+      "billing_options" => [Struct.new(:id).new("option-1"), "/billing/admin/options/option-1/edit"],
+      "billing_prices" => [Struct.new(:id).new("price-1"), "/billing/admin/prices/price-1/edit"]
+    }.each do |resource_key, (record, expected_path)|
+      resource = RecordingStudioAdmin.resource_for(resource_key)
+      edit = resource.action_for(:edit).resolve(record, admin_context)
+      retire = resource.action_for(:retire).resolve(record, admin_context)
+
+      assert_equal expected_path, URI.parse(edit.url).path
+      assert_nil edit.method
+      assert_equal :post, retire.method
+      assert_equal "Retire this from the catalogue?", retire.confirm
+      assert retire.destructive
+    end
   end
 
   test "product create stays on the BillingAdmin parent and existing draft operation" do
@@ -181,7 +236,24 @@ class BillingAdminHubsTest < ActiveSupport::TestCase
 
   def with_stubbed_new_product_parent(&)
     parent = Struct.new(:id).new("parent-1")
-    RecordingStudioBilling::BillingAdminProductNew.stub(:billing_admin_recording_for, parent, &)
+    RecordingStudioBilling::BillingAdminForms.stub(:billing_admin_recording_for, parent, &)
+  end
+
+  def with_stubbed_billing_admin_parent(&)
+    parent = Struct.new(:id).new("parent-1")
+    RecordingStudioBilling::BillingAdminForms.stub(:billing_admin_recording_for, parent, &)
+  end
+
+  def admin_context
+    context = Object.new
+    context.define_singleton_method(:admin_screen_path) { |key| "/admin/screens/#{key}" }
+    context.define_singleton_method(:params) { {} }
+    routes = Object.new
+    routes.define_singleton_method(:recording_studio_billing_path) { "/billing" }
+    controller = Object.new
+    controller.define_singleton_method(:main_app) { routes }
+    context.define_singleton_method(:controller) { controller }
+    context
   end
 
   def access_context_for(recordable)

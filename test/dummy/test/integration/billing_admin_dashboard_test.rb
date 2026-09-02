@@ -10,15 +10,17 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
   HIGH_SIGNAL_SCREENS = %w[
-    billing_products billing_prices billing_manifests
+    billing_products billing_plans billing_addons
+    billing_prices billing_manifests
     billing_invoices billing_payments billing_financial_commands
     billing_subscriptions billing_plan_updates billing_reconciliation_issues
   ].freeze
 
-  HUB_SECTIONS = %w[billing_commercial billing_financial billing_operations].freeze
+  HUB_SECTIONS = %w[billing billing_commercial billing_financial billing_operations].freeze
 
   setup do
     acquire_database_lock!
+    BillingTestDatabaseCleanup.clear!
     load Rails.root.join("db/seeds.rb").to_s
     @user = User.find_by!(email: "admin@admin.com")
     @admin_root = RecordingStudio.root_recording_for(AdminRoot.find_by!(name: "Billing Administration"))
@@ -40,7 +42,9 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
       key: "billing_account_operations", recording: @admin_root, context:
     )
 
-    site_screens = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) - %w[billing_feature_overrides]
+    site_screens = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) -
+                   %w[billing_feature_overrides] +
+                   RecordingStudioBilling::BillingAdminForms::KIND_SCREENS.keys
     (HUB_SECTIONS + site_screens).each do |key|
       assert RecordingStudioAdmin.screen_enabled?(key:, recording: @admin_root, context:), key
     end
@@ -53,18 +57,20 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     get "/admin"
     assert_response :success
     assert_admin_shell
-    assert_includes response.body, "Products and pricing"
+    assert_includes response.body, "Billing"
     assert_includes response.body, "Products"
-    assert_includes response.body, "Prices"
-    assert_includes response.body, "Published manifests"
-    refute_includes response.body, "View products and pricing"
+    assert_includes response.body, "Plans"
+    assert_includes response.body, "Add-ons"
+    assert_select "a[href='/admin/screens/billing_products']", text: "Products"
+    assert_select "a[href='/admin/screens/billing_plans']", text: "Plans"
+    assert_select "a[href='/admin/screens/billing_addons']", text: "Add-ons"
     refute_includes response.body, "Table data"
     refute_includes response.body, "Sign out"
     assert_admin_access_avatars
 
     HIGH_SIGNAL_SCREENS.first(3).each do |screen_key|
       widget_key = RecordingStudioBilling::BillingAdminHubs.widget_key_for(screen_key)
-      get "/admin/sections/billing_commercial/widgets/#{widget_key}"
+      get "/admin/sections/billing/widgets/#{widget_key}"
       assert_response :success, widget_key
       assert_operator seeded_row_count_for(screen_key), :>, 0
       assert_includes response.body, seeded_row_label_for(screen_key)
@@ -72,8 +78,9 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     end
 
     {
-      "billing_financial" => HIGH_SIGNAL_SCREENS[3, 3],
-      "billing_operations" => HIGH_SIGNAL_SCREENS[6, 3]
+      "billing_commercial" => %w[billing_products billing_prices billing_manifests],
+      "billing_financial" => %w[billing_invoices billing_payments billing_financial_commands],
+      "billing_operations" => %w[billing_subscriptions billing_plan_updates billing_reconciliation_issues]
     }.each do |section_key, screen_keys|
       get "/admin/sections/#{section_key}"
       assert_response :success, section_key
@@ -94,8 +101,17 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "billing admin shortcut redirects to the Billing hub" do
+    get "/admin/billing"
+
+    assert_redirected_to "/admin/sections/billing"
+  end
+
   test "hub and inventory screens return tables with seeded rows" do
-    (HUB_SECTIONS + RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) - %w[billing_feature_overrides]).each do |key|
+    inventory_keys = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s) -
+                     %w[billing_feature_overrides] +
+                     RecordingStudioBilling::BillingAdminForms::KIND_SCREENS.keys
+    (HUB_SECTIONS + inventory_keys).each do |key|
       get "/admin/screens/#{key}"
       assert_response :success, key
       assert_admin_shell
@@ -163,9 +179,96 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
     assert_admin_access_avatars
   end
 
+  test "catalogue New and Edit actions use billing engine pages" do
+    billing_admin = billing_admin_recording
+    plan = RecordingStudioBilling::Product.with_current_recording.find_by!(kind: "plan")
+    addon = RecordingStudioBilling::Product.with_current_recording.find_by!(kind: "addon")
+    option = RecordingStudioBilling::BillingOption.with_current_recording.order(created_at: :desc).first
+    price = RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first
+
+    get "/admin/screens/billing_plans"
+    assert_response :success
+    assert_select "a[href*='/billing/admin/products/new'][href*='kind=plan']", text: "New"
+    get "/admin/screens/billing_plans/table"
+    assert_includes response.body, plan.name
+    refute_includes response.body, addon.name
+
+    get "/admin/screens/billing_addons"
+    assert_response :success
+    assert_select "a[href*='/billing/admin/products/new'][href*='kind=addon']", text: "New"
+    get "/admin/screens/billing_addons/table"
+    assert_includes response.body, addon.name
+    refute_includes response.body, plan.name
+
+    get "/billing/admin/products/new", params: {
+      parent_recording_id: billing_admin.id,
+      kind: "plan",
+      return_to: "/admin/screens/billing_plans"
+    }
+    assert_response :success
+    assert_includes response.body, "New plan"
+    assert_select "input[type=hidden][name='attributes[kind]'][value=plan]"
+    assert_select "select[name='attributes[kind]']", count: 0
+
+    get "/billing/admin/products/new", params: {
+      parent_recording_id: billing_admin.id,
+      kind: "addon",
+      return_to: "/admin/screens/billing_addons"
+    }
+    assert_response :success
+    assert_includes response.body, "New add-on"
+    assert_select "input[type=hidden][name='attributes[kind]'][value=addon]"
+
+    get "/admin/screens/billing_options"
+    assert_response :success
+    assert_select "a[href*='/billing/admin/options/new']", text: "New"
+    get "/billing/admin/options/new", params: { parent_recording_id: billing_admin.id }
+    assert_response :success
+    assert_select "form[action^='/billing/admin/operations/create_draft_billing_option']"
+    assert_select "select[name='parent_recording_id'] option[value='#{plan.recording.id}']"
+
+    get "/admin/screens/billing_prices"
+    assert_response :success
+    assert_select "a[href*='/billing/admin/prices/new']", text: "New"
+    get "/billing/admin/prices/new", params: { parent_recording_id: billing_admin.id }
+    assert_response :success
+    assert_select "form[action^='/billing/admin/operations/create_draft_price']"
+    assert_select "select[name='parent_recording_id'] option[value='#{option.recording.id}']"
+    assert_select "select[name='attributes[market_recording_id]']"
+
+    {
+      "/billing/admin/products/#{plan.id}/edit" => ["revise_product", "attributes[name]", plan.name],
+      "/billing/admin/options/#{option.id}/edit" => ["revise_billing_option", "attributes[name]", option.name],
+      "/billing/admin/prices/#{price.id}/edit" => ["revise_price", "attributes[key]", price.key]
+    }.each do |path, (operation, field_name, field_value)|
+      get path
+      assert_response :success, path
+      assert_select "form[action*='#{operation}']"
+      assert_select "input[name='#{field_name}'][value='#{field_value}']"
+    end
+  end
+
+  test "catalogue tables expose Edit and destructive Retire actions" do
+    {
+      "billing_products" => RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first,
+      "billing_options" => RecordingStudioBilling::BillingOption.with_current_recording.order(created_at: :desc).first,
+      "billing_prices" => RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first
+    }.each do |screen_key, record|
+      get "/admin/screens/#{screen_key}/table"
+      assert_response :success
+      assert_select "a[href*='/billing/admin/'][href*='/#{record.id}/edit']", text: "Edit"
+      assert_select "a[href*='/billing/admin/operations/retire_'][data-turbo-method=post]" do |links|
+        assert(links.any? { |link| link.text.strip == "Retire" })
+        assert(links.any? { |link| link["data-turbo-confirm"] == "Retire this from the catalogue?" })
+        assert(links.none? { |link| link["href"].start_with?("/billing/billing/") })
+        assert(links.any? { |link| link["href"].end_with?("/#{record.id}") })
+      end
+    end
+  end
+
   test "new product GET authorizes against the scoped Admin root when the host resolver is silent" do
     original_resolver = RecordingStudioAdmin.configuration.access_recording_resolver
-    RecordingStudioAdmin.configuration.access_recording_resolver = ->(_context) { nil }
+    RecordingStudioAdmin.configuration.access_recording_resolver = ->(_context) {}
     get "/billing/admin/products/new", params: { parent_recording_id: billing_admin_recording.id }
     assert_response :success
     assert_includes response.body, "New product"
@@ -192,19 +295,24 @@ class BillingAdminDashboardTest < ActionDispatch::IntegrationTest
 
   def expected_table_title(key)
     RecordingStudioBilling::BillingAdminHubs::HUB_TABLES.dig(key, :title) ||
+      RecordingStudioBilling::BillingAdminForms::KIND_SCREENS.dig(key, :title) ||
       RecordingStudioBilling::ADMIN_OPERATION_AREAS.fetch(key.to_sym).fetch(:title)
   end
 
   def seeded_row_label_for(key)
     case key
+    when "billing", "billing_products"
+      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.name
     when "billing_commercial", "billing_manifests"
       RecordingStudioBilling::CommercialManifest.order(created_at: :desc).first.manifest_digest.first(12)
     when "billing_financial", "billing_financial_commands"
       RecordingStudioBilling::FinancialCommand.order(created_at: :desc).first.command_type
     when "billing_operations", "billing_reconciliation_issues"
       RecordingStudioBilling::ReconciliationIssue.order(created_at: :desc).first.kind
-    when "billing_products"
-      RecordingStudioBilling::Product.with_current_recording.order(created_at: :desc).first.key
+    when "billing_plans"
+      RecordingStudioBilling::Product.with_current_recording.where(kind: "plan").order(created_at: :desc).first.name
+    when "billing_addons"
+      RecordingStudioBilling::Product.with_current_recording.where(kind: "addon").order(created_at: :desc).first.name
     when "billing_prices"
       RecordingStudioBilling::Price.with_current_recording.order(created_at: :desc).first.key
     when "billing_invoices"

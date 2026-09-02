@@ -28,6 +28,20 @@ class InstallGeneratorTest < Minitest::Test
                     '@source "../../vendor/bundle/**/recording_studio_billing/app/components/**/*.{rb,erb}";'
   end
 
+  def test_install_guide_puts_the_billing_hub_route_before_the_admin_mount
+    install_guide = File.read(
+      File.expand_path("../lib/generators/recording_studio_billing/install/templates/INSTALL.md", __dir__)
+    )
+
+    draw_position = install_guide.index("draw_recording_studio_billing_admin")
+    mount_position = install_guide.index("recording_studio_admin_for")
+
+    assert draw_position
+    assert mount_position
+    assert_operator draw_position, :<, mount_position
+    assert_includes install_guide, "root_section: :billing"
+  end
+
   def test_sql_schema_format_configuration_is_idempotent
     Dir.mktmpdir do |destination_root|
       application_path = File.join(destination_root, "config/application.rb")

@@ -350,36 +350,60 @@ end
 
 ## Products and pricing
 
-Admin inventory lives under **Products and pricing**. The section key remains `billing_commercial` for hosts that already registered that navigation id.
+Admin inventory starts at **Billing**. Mount the shortcut before Admin:
 
-The site Admin root (`BillingAdminSupport`) enables three hubs:
+```ruby
+draw_recording_studio_billing_admin
+recording_studio_admin_for :admin, at: "/admin", root_section: :billing
+```
+
+`/admin/billing` redirects to `/admin/sections/billing`. The first header
+buttons link to Products, Plans, and Add-ons. The More menu starts with billing
+options, prices, invoices, payments, and subscriptions.
+
+The site Admin root enables these hubs:
 
 | Hub | Widgets | Hub screen table |
 | --- | --- | --- |
+| Billing | Products, Plans, Add-ons | Products |
 | Products and pricing | Products, Prices, Published manifests | Published manifests |
 | Financial records | Invoices, Payments, Financial commands | Financial commands |
 | Billing operations | Subscriptions, Plan updates, Reconciliation issues | Reconciliation issues |
 
-A widget with a child screen links through to that inventory. Recording Studio
-Admin only enables a screen when an enabled section links it, so each hub also
-links the rest of its site-scoped inventory for discovery and direct URLs.
-Screens that filter on a catalogue `key` read `catalogue_key` from the query
-string. Admin routes already use `params[:key]` for the screen id, so reusing
-`key` as a filter hid every row.
-Account billing operations (feature overrides) is hidden on the site Admin
-root. It becomes visible only when admin access is a `:billing` workspace root.
-Dummy Admin hubs render `recording_studio_accessible_avatars` in the
-default-layout slot. Configure `avatar_resolver` so granted actors become
-avatars; + Access is only the empty-grant fallback.
+The Billing widgets use Product names. Plans show only `kind=plan`. Add-ons show
+only `kind=addon`. `billing_commercial`, `billing_financial`, and
+`billing_operations` remain enabled public section keys.
 
-Products inventory has a primary New button. It opens the billing create page
-(`/billing/admin/products/new?parent_recording_id=…`). The GET validates
-that BillingAdmin parent and authorizes against that Admin root. The form
-asks for Name, then Key, Kind, and Provider. Save posts to
-`create_draft_product`, which writes a draft with `RecordingStudio.record!`.
-That path authorizes the registered `billing_products` `create` action
-(`required_role :admin`). Billing does not fork Admin's `screens/show`
-template. Revise stays `revise`. Publish stays `CommercialPublisher`.
+Products, billing options, and prices have New, Edit, and Retire actions. New
+and Edit open billing engine GET pages:
+
+- `/billing/admin/products/new`
+- `/billing/admin/products/:id/edit`
+- `/billing/admin/options/new`
+- `/billing/admin/options/:id/edit`
+- `/billing/admin/prices/new`
+- `/billing/admin/prices/:id/edit`
+
+Product forms ask for Name, Key, Kind, and Provider. Plan and Add-on links lock
+Kind in a hidden input. Billing option forms ask for the commercial terms on
+the model. New billing options select a Product parent. Price forms ask for the
+market and money fields. New prices select a Billing option parent. Every
+option list stays inside the current Billing Admin tree.
+
+Save posts to `create_draft_*` or `revise_*`. Retire posts to `retire_*` and
+asks for confirmation. These operations use Recording Studio revisions and
+`CommercialPublisher.retire!`. They never delete catalogue rows. The forms are
+not Admin screens.
+
+Each GET resolves an Admin root from its selected parent or edited item. It
+uses a request-local Admin `Surface` for authorization. Missing or foreign
+catalogue items return 404. An actor without the required Admin role gets 403.
+
+Screens that filter on a catalogue `key` read `catalogue_key`. Admin screen
+routes already use `params[:key]`. Account billing operations stays hidden on
+the site Admin root. It becomes visible when the access root is a `:billing`
+workspace. Dummy Admin hubs render `recording_studio_accessible_avatars` in the
+default-layout slot.
 
 Product and BillingOption require a human `name` as well as the stable
 catalogue `key`. Inventory shows both. Dummy seeds use labels such as Monthly

@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.9.11
+
+Staff now land on a Billing hub with direct catalogue links and engine-owned
+forms.
+
+### Added
+
+- Add the `billing` Admin section. Products, Plans, and Add-ons are its first
+  links and widgets.
+- Add billing engine pages to create and edit products, billing options, and
+  prices. Plan and Add-on links lock the Product kind.
+- Add Edit and Retire row actions. Retire remains a confirmed POST through
+  `CommercialPublisher.retire!`.
+- Add `draw_recording_studio_billing_admin`. It redirects `/admin/billing` to
+  `/admin/sections/billing`.
+
+### Fixed
+
+- Override only Admin `sections/show.html.erb` so Flatpack header buttons use
+  `href:`. Billing does not override `screens/show.html.erb`.
+- Infer Product and Billing option parent references from
+  `parent_recording_id` during draft creation.
+
+### Upgrade notes
+
+- Add `draw_recording_studio_billing_admin` before
+  `recording_studio_admin_for`.
+- Set `root_section: :billing` on the Admin mount.
+- No schema changes.
+
 ## 0.9.10
 
 New product is a billing page. Admin `screens/show` is no longer shadowed.

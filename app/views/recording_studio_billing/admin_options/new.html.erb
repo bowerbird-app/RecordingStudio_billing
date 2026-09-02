@@ -1,0 +1,7 @@
+<% billing_page_nav(title: @page.title, back_url: @page.cancel_path, back_label: "Billing options") %>
+<% recording_studio_page_nav_right do %>
+  <%= recording_studio_accessible_avatars(@page.access_recording, button_style: :ghost, button_size: :md) %>
+<% end %>
+
+<%= render FlatPack::PageTitle::Component.new(title: @page.title) %>
+<%= render "form", page: @page, select_parent: true %>

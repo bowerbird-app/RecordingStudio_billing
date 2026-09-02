@@ -1,9 +1,20 @@
 # frozen_string_literal: true
 
 require "recording_studio_admin"
+require "recording_studio_billing/billing_admin_forms"
+require "recording_studio_billing/billing_admin_product_new"
 require "recording_studio_billing/billing_admin_hubs"
 
 module RecordingStudioBilling
+  class BillingSection < RecordingStudioAdmin::Section
+    key "billing"
+    icon :shopping_bag
+    title "Billing"
+    subtitle "Catalogue, invoices, payments, and subscriptions"
+    blast_radius :site
+    availability_scope :all
+  end
+
   class BillingCommercialSection < RecordingStudioAdmin::Section
     key "billing_commercial"
     icon :shopping_bag
@@ -46,6 +57,16 @@ module RecordingStudioBilling
     link :operations, text: "View account billing operations", url: lambda { |context|
       context.admin_screen_path("billing_feature_overrides")
     }
+  end
+
+  class BillingScreen < RecordingStudioAdmin::Screen
+    key "billing"
+    title "Billing"
+    blast_radius :site
+    query { |_context| Product.with_current_recording.order(created_at: :desc) }
+    filter :key, **BillingAdminHubs.inventory_filter_options(:key)
+    filter :kind, label: "Kind"
+    filter :state, label: "State"
   end
 
   class BillingCommercialScreen < RecordingStudioAdmin::Screen
@@ -173,6 +194,10 @@ module RecordingStudioBilling
   }.freeze
 
   ADMIN_OPERATION_SCREEN_CLASSES = ADMIN_OPERATION_AREAS.map do |key, definition|
+    form_resource = BillingAdminForms::PAGES.values.find do |page|
+      page.fetch(:mode) == :new && page.fetch(:resource_key) == key.to_s
+    end&.fetch(:resource)
+
     Class.new(RecordingStudioAdmin::Screen) do
       key key.to_s
       title definition.fetch(:title)
@@ -185,12 +210,12 @@ module RecordingStudioBilling
       definition.fetch(:filters).each do |filter_key|
         filter filter_key, **BillingAdminHubs.inventory_filter_options(filter_key)
       end
-      if key.to_s == "billing_products"
-        button :new_product,
+      if form_resource
+        button :"new_#{form_resource}",
                text: "New",
                style: :primary,
-               url: ->(context) { BillingAdminProductNew.new_url_for(context) },
-               visible_if: ->(context) { BillingAdminProductNew.create_allowed?(context) }
+               url: ->(context) { BillingAdminForms.new_url_for(form_resource, context) },
+               visible_if: ->(context) { BillingAdminForms.create_allowed?(form_resource, context) }
       end
       table do
         title definition.fetch(:title)
@@ -203,9 +228,10 @@ module RecordingStudioBilling
         admin_action key, :confirm if key.to_s == "billing_plan_update_runs"
         admin_action key, :apply if key.to_s == "billing_plan_update_runs"
         admin_action key, :reconcile if key.to_s == "billing_financial_commands"
-        admin_action key, :create if ADMIN_COMMERCIAL_OPERATION_NAMES.key?(key.to_s)
-        admin_action key, :revise if ADMIN_COMMERCIAL_OPERATION_NAMES.key?(key.to_s)
-        admin_action key, :retire if ADMIN_COMMERCIAL_OPERATION_NAMES.key?(key.to_s)
+        if ADMIN_COMMERCIAL_OPERATION_NAMES.key?(key.to_s)
+          admin_action key, form_resource ? :edit : :revise
+          admin_action key, :retire
+        end
         admin_action key, :refund if key.to_s == "billing_payments"
         admin_action key, :adjust if key.to_s == "billing_invoices"
         admin_action key, :create if key.to_s == "billing_feature_overrides"
@@ -217,6 +243,10 @@ module RecordingStudioBilling
   end.freeze
 
   ADMIN_OPERATION_RESOURCE_CLASSES = ADMIN_OPERATION_AREAS.map do |key, definition|
+    form_resource = BillingAdminForms::PAGES.values.find do |page|
+      page.fetch(:mode) == :new && page.fetch(:resource_key) == key.to_s
+    end&.fetch(:resource)
+
     Class.new(RecordingStudioAdmin::Resource) do
       key key.to_s
       section definition.fetch(:section)
@@ -250,15 +280,18 @@ module RecordingStudioBilling
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                    operation: operation.fetch(:operation), id: record.id
                  )
-                 mount_path = if context.controller.respond_to?(:main_app)
-                                context.controller.main_app.recording_studio_billing_path
-                              else
-                                "/billing"
-                              end
-                 "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                 BillingAdminForms.mounted_operation_url(context, engine_path)
                }
       end
       if (operation_name = ADMIN_COMMERCIAL_OPERATION_NAMES[key.to_s])
+        if form_resource
+          action :edit,
+                 text: "Edit",
+                 method: :get,
+                 required_role: :admin,
+                 blast_radius: :site,
+                 url: ->(record, context) { BillingAdminForms.edit_url_for(form_resource, record, context) }
+        end
         action :create,
                text: "Create draft", method: :post, required_role: :admin, blast_radius: :site,
                visible_if: ->(record, context) { BillingAdminProductNew.create_action_visible?(record, context) },
@@ -267,30 +300,26 @@ module RecordingStudioBilling
                  engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(
                    operation: "create_draft_#{operation_name}", parent_recording_id:
                  )
-                 mount_path = if context.controller.respond_to?(:main_app)
-                                context.controller.main_app.recording_studio_billing_path
-                              else
-                                "/billing"
-                              end
-                 "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                 BillingAdminForms.mounted_operation_url(context, engine_path)
                }
         actions = {
           revise: { operation: "revise_#{operation_name}", text: "Revise" }
         }
         actions[:retire] = { operation: "retire_#{operation_name}", text: "Retire" }
         actions.each do |action_name, operation|
+          retire_catalogue_item = form_resource && action_name == :retire
           action action_name,
-                 text: operation.fetch(:text), method: :post, required_role: :admin, blast_radius: :site,
+                 text: operation.fetch(:text),
+                 method: :post,
+                 confirm: ("Retire this from the catalogue?" if retire_catalogue_item),
+                 destructive: retire_catalogue_item,
+                 required_role: :admin,
+                 blast_radius: :site,
                  url: lambda { |record, context|
                    operation_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                      operation: operation.fetch(:operation), id: record.id
                    )
-                   mount_path = if context.controller.respond_to?(:main_app)
-                                  context.controller.main_app.recording_studio_billing_path
-                                else
-                                  "/billing"
-                                end
-                   "#{mount_path.to_s.chomp('/')}#{operation_path}"
+                   BillingAdminForms.mounted_operation_url(context, operation_path)
                  }
         end
       end
@@ -301,8 +330,7 @@ module RecordingStudioBilling
                           engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operations_create_path(
                             operation: "create_feature_override", account_recording_id: context.params.fetch("account_recording_id")
                           )
-                          mount_path = context.controller.respond_to?(:main_app) ? context.controller.main_app.recording_studio_billing_path : "/billing"
-                          "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                          BillingAdminForms.mounted_operation_url(context, engine_path)
                         }
         {
           revise: { operation: "revise_feature_override", text: "Revise" },
@@ -314,8 +342,7 @@ module RecordingStudioBilling
                                 engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                                   operation: operation.fetch(:operation), id: record.id
                                 )
-                                mount_path = context.controller.respond_to?(:main_app) ? context.controller.main_app.recording_studio_billing_path : "/billing"
-                                "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                                BillingAdminForms.mounted_operation_url(context, engine_path)
                               }
         end
       end
@@ -331,16 +358,18 @@ module RecordingStudioBilling
                                            engine_path = RecordingStudioBilling::Engine.routes.url_helpers.admin_operation_path(
                                              operation: operation.fetch(:operation), id: record.id
                                            )
-                                           mount_path = if context.controller.respond_to?(:main_app)
-                                                          context.controller.main_app.recording_studio_billing_path
-                                                        else
-                                                          "/billing"
-                                                        end
-                                           "#{mount_path.to_s.chomp('/')}#{engine_path}"
+                                           BillingAdminForms.mounted_operation_url(context, engine_path)
                                          }
       end
     end
   end.freeze
+
+  class BillingResource < RecordingStudioAdmin::Resource
+    key "billing"
+    section "billing"
+    title "Billing"
+    blast_radius :site
+  end
 
   class BillingCommercialResource < RecordingStudioAdmin::Resource
     key "billing_commercial"

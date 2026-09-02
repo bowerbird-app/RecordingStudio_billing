@@ -11,33 +11,39 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_equal :application_layout, RecordingStudioRootSwitchable.configuration.layout
     assert_includes ApplicationController.ancestors, RecordingStudio::RootSwitchable::ControllerSupport
     assert_includes AdminRoot.ancestors, RecordingStudioBilling::BillingAdminSupport
-    assert_equal %w[billing_commercial billing_financial billing_operations],
+    assert_equal %w[billing billing_commercial billing_financial billing_operations],
                  AdminRoot.recording_studio_admin_section_keys_for(nil, nil, nil)
     assert RecordingStudioAccessible.configuration.avatar_for(User.new(email: "admin@admin.com"))
   end
 
   test "billing admin definitions are registered at site scope" do
-    section_keys = %w[billing_account_operations billing_commercial billing_financial billing_operations]
-    screen_section_keys = %w[billing_commercial billing_financial billing_operations]
+    section_keys = %w[billing billing_account_operations billing_commercial billing_financial billing_operations]
+    screen_section_keys = %w[billing billing_commercial billing_financial billing_operations]
+    kind_screen_keys = RecordingStudioBilling::BillingAdminForms::KIND_SCREENS.keys
     operation_keys = RecordingStudioBilling::ADMIN_OPERATION_AREAS.keys.map(&:to_s)
     account_operation_keys = %w[billing_feature_overrides]
     site_operation_keys = operation_keys - account_operation_keys
 
-    assert_equal section_keys, RecordingStudioAdmin.sections.keys.grep(/^billing_/).sort
-    assert_equal (screen_section_keys + operation_keys).sort,
-                 RecordingStudioAdmin.screens.keys.grep(/^billing_/).sort
-    assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.resources.keys.grep(/^billing_/).sort
+    assert_equal section_keys.sort, RecordingStudioAdmin.sections.keys.grep(/^billing/).sort
+    assert_equal (screen_section_keys + kind_screen_keys + operation_keys).sort,
+                 RecordingStudioAdmin.screens.keys.grep(/^billing/).sort
+    assert_equal (screen_section_keys + operation_keys).sort, RecordingStudioAdmin.resources.keys.grep(/^billing/).sort
     assert_equal RecordingStudioBilling::BillingAdminHubs::WIDGET_SPECS.map { |spec| spec.fetch(:key) }.sort,
                  RecordingStudioAdmin.registry.widgets.keys.grep(/^widgets\.billing\./).sort
 
     assert_equal :root, RecordingStudioAdmin.section_for("billing_account_operations").blast_radius
-    screen_section_keys.each do |key|
+    (screen_section_keys - %w[billing]).each do |key|
       assert_equal :site, RecordingStudioAdmin.section_for(key).blast_radius
     end
+    assert_equal :site, RecordingStudioAdmin.section_for("billing").blast_radius
 
     (screen_section_keys + site_operation_keys).each do |key|
       assert_equal :site, RecordingStudioAdmin.screen_for(key).blast_radius
       assert_equal :site, RecordingStudioAdmin.resource_for(key).blast_radius
+    end
+    kind_screen_keys.each do |key|
+      assert_equal :site, RecordingStudioAdmin.screen_for(key).blast_radius
+      refute RecordingStudioAdmin.resource_for(key)
     end
     account_operation_keys.each do |key|
       assert_equal :root, RecordingStudioAdmin.screen_for(key).blast_radius
@@ -51,6 +57,16 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
       assert_equal expected_model, screen.query.call(nil).klass
       assert_equal definition.fetch(:section), RecordingStudioAdmin.resource_for(key).section_key
     end
+
+    %w[
+      billing_product_new
+      billing_product_edit
+      billing_option_new
+      billing_option_edit
+      billing_price_new
+      billing_price_edit
+    ].each { |key| refute RecordingStudioAdmin.screen_for(key) }
+    assert_equal RecordingStudioBilling::BillingResource, RecordingStudioAdmin.resource_for("billing")
 
     RecordingStudioBilling::BillingAdminHubs::HIGH_SIGNAL_SCREEN_KEYS.each do |section_key, screen_keys|
       section = RecordingStudioAdmin.section_for(section_key)
@@ -95,7 +111,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   end
 
   test "dummy seeds create an idempotent credential-free demonstration catalogue" do
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(1_208_120_200)")
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    BillingTestDatabaseCleanup.clear!
     Current.actor = nil
 
     load Rails.root.join("db/seeds.rb").to_s
@@ -105,16 +122,16 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     workspace_recording = RecordingStudio::Recording.find_by!(recordable: workspace)
     admin_root_recording = RecordingStudio::Recording.find_by!(recordable: admin_root)
     account_recording = RecordingStudio::Recording.find_by!(root_recording: workspace_recording,
-                                parent_recording: workspace_recording,
-                                recordable_type: "RecordingStudioBilling::Account")
+                                                            parent_recording: workspace_recording,
+                                                            recordable_type: "RecordingStudioBilling::Account")
     billing_admin_recording = RecordingStudio::Recording.find_by!(root_recording: admin_root_recording,
-                                    parent_recording: admin_root_recording,
-                                    recordable_type: "RecordingStudioBilling::BillingAdmin")
+                                                                  parent_recording: admin_root_recording,
+                                                                  recordable_type: "RecordingStudioBilling::BillingAdmin")
     account = account_recording.recordable
     billing_admin = billing_admin_recording.recordable
     catalogue = lambda do |model|
       model.where(id: RecordingStudio::Recording.where(root_recording: admin_root_recording,
-                                                        recordable_type: model.name).select(:recordable_id))
+                                                       recordable_type: model.name).select(:recordable_id))
     end
 
     assert_nil Current.actor
@@ -179,19 +196,19 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
         assert_no_difference -> { AdminRoot.count } do
           assert_no_difference -> { RecordingStudioBilling::Account.count } do
             assert_no_difference -> { RecordingStudioBilling::BillingAdmin.count } do
-                assert_no_difference -> { RecordingStudioBilling::ProviderAccount.count } do
-                  assert_no_difference -> { RecordingStudioBilling::Product.count } do
-                    assert_no_difference -> { RecordingStudioBilling::Price.count } do
-                      assert_no_difference -> { RecordingStudioBilling::UsageUnit.count } do
-                        assert_no_difference -> { RecordingStudioBilling::OveragePrice.count } do
-                          assert_no_difference -> { RecordingStudioBilling::PlanUpdate.count } do
-                            load Rails.root.join("db/seeds.rb").to_s
-                          end
+              assert_no_difference -> { RecordingStudioBilling::ProviderAccount.count } do
+                assert_no_difference -> { RecordingStudioBilling::Product.count } do
+                  assert_no_difference -> { RecordingStudioBilling::Price.count } do
+                    assert_no_difference -> { RecordingStudioBilling::UsageUnit.count } do
+                      assert_no_difference -> { RecordingStudioBilling::OveragePrice.count } do
+                        assert_no_difference -> { RecordingStudioBilling::PlanUpdate.count } do
+                          load Rails.root.join("db/seeds.rb").to_s
                         end
                       end
                     end
                   end
                 end
+              end
             end
           end
         end
@@ -200,7 +217,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_nil Current.actor
   ensure
     Current.actor = nil
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(1_208_120_200)")
+    BillingTestDatabaseCleanup.clear!
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
   end
 
   private

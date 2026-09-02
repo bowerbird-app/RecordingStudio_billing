@@ -224,12 +224,25 @@ module RecordingStudioBilling
     end
 
     def commercial_attributes(model)
-      attributes = params.fetch(:attributes, {}).to_unsafe_h
+      attributes = params.fetch(:attributes, {}).to_unsafe_h.stringify_keys
+      attributes = attributes.merge(inferred_parent_attribute(model)) { |_key, explicit, _inferred| explicit }
+      attributes.transform_values! { |attribute| attribute == "" ? nil : attribute }
       allowed = model.column_names - %w[id created_at updated_at state]
-      unknown = attributes.keys.map(&:to_s) - allowed
+      unknown = attributes.keys - allowed
       raise ArgumentError, "unsupported #{model.model_name.human.downcase} attributes: #{unknown.join(', ')}" if unknown.any?
 
       attributes.slice(*allowed)
+    end
+
+    def inferred_parent_attribute(model)
+      parent_id = params[:parent_recording_id].presence
+      return {} if parent_id.blank?
+
+      case model.name.demodulize
+      when "BillingOption" then { "product_recording_id" => parent_id }
+      when "Price", "OveragePrice" then { "billing_option_recording_id" => parent_id }
+      else {}
+      end
     end
 
     def feature_override_creation_attributes

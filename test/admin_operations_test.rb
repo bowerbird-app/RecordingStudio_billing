@@ -196,8 +196,10 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
       post "/billing/admin/operations/create_draft_billing_option", params: {
         parent_recording_id: product_recording.id,
         attributes: billing_option_attributes(key: option_key, product_recording: product_recording)
+          .except(:product_recording_id)
       }
       option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_key)
+      assert_equal product_recording.id, option.product_recording_id
       post "/billing/admin/operations/revise_billing_option/#{option.id}", params: { attributes: { checkout_policy: "required" } }
       option = RecordingStudioBilling::BillingOption.with_current_recording.find_by!(key: option_key)
       assert_equal "required", option.checkout_policy
@@ -206,8 +208,10 @@ class AdminOperationsTest < ActionDispatch::IntegrationTest
       post "/billing/admin/operations/create_draft_price", params: {
         parent_recording_id: option_recording.id,
         attributes: price_attributes(key: price_key, billing_option_recording: option_recording)
+          .except(:billing_option_recording_id)
       }
       price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key)
+      assert_equal option_recording.id, price.billing_option_recording_id
       post "/billing/admin/operations/revise_price/#{price.id}", params: { attributes: { amount_minor: 1_200 } }
       price = RecordingStudioBilling::Price.with_current_recording.find_by!(key: price_key)
       assert_equal 1_200, price.amount_minor

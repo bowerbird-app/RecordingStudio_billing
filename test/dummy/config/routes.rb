@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Rails.application.routes.draw do
   devise_for :users
 
@@ -6,7 +8,8 @@ Rails.application.routes.draw do
   get "/recording_studio", to: redirect("/"), as: nil
   mount RecordingStudio::Engine, at: "/recording_studio"
   mount RecordingStudioRootSwitchable::Engine, at: "/recording_studio_root_switchable"
-  recording_studio_admin_for :admin, at: "/admin", root_section: :billing_commercial
+  draw_recording_studio_billing_admin
+  recording_studio_admin_for :admin, at: "/admin", root_section: :billing
   draw_recording_studio_billing_plans path: "/plans"
   mount RecordingStudioBilling::Engine, at: "/billing"
   get "/dummy_portal", to: "dummy_portals#show"

@@ -156,7 +156,7 @@ class. Hooks run only during rendering; they must not make billing state changes
   recordable.
 - The admin support concern uses the public
   `RecordingStudioAdmin::AllowsAdminSections` API to register the site-scoped
-  `:billing_commercial`, `:billing_financial`, and `:billing_operations`
+  `:billing`, `:billing_commercial`, `:billing_financial`, and `:billing_operations`
   sections. Hosts enable `:accessible` on the Admin root themselves and grant
   Accessible access on that root. Admin 2.0 `authorize_resource!` and
   `site_admin_recording_resolver` use that grant; do not stub `authorized?`.
@@ -169,51 +169,40 @@ billing-admin-enabled root.
 
 ### Administrative workflows
 
-The three site-scoped Admin hubs are dashboards, not empty titles. Products
-and pricing shows Products, Prices, and Published manifests. Financial records
-shows Invoices, Payments, and Financial commands. Billing operations shows
-Subscriptions, Plan updates, and Reconciliation issues. Each widget lists
-current rows and links through to that inventory screen. The matching hub
-screens (`billing_commercial`, `billing_financial`, `billing_operations`) query
-the same relations and render a table so their filters have rows.
+Mount the billing shortcut before Recording Studio Admin:
 
-`BillingAdminSupport` still enables only those three sections on the Admin
-root. Recording Studio Admin treats a section link as the child that enables a
-screen, so each hub also links the rest of its site-scoped inventory. Those
-screens stay out of the hub widget set and appear in `/admin/sections` search.
-They must not 404. Catalogue `key` filters use the `catalogue_key` query param
-because Admin screen routes already occupy `params[:key]`. Account billing
-operations is root-scoped feature overrides:
-it is hidden on the site Admin root until the current access recording is a
-`:billing` workspace that can render that list. Dummy does not invent a second
-override UI.
+```ruby
+draw_recording_studio_billing_admin
+recording_studio_admin_for :admin, at: "/admin", root_section: :billing
+```
 
-The registered RecordingStudioAdmin resources provide the V1 site-scoped
-inventory screens, filters, capability and tax diagnostics, and audit-backed
-POST actions for price publication, plan-update preview/confirmation/apply, and
-provider-command reconciliation. Each action authorizes the actor through the
-resolved `AdminRoot` RecordingStudioAdmin context before dispatching to the
-corresponding domain service; it does not update billing rows directly.
+Staff land on **Billing**. `/admin/billing` redirects to
+`/admin/sections/billing`. The first header buttons are Products, Plans, and
+Add-ons. Each button is a link to its Admin inventory screen. The More menu
+starts with billing options, prices, invoices, payments, and subscriptions.
 
-RecordingStudioAdmin cannot generate safe CRUD forms for these recording-backed
-models. Hosts that expose create or edit controls for provider accounts,
-products and prices, tax/usage configuration, feature overrides, or plan updates
-must create drafts with `RecordingStudio.record!` and revise existing records
-with the relevant Recording Studio revision API. They must not mutate published
-or historical recordables in place. Publication remains exclusively with
-`CommercialPublisher`, and account-scoped feature overrides remain with
-`FeatureOverrideReviser`. The admin inventory label is **Products and pricing**;
-the section key remains `billing_commercial`.
+`BillingAdminSupport` enables `billing` first. It also keeps
+`billing_commercial`, `billing_financial`, and `billing_operations` enabled.
+Those public section keys do not change. The focused Billing widgets list
+Products, Plans, and Add-ons. Plans and Add-ons filter Product by `kind`.
+The older hubs keep their operational widgets and inventory links.
 
-Products inventory (`/admin/screens/billing_products`) has a primary New
-button. That opens the billing create page at `/billing/admin/products/new`
-with the BillingAdmin parent id. The form asks for Name, Key, Kind, and
-Provider. Save posts to the existing `create_draft_product` operation,
-which writes a draft with `RecordingStudio.record!`. The button and page
-authorize `billing_products` `create` (`required_role :admin`, site blast
-radius, Accessible grant on the Admin root) the same way other billing
-admin_actions do. View-only actors do not see New and receive 403 on the
-create page. A missing or wrongly shaped parent returns 404.
+Products, billing options, and prices have New, Edit, and Retire actions. New
+and Edit open billing engine pages under `/billing/admin`. Save posts to the
+existing `create_draft_*` and `revise_*` operations. Retire posts to
+`retire_*` with a confirmation. It calls `CommercialPublisher.retire!` and
+does not delete SQL rows.
+
+Each form resolves its Admin root from the selected catalogue parent or the
+edited item. Recording Studio Admin authorizes the matching resource action
+through Accessible. Missing catalogue parents return 404. Failed authorization
+returns 403. The forms are billing engine GET pages. They are not registered
+Admin screens.
+
+The registered resources also provide audit-backed POST actions for price
+publication, plan update work, and provider command reconciliation. These
+actions call the domain services. They do not update billing rows directly.
+Account billing operations stays hidden on the site Admin root.
 
 `key` stays the stable catalogue id (`demo_monthly_plan`). `name` is the
 required label people read (`Monthly plan`). Product and BillingOption both
