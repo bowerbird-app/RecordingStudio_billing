@@ -111,7 +111,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
   end
 
   test "dummy seeds create an idempotent credential-free demonstration catalogue" do
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(1_208_120_200)")
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_lock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
+    BillingTestDatabaseCleanup.clear!
     Current.actor = nil
 
     load Rails.root.join("db/seeds.rb").to_s
@@ -216,7 +217,8 @@ class RecordingStudioV3TemplateTest < ActiveSupport::TestCase
     assert_nil Current.actor
   ensure
     Current.actor = nil
-    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(1_208_120_200)")
+    BillingTestDatabaseCleanup.clear!
+    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{BillingTestDatabaseCleanup::LOCK_NAMESPACE})")
   end
 
   private
