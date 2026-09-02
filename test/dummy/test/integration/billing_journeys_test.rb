@@ -30,8 +30,7 @@ class BillingJourneysTest < ActionDispatch::IntegrationTest
 
     assert_response :success, response.body
     assert_includes response.body, "Billing"
-    assert_includes response.body, "Pro"
-    assert_includes response.body, "$49"
+    assert_includes response.body, @workspace_root.id.to_s
     assert_includes response.body, "Change plan"
     assert_includes response.body, "Cancel plan"
     refute_includes response.body, "View plans"

@@ -14,7 +14,9 @@ Cloud Agents fetch Cursor skills at Build instead of reading a vendored pack.
 ### Fixed
 
 - Dummy billing journeys bind the selected workspace through the request
-  cookie instead of a hardcoded device key.
+  cookie instead of a hardcoded device key. The first journey test asserts
+  that workspace on `/billing`, not which current-plan card the overview
+  picks.
 
 ### Upgrade notes
 
