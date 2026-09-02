@@ -1280,6 +1280,16 @@ class CheckoutIntentTest < ActiveSupport::TestCase
     end
   end
 
+  test "a nominated meter must be an allowance" do
+    error = assert_raises(ArgumentError) do
+      RecordingStudioBilling.configuration.feature_definitions = entitlement_features.merge(
+        "projects" => entitlement_features.fetch("projects").merge(meter_key: "projects")
+      )
+    end
+
+    assert_match(/allowance/, error.message)
+  end
+
   test "public entitlement APIs normalize an account child recording and fail closed across roots" do
     RecordingStudioBilling.configuration.feature_definitions = entitlement_features
     graph = published_catalogue(kind: "plan", recurrence: "recurring", interval: "month")
@@ -1856,7 +1866,7 @@ class CheckoutIntentTest < ActiveSupport::TestCase
 
   def complete_pack_checkout!(graph, key:, feature_key:, amount:)
     option, = published_option(graph, kind: "credit_pack", recurrence: "one_time", interval: nil,
-                                     feature_keys: [feature_key], product_feature_values: { feature_key => amount })
+                                      feature_keys: [feature_key], product_feature_values: { feature_key => amount })
     intent = create_intent(graph, country: "IT", key:, option:).intent
     RecordingStudioBilling.execute_checkout_intent(checkout_intent: intent, root_recording: graph[:customer_root])
     RecordingStudioBilling.project_completed_checkout_intent(checkout_intent: intent,

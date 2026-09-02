@@ -192,11 +192,6 @@ Rails.application.config.to_prepare do
       usage_unit_key: "demo_api_call", replenishment: "period", lifecycle: "subscription", consumption: "metered",
       ordering: 2, validation: { "minimum" => 0 }
     },
-    "demo_ai_credits" => {
-      source: "catalogue", merge_rule: "replace", default: 0, type: "allowance", meter_key: "demo_ai_credits",
-      usage_unit_key: "demo_ai_token", replenishment: "none", lifecycle: "purchase", consumption: "metered",
-      ordering: 4, validation: { "minimum" => 0 }
-    },
     "demo_projects" => {
       source: "catalogue", merge_rule: "replace", default: 0, type: "limit", meter_key: nil,
       usage_unit_key: nil, replenishment: "none", lifecycle: "subscription", consumption: "none", ordering: 3,

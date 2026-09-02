@@ -47,7 +47,6 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
 
     assert_equal "service", products.find_by!(key: "demo_usage_product").kind
     assert_equal "credit_pack", products.find_by!(key: "demo_credit_pack").kind
-    assert_equal "credit_pack", products.find_by!(key: "demo_ai_credit_pack").kind
     assert_equal "plan", products.find_by!(key: "demo_monthly_plan").kind
     assert_equal "Pro", products.find_by!(key: "demo_monthly_plan").name
     assert_equal "Pro yearly", products.find_by!(key: "demo_annual_plan").name
@@ -118,7 +117,6 @@ class DummyV1CatalogueTest < ActiveSupport::TestCase
     assert_equal 11, api.used
     assert_equal 989, api.remaining
     assert_equal 989, RecordingStudioBilling.remaining_credits(root_recording: @workspace_root, meter_key: "demo_api_calls")
-    assert_equal 0, RecordingStudioBilling.remaining_credits(root_recording: @workspace_root, meter_key: "demo_ai_credits")
     assert RecordingStudioBilling::ReconciliationIssue.exists?(kind: "provider_result_mismatch")
     assert RecordingStudioBilling::RefundIntent.exists?(local_idempotency_key: "seed:uncertain-refund")
   end

@@ -14,7 +14,8 @@ can actually charge: subscriptions, standalone purchases, and metered usage.
 - `record_usage` against that key burns the combined cap. API credits and AI
   credits stay on separate meters.
 - Show combined credits left on the customer Usage screen.
-- Dummy catalogue nominates `demo_api_calls` and `demo_ai_credits`.
+- Dummy catalogue nominates `demo_api_calls`. The gem suite covers a second
+  isolated meter.
 
 ### Changed
 

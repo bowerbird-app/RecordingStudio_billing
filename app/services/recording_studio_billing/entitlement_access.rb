@@ -126,8 +126,10 @@ module RecordingStudioBilling
     end
 
     def included_meter_source?(grant)
-      grant.source_type == "RecordingStudioBilling::SubscriptionLine" ||
-        grant.source_type == "RecordingStudioBilling::DefaultEntitlementBootstrap"
+      [
+        "RecordingStudioBilling::SubscriptionLine",
+        "RecordingStudioBilling::DefaultEntitlementBootstrap"
+      ].include?(grant.source_type)
     end
 
     def integer_grant_sum(grants)
