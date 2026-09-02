@@ -2,11 +2,19 @@
 
 ## Unreleased
 
+## 0.9.12
+
+Cloud Agents fetch Cursor skills at Build instead of reading a vendored pack.
+
 ### Changed
 
-- Remove vendored Cursor skills, rules, and agents. Cloud Agent Builds now
-  fetch the plugin pack through `.cursor/fetch-skills.sh`. This does not change
-  the gem version, host setup, or schema.
+- Remove vendored Cursor skills, rules, and agents. Cloud Agent Builds fetch
+  RecordingStudio_cursor_plugin through `.cursor/fetch-skills.sh`.
+
+### Upgrade notes
+
+- No host or schema changes. Rebuild the Cloud Agent environment with Draft
+  off so Build loads the pack.
 
 ## 0.9.11
 
